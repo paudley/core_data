@@ -3,6 +3,8 @@
 
 # shellcheck shell=bash
 
+# Database role and schema helpers used by manage.sh.
+# cmd_create_user creates a role with LOGIN privilege if it does not yet exist.
 cmd_create_user() {
   ensure_env
   if [[ $# -ne 2 ]]; then
@@ -24,6 +26,7 @@ END
 SQL
 }
 
+# cmd_drop_user removes a role when present, ignoring missing roles.
 cmd_drop_user() {
   ensure_env
   if [[ $# -ne 1 ]]; then
@@ -44,6 +47,7 @@ END
 SQL
 }
 
+# cmd_create_db ensures the owner exists, creates the database, and bootstraps extensions.
 cmd_create_db() {
   ensure_env
   if [[ $# -ne 2 ]]; then
@@ -74,6 +78,7 @@ SQL
   schedule_pg_squeeze_job "${db}"
 }
 
+# cmd_drop_db unschedules cron jobs and drops the database after terminating sessions.
 cmd_drop_db() {
   ensure_env
   if [[ $# -ne 1 ]]; then

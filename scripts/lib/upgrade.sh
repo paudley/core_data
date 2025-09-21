@@ -3,6 +3,8 @@
 
 # shellcheck shell=bash
 
+# Major version upgrade workflow helpers for manage.sh.
+# _update_env_var rewrites a key=value entry inside the active .env file.
 _update_env_var() {
   local key=$1
   local value=$2
@@ -30,6 +32,7 @@ path.write_text("\n".join(lines) + "\n")
 PY
 }
 
+# _ensure_base_image pulls the postgres base image for the target version.
 _ensure_base_image() {
   local version=$1
   local image="postgres:${version}-bookworm"
@@ -45,6 +48,7 @@ _ensure_base_image() {
   exit 1
 }
 
+# _select_helper_image chooses a pgautoupgrade image compatible with the upgrade target.
 _select_helper_image() {
   local version=$1
   local candidates=(
@@ -72,6 +76,7 @@ _select_helper_image() {
   echo "${image}"
 }
 
+# _wait_for_postgres polls pg_isready until the upgraded server is healthy.
 _wait_for_postgres() {
   local retries=${1:-30}
   local delay=${2:-5}
@@ -85,6 +90,7 @@ _wait_for_postgres() {
   return 1
 }
 
+# cmd_upgrade coordinates backups, pgautoupgrade, image rebuild, and verification.
 cmd_upgrade() {
   ensure_env
   local new_version=""
@@ -123,7 +129,6 @@ USAGE
     exit 0
   fi
 
-  local old_version=${PG_VERSION}
   local data_dir
   data_dir=$(realpath -m "${PG_DATA_DIR}")
 

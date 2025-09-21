@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+# Orchestrates dumps, log capture, pgBadger reports, and retention pruning.
+# Intended to be called by manage.sh daily-maintenance.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -59,5 +61,5 @@ else
 fi
 
 echo "[daily] applying retention ${RETENTION_DAYS} days"
-find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort | head -n -${RETENTION_DAYS} | xargs -r rm -rf
+find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort | head -n -"${RETENTION_DAYS}" | xargs -r rm -rf
 echo "[daily] complete"

@@ -107,8 +107,6 @@ def manage_env(tmp_path_factory):
             backups_link.unlink()
         if had_existing_backups and original_backups.exists():
             original_backups.rename(backups_link)
-        else:
-            backups_link.mkdir(exist_ok=True)
         env_file.unlink(missing_ok=True)
         if had_env and backup_env_bytes is not None:
             repo_env_path.write_bytes(backup_env_bytes)
