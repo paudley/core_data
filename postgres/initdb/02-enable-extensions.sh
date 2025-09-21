@@ -16,6 +16,7 @@ EXTENSIONS=(
   pgtap
   pg_repack
   pg_squeeze
+  pgstattuple
 )
 
 DOLLAR='$'
@@ -80,6 +81,18 @@ for db in "${target_dbs[@]}"; do
   configure_database "${db}"
   schedule_pg_squeeze_job "${db}"
 done
+
+# Reset pg_stat_statements nightly to preserve meaningful comparisons.
+psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "postgres" <<'SQL'
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_pgstat_reset';
+SELECT cron.schedule('core_data_pgstat_reset', '0 4 * * *', $$SELECT pg_stat_statements_reset();$$);
+SQL
+
+# Nightly vacuum analyze with SKIP_LOCKED and parallel workers to keep stats fresh safely.
+psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "postgres" <<'SQL'
+SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_vacuum_analyze';
+SELECT cron.schedule('core_data_vacuum_analyze', '30 2 * * *', $$VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4);$$);
+SQL
 
 # Ensure template1 ships with extensions and helper functions so new databases inherit them.
 configure_database "template1"
