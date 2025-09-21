@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 # pg_hba.conf template rendered during init
 
 # TYPE  DATABASE        USER            ADDRESS                 METHOD

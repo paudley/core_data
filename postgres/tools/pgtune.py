@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 """
 pgtune
 

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 set -euo pipefail
 
 if [[ -z "${DATABASES_TO_CREATE:-}" ]]; then

@@ -1,3 +1,8 @@
+<!--
+SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+SPDX-License-Identifier: MIT
+-->
+
 # core_data: Current Architecture & Operations Guide
 
 ## Overview

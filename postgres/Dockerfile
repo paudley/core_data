@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 # syntax=docker/dockerfile:1.7
 ARG PG_VERSION=17
 ARG AGE_VERSION=master

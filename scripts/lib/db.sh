@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 # shellcheck shell=bash
 
 cmd_create_user() {

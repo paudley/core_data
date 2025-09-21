@@ -1,4 +1,7 @@
 #!/usr/bin/env perl
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
 #------------------------------------------------------------------------------
 #
 # pgBadger - Advanced PostgreSQL log analyzer
