@@ -13,7 +13,7 @@ core_data packages a production-focused PostgreSQL 17 environment using Docker C
 core_data/
 ├── .env.example              # Template for environment-specific settings (not committed)
 ├── docker-compose.yml        # Orchestrates PostgreSQL and PgHero services
-├── README.md                 # This operations and architecture guide
+├── README.md                 # Quick start and project overview
 ├── AGENTS.md                 # Contributor quick-reference and runbook pointers
 ├── backups/                  # Host output directory for logical dumps and reports
 ├── data/                     # Host-mount roots for persistent Postgres/PgBackRest/PgHero data
