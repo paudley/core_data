@@ -10,6 +10,13 @@ SPDX-License-Identifier: MIT
 
 A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hardened database image with spatial, vector, and graph extensions, provisions PgHero for observability, and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
 
+## Why You Want This
+- Run the same Postgres 17 stack everywhere: laptop, CI runner, or production.
+- Ship with the heavy hitters pre-installed—PostGIS, pgvector, AGE, pg_cron, pgBackRest—without custom build scripts.
+- Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
+- Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
+
+
 ## Highlights
 - Custom Docker image with PostGIS, pgvector, Apache AGE, pg_cron, pg_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 - Init scripts render configuration from templates, create application databases, and enable extensions automatically.
