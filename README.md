@@ -41,8 +41,7 @@ core_data/
 ├── backups/                  # Host output directory for logical dumps and reports
 ├── data/                     # Host bind mounts for postgres_data / pgbackrest_repo / pghero_data
 ├── README.md                 # This guide
-├── AGENTS.md                 # Contributor quick-reference & runbooks
-└── PLAN.md                   # Delivery roadmap and milestones
+└── AGENTS.md                 # Contributor quick-reference & runbooks
 ```
 Keep `data/` out of version control—it holds live cluster state and backup archives.
 
@@ -66,7 +65,7 @@ The CLI sources modular helpers from `scripts/lib/` so each function can be impo
 ## Automation & Testing
 - **CI Workflow:** `.github/workflows/ci.yml` builds the image, runs `python -m pytest -k full_workflow`, and uploads generated backups for inspection.
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
-- **Documentation:** `AGENTS.md` offers contributor runbooks; `PLAN.md` tracks milestones.
+- **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits
 Thank you to the maintainers and communities behind the components that make core_data possible:
