@@ -1,6 +1,6 @@
 # Contributing to core_data
 
-First off, thank you for considering contributing to Git AI Reporter! It's people like you that make core_data such a great tool.
+First off, thank you for considering contributing to core_data! It's people like you that make the project great.
 
 ## Code of Conduct
 
@@ -17,7 +17,7 @@ Before creating bug reports, please check [existing issues](https://github.com/p
 * **Provide specific examples to demonstrate the steps**
 * **Describe the behavior you observed and what you expected**
 * **Include logs and error messages**
-* **Include your environment details** (OS, Python version, git-ai-reporter version)
+* **Include your environment details** (OS, Docker version, core_data commit)
 
 ### Suggesting Enhancements
 
@@ -35,7 +35,7 @@ Enhancement suggestions are tracked as [GitHub issues](https://github.com/paudle
 2. Follow the setup instructions in the README
 3. Make your changes following our coding standards
 4. Add or update tests as needed
-5. Ensure the test suite passes
+5. Run `python -m pytest -k full_workflow` (matches CI) and capture relevant logs
 6. Update documentation as needed
 7. Submit your pull request!
 
@@ -56,9 +56,17 @@ cd core_data
 
 ## Documentation
 
-- Update the README.md if you change functionality
+- Update README.md if you change functionality
 - Update inline documentation and docstrings
-- Add entries to PENDING.md for future enhancements
+
+## Verification Checklist
+
+Before requesting review, make sure you:
+
+- [ ] ran `python -m pytest -k full_workflow`
+- [ ] exercised affected `./scripts/manage.sh` commands manually when applicable
+- [ ] updated README.md / AGENTS.md / PLAN.md if behavior or process changed
+- [ ] confirmed `.github/workflows/ci.yml` still reflects the desired automation
 
 ## Commit Messages
 
