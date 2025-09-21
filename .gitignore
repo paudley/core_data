@@ -1,0 +1,9 @@
+.env
+*.log
+*.sql
+*.sql.gz
+/data/
+!/data/.gitkeep
+
+/backups/
+!/backups/.gitkeep

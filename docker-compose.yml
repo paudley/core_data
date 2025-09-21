@@ -1,0 +1,58 @@
+
+services:
+  postgres:
+    build:
+      context: .
+      dockerfile: postgres/Dockerfile
+      args:
+        PG_VERSION: ${PG_VERSION}
+        AGE_VERSION: ${AGE_VERSION:-master}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_USER: ${POSTGRES_SUPERUSER}
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      DATABASES_TO_CREATE: ${DATABASES_TO_CREATE}
+      TZ: ${TZ}
+    volumes:
+      - ${PG_DATA_DIR}:/var/lib/postgresql/data
+      - ${CORE_DATA_PGBACKREST_REPO_DIR}:/var/lib/pgbackrest
+      - ./backups:/backups
+      - ./postgres/conf:/opt/core_data/conf:ro
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    networks:
+      - core_data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  pghero:
+    image: ankane/pghero:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_SUPERUSER}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      PGHERO_USERNAME: ${PGHERO_USER}
+      PGHERO_PASSWORD: ${PGHERO_PASSWORD}
+    ports:
+      - "${PGHERO_PORT}:8080"
+    networks:
+      - core_data
+
+networks:
+  core_data:
+    name: ${DOCKER_NETWORK_NAME}
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DOCKER_NETWORK_SUBNET}
