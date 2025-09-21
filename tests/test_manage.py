@@ -43,14 +43,34 @@ def manage_env(tmp_path_factory):
             lines.append(line)
     env_file.write_text("\n".join(lines) + "\n")
 
-    for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR"):
-        directory = Path(replacements[key])
+    managed_paths = [Path(replacements[key]) for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR")]
+    for directory in managed_paths:
         directory.mkdir(parents=True, exist_ok=True)
-        directory.chmod(0o777)
+        try:
+            directory.chmod(0o777)
+        except PermissionError:
+            pass
 
-    backups_dir = ROOT / "backups"
-    backups_dir.mkdir(exist_ok=True)
-    backups_dir.chmod(0o777)
+    backups_target = workdir / "backups"
+    backups_target.mkdir(parents=True, exist_ok=True)
+    try:
+        backups_target.chmod(0o777)
+    except PermissionError:
+        pass
+
+    backups_link = ROOT / "backups"
+    had_existing_backups = backups_link.exists() or backups_link.is_symlink()
+    original_backups = ROOT / ".backups_original"
+    if had_existing_backups:
+        if original_backups.exists() or original_backups.is_symlink():
+            if original_backups.is_dir():
+                subprocess.run(["rm", "-rf", str(original_backups)], check=False)
+            else:
+                original_backups.unlink(missing_ok=True)
+        backups_link.rename(original_backups)
+    if backups_link.exists() or backups_link.is_symlink():
+        backups_link.unlink()
+    backups_link.symlink_to(backups_target)
 
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_file)
@@ -58,10 +78,8 @@ def manage_env(tmp_path_factory):
     env["PG_BADGER_JOBS"] = "1"
 
     repo_env_path = ROOT / ".env"
-    backup_env_bytes = None
     had_env = repo_env_path.exists() or repo_env_path.is_symlink()
-    if had_env:
-        backup_env_bytes = repo_env_path.read_bytes()
+    backup_env_bytes = repo_env_path.read_bytes() if had_env else None
     repo_env_path.write_text(env_file.read_text())
 
     try:
@@ -69,23 +87,33 @@ def manage_env(tmp_path_factory):
     finally:
         subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
         subprocess.run(["docker", "pull", "busybox"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR"):
-            directory = Path(replacements[key])
+        for directory in managed_paths:
             if directory.exists():
-                subprocess.run(["chmod", "-R", "777", str(directory)], check=False)
                 subprocess.run([
                     "docker", "run", "--rm",
-                    "-v", f"{directory}:/target",
+                    "-v", f"{directory.resolve()}:/target",
                     "busybox", "sh", "-c",
                     "rm -rf /target/* /target/.[!.]* /target/..?*"
                 ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(["rmdir", str(directory)], check=False)
+        if backups_target.exists():
+            subprocess.run([
+                "docker", "run", "--rm",
+                "-v", f"{backups_target.resolve()}:/target",
+                "busybox", "sh", "-c",
+                "rm -rf /target/* /target/.[!.]* /target/..?*"
+            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if backups_link.is_symlink():
+            backups_link.unlink()
+        if had_existing_backups and original_backups.exists():
+            original_backups.rename(backups_link)
+        else:
+            backups_link.mkdir(exist_ok=True)
         env_file.unlink(missing_ok=True)
-        if had_env:
+        if had_env and backup_env_bytes is not None:
             repo_env_path.write_bytes(backup_env_bytes)
         else:
             repo_env_path.unlink(missing_ok=True)
-
 
 def run_manage(env, *args, check=True):
     subprocess.run([str(MANAGE), *args], cwd=ROOT, env=env, check=check)
