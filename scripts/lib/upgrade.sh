@@ -123,7 +123,6 @@ USAGE
     exit 0
   fi
 
-  local old_version=${PG_VERSION}
   local data_dir
   data_dir=$(realpath -m "${PG_DATA_DIR}")
 

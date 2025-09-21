@@ -59,5 +59,5 @@ else
 fi
 
 echo "[daily] applying retention ${RETENTION_DAYS} days"
-find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort | head -n -${RETENTION_DAYS} | xargs -r rm -rf
+find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort | head -n -"${RETENTION_DAYS}" | xargs -r rm -rf
 echo "[daily] complete"

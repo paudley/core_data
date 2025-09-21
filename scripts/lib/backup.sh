@@ -49,18 +49,18 @@ SQL
 
 cmd_backup() {
   ensure_env
-  local type=auto
+  local backup_type="auto"
   if [[ $# -ge 1 ]]; then
     case $1 in
-      --type=full) type=full ;;
-      --type=diff) type=diff ;;
-      --type=incr) type=incr ;;
+      --type=full) backup_type="full" ;;
+      --type=diff) backup_type="diff" ;;
+      --type=incr) backup_type="incr" ;;
       *) echo "Unknown backup type '$1'" >&2; exit 1 ;;
     esac
   fi
   local cmd=(pgbackrest --config="${PGBACKREST_CONF}" --stanza=main --log-level-console=info)
-  if [[ ${type} != auto ]]; then
-    cmd+=("--type=${type}")
+  if [[ ${backup_type} != "auto" ]]; then
+    cmd+=("--type=${backup_type}")
   fi
   cmd+=(backup)
   compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
