@@ -10,6 +10,7 @@ auth/
 
 # Python
 __pycache__/
+.pytest_cache/
 *.py[cod]
 *$py.class
 
@@ -37,4 +38,3 @@ logs/
 
 # Node (if used for tooling)
 node_modules/
-

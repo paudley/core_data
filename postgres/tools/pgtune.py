@@ -10,6 +10,9 @@ Sample usage shown by running with "--help"
 Copyright (c) 2009-2013, Gregory Smith
 """
 
+# Vendored from https://github.com/gregs1104/pgtune and distributed under the
+# BSD 3-Clause License. See THIRD_PARTY_LICENSES.md for full terms.
+
 import sys
 import os
 import datetime

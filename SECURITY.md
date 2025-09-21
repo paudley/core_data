@@ -11,7 +11,7 @@ We release patches for security vulnerabilities. Currently supported versions:
 
 ## Reporting a Vulnerability
 
-We take the security of Git AI Reporter seriously. If you believe you have found a security vulnerability, please report it to us as described below.
+We take the security of core_data seriously. If you believe you have found a security vulnerability, please report it to us as described below.
 
 ### Please DO NOT:
 - Open a public GitHub issue for security vulnerabilities
@@ -125,5 +125,5 @@ XE4dvUx/JNzvuZ/nkLMnuVf+feQJsvc+kLNV1K2sFGffpC/ZdBkU0lz5oLfqTtAM
 
 
 For general questions, use:
-- GitHub Issues: [https://github.com/paudley/git-ai-reporter/issues](https://github.com/paudley/git-ai-reporter/issues)
+- GitHub Issues: [https://github.com/paudley/core_data/issues](https://github.com/paudley/core_data/issues)
 - Email: [paudley@blackcat.ca](mailto:paudley@blackcat.ca)

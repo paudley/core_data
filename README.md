@@ -25,7 +25,7 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ## Quick Start
-1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings.
+1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
 2. Build and start the stack:
    ```bash
    ./scripts/manage.sh build-image
