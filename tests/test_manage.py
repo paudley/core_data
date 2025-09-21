@@ -48,6 +48,10 @@ def manage_env(tmp_path_factory):
         directory.mkdir(parents=True, exist_ok=True)
         directory.chmod(0o777)
 
+    backups_dir = ROOT / "backups"
+    backups_dir.mkdir(exist_ok=True)
+    backups_dir.chmod(0o777)
+
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_file)
     project_name = env.setdefault("COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}")
@@ -77,7 +81,7 @@ def manage_env(tmp_path_factory):
                 ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 subprocess.run(["rmdir", str(directory)], check=False)
         env_file.unlink(missing_ok=True)
-        if had_env and backup_env_bytes is not None:
+        if had_env:
             repo_env_path.write_bytes(backup_env_bytes)
         else:
             repo_env_path.unlink(missing_ok=True)
