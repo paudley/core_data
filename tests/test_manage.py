@@ -53,22 +53,34 @@ def manage_env(tmp_path_factory):
     project_name = env.setdefault("COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}")
     env["PG_BADGER_JOBS"] = "1"
 
-    yield env, project_name
+    repo_env_path = ROOT / ".env"
+    backup_env_bytes = None
+    had_env = repo_env_path.exists() or repo_env_path.is_symlink()
+    if had_env:
+        backup_env_bytes = repo_env_path.read_bytes()
+    repo_env_path.write_text(env_file.read_text())
 
-    subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
-    subprocess.run(["docker", "pull", "busybox"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR"):
-        directory = Path(replacements[key])
-        if directory.exists():
-            subprocess.run(["chmod", "-R", "777", str(directory)], check=False)
-            subprocess.run([
-                "docker", "run", "--rm",
-                "-v", f"{directory}:/target",
-                "busybox", "sh", "-c",
-                "rm -rf /target/* /target/.[!.]* /target/..?*"
-            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            subprocess.run(["rmdir", str(directory)], check=False)
-    env_file.unlink(missing_ok=True)
+    try:
+        yield env, project_name
+    finally:
+        subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
+        subprocess.run(["docker", "pull", "busybox"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR"):
+            directory = Path(replacements[key])
+            if directory.exists():
+                subprocess.run(["chmod", "-R", "777", str(directory)], check=False)
+                subprocess.run([
+                    "docker", "run", "--rm",
+                    "-v", f"{directory}:/target",
+                    "busybox", "sh", "-c",
+                    "rm -rf /target/* /target/.[!.]* /target/..?*"
+                ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["rmdir", str(directory)], check=False)
+        env_file.unlink(missing_ok=True)
+        if had_env and backup_env_bytes is not None:
+            repo_env_path.write_bytes(backup_env_bytes)
+        else:
+            repo_env_path.unlink(missing_ok=True)
 
 
 def run_manage(env, *args, check=True):
