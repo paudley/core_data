@@ -32,7 +32,6 @@ pgTap ships in the image. Typical workflow:
    ```sql
    CREATE SCHEMA IF NOT EXISTS test;
    SET search_path = test, public;
-   ``
 3. Write tests using pgTap assertions:
    ```sql
    -- file: test/sample.sql
