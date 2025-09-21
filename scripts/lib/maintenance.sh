@@ -3,6 +3,8 @@
 
 # shellcheck shell=bash
 
+# pgBadger and daily maintenance helpers used by manage.sh.
+# cmd_pgbadger_report generates a pgBadger HTML report from recent CSV logs.
 cmd_pgbadger_report() {
   ensure_env
   local since=""
@@ -42,6 +44,7 @@ cmd_pgbadger_report() {
   echo "pgBadger report written to ${output}" >&2
 }
 
+# cmd_daily_maintenance orchestrates daily dumps, log copy, pgBadger, and retention.
 cmd_daily_maintenance() {
   ensure_env
   local backup_root=${DAILY_BACKUP_ROOT:-./backups/daily}

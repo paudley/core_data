@@ -2,6 +2,8 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+# Orchestrates dumps, log capture, pgBadger reports, and retention pruning.
+# Intended to be called by manage.sh daily-maintenance.
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)

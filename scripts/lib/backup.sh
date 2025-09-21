@@ -3,6 +3,8 @@
 
 # shellcheck shell=bash
 
+# pgBackRest and logical backup helpers used by manage.sh.
+# cmd_dump writes a custom-format pg_dump archive compressed with gzip.
 cmd_dump() {
   ensure_env
   if [[ $# -lt 1 ]]; then
@@ -16,6 +18,7 @@ cmd_dump() {
   echo "Dump written to ${outfile}" >&2
 }
 
+# cmd_dump_sql produces a plain-text pg_dump suitable for review or editing.
 cmd_dump_sql() {
   ensure_env
   if [[ $# -lt 1 ]]; then
@@ -29,6 +32,7 @@ cmd_dump_sql() {
   echo "Plain SQL dump written to ${outfile}" >&2
 }
 
+# cmd_restore_dump recreates the database and restores a gzip-compressed custom dump.
 cmd_restore_dump() {
   ensure_env
   if [[ $# -ne 2 ]]; then
@@ -47,6 +51,7 @@ SQL
     bash -lc "gunzip -c '${infile}' | pg_restore --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}'"
 }
 
+# cmd_backup wraps pgBackRest backup with optional type selection (full/diff/incr).
 cmd_backup() {
   ensure_env
   local backup_type="auto"
@@ -69,6 +74,7 @@ cmd_backup() {
     "${cmd[@]}"
 }
 
+# cmd_stanza_create initializes the pgBackRest stanza inside the container.
 cmd_stanza_create() {
   ensure_env
   compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
@@ -77,6 +83,7 @@ cmd_stanza_create() {
     pgbackrest --config="${PGBACKREST_CONF}" --stanza=main stanza-create
 }
 
+# cmd_restore_snapshot proxies pgBackRest restore with arbitrary arguments.
 cmd_restore_snapshot() {
   ensure_env
   compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
@@ -85,6 +92,7 @@ cmd_restore_snapshot() {
     pgbackrest --config="${PGBACKREST_CONF}" --stanza=main --log-level-console=info restore "$@"
 }
 
+# cmd_provision_qa captures a diff backup and restores a specific database for QA.
 cmd_provision_qa() {
   ensure_env
   if [[ $# -ne 1 ]]; then
