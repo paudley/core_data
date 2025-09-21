@@ -10,6 +10,13 @@ SPDX-License-Identifier: MIT
 
 A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hardened database image with spatial, vector, and graph extensions, provisions PgHero for observability, and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
 
+## Why You Want This
+- Run the same Postgres 17 stack everywhere: laptop, CI runner, or production.
+- Ship with the heavy hitters pre-installed—PostGIS, pgvector, AGE, pg_cron, pgBackRest—without custom build scripts.
+- Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
+- Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
+
+
 ## Highlights
 - Custom Docker image with PostGIS, pgvector, Apache AGE, pg_cron, pg_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 - Init scripts render configuration from templates, create application databases, and enable extensions automatically.
@@ -18,7 +25,7 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ## Quick Start
-1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings.
+1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
 2. Build and start the stack:
    ```bash
    ./scripts/manage.sh build-image
@@ -41,8 +48,7 @@ core_data/
 ├── backups/                  # Host output directory for logical dumps and reports
 ├── data/                     # Host bind mounts for postgres_data / pgbackrest_repo / pghero_data
 ├── README.md                 # This guide
-├── AGENTS.md                 # Contributor quick-reference & runbooks
-└── PLAN.md                   # Delivery roadmap and milestones
+└── AGENTS.md                 # Contributor quick-reference & runbooks
 ```
 Keep `data/` out of version control—it holds live cluster state and backup archives.
 
@@ -66,7 +72,7 @@ The CLI sources modular helpers from `scripts/lib/` so each function can be impo
 ## Automation & Testing
 - **CI Workflow:** `.github/workflows/ci.yml` builds the image, runs `python -m pytest -k full_workflow`, and uploads generated backups for inspection.
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
-- **Documentation:** `AGENTS.md` offers contributor runbooks; `PLAN.md` tracks milestones.
+- **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits
 Thank you to the maintainers and communities behind the components that make core_data possible:

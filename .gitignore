@@ -1,12 +1,40 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+# Environment & secrets
+auth/
 .env
+.env.*
+*.env
+*.local
+
+# Python
+__pycache__/
+.pytest_cache/
+*.py[cod]
+*$py.class
+
+# Logs & reports
+logs/
 *.log
+*.csv
+*.html
+
+# Database dumps and artifacts
 *.sql
 *.sql.gz
+/backups/
+!/backups/.gitkeep
+
+# Docker volumes/data
 /data/
 !/data/.gitkeep
 
-/backups/
-!/backups/.gitkeep
+# Editors & tooling
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Node (if used for tooling)
+node_modules/

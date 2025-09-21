@@ -65,7 +65,7 @@ Before requesting review, make sure you:
 
 - [ ] ran `python -m pytest -k full_workflow`
 - [ ] exercised affected `./scripts/manage.sh` commands manually when applicable
-- [ ] updated README.md / AGENTS.md / PLAN.md if behavior or process changed
+- [ ] updated README.md / AGENTS.md if behavior or process changed
 - [ ] confirmed `.github/workflows/ci.yml` still reflects the desired automation
 
 ## Commit Messages
