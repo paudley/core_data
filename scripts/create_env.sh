@@ -165,7 +165,11 @@ fi
 
 # Resource sizing suggestions
 mem_total_gb=$(detect_total_memory_gb)
-mem_limit_default=$(( mem_total_gb > 12 ? mem_total_gb - 4 : mem_total_gb * 3 / 4 ))
+if (( mem_total_gb > 12 )); then
+  mem_limit_default=$((mem_total_gb - 4))
+else
+  mem_limit_default=$((mem_total_gb * 3 / 4))
+fi
 if (( mem_limit_default < 2 )); then
   mem_limit_default=2
 fi
