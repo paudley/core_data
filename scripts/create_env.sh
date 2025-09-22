@@ -180,7 +180,7 @@ if [[ ! ${mem_limit} =~ ^[0-9]+([.][0-9]+)?$ ]]; then
 fi
 set_env_value POSTGRES_MEMORY_LIMIT "${mem_limit}g"
 
-shm_default=$(awk "BEGIN {print ${mem_limit}/4}")
+shm_default=$(awk -v mem_limit="${mem_limit}" 'BEGIN {print mem_limit/4}')
 if [[ ${shm_default} == "0" ]]; then
   shm_default=1
 fi
