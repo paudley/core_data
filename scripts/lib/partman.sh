@@ -38,7 +38,7 @@ partman_show_config() {
   local database=${1:-${POSTGRES_DB:-postgres}}
   local parent_filter=${2:-}
 
-  if [[ -n ${parent_filter} && ${parent_filter} != *.* ]]; then
+  if [[ -n ${parent_filter} && ! ${parent_filter} =~ \. ]]; then
     echo "[partman] parent table must be schema-qualified (e.g., schema.table)." >&2
     exit 1
   fi
