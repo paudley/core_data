@@ -22,12 +22,17 @@ if [[ -z "${POSTGRES_SUPERUSER_PASSWORD}" && -n "${POSTGRES_SUPERUSER_PASSWORD_F
   POSTGRES_SUPERUSER_PASSWORD=$(<"${POSTGRES_SUPERUSER_PASSWORD_FILE}")
 fi
 
-export PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD}"
-export PGHOST="${POSTGRES_HOST}"
-export PGPORT="${POSTGRES_PORT}"
-export PGUSER="${POSTGRES_SUPERUSER}"
-export PGDATABASE=${POSTGRES_DB:-postgres}
-export PGSSLMODE=require
+PG_ENV=(
+  env
+  PGHOST="${POSTGRES_HOST}"
+  PGPORT="${POSTGRES_PORT}"
+  PGUSER="${POSTGRES_SUPERUSER}"
+  PGDATABASE="${POSTGRES_DB:-postgres}"
+  PGSSLMODE=require
+)
+if [[ -n ${POSTGRES_SUPERUSER_PASSWORD} ]]; then
+  PG_ENV+=(PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD}")
+fi
 
 mkdir -p "${LOGICAL_BACKUP_OUTPUT}"
 
@@ -44,8 +49,8 @@ RUNNING=true
 trap 'RUNNING=false' TERM INT
 
 wait_for_postgres() {
-  until pg_isready -q; do
-    log "waiting for postgres at ${PGHOST}:${PGPORT}"
+  until "${PG_ENV[@]}" pg_isready -q; do
+    log "waiting for postgres at ${POSTGRES_HOST}:${POSTGRES_PORT}"
     sleep 5
   done
 }
@@ -59,7 +64,7 @@ perform_backup() {
   log "starting logical backup into ${target_dir}"
 
   local databases
-  databases=$(psql -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;")
+  databases=$("${PG_ENV[@]}" psql -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;")
   while IFS= read -r db; do
     [[ -z "${db}" ]] && continue
     if [[ -n ${EXCLUDE_MAP["${db}"]+x} ]]; then
@@ -67,11 +72,11 @@ perform_backup() {
     fi
     local outfile="${target_dir}/${db}.dump"
     log "  -> dumping ${db}"
-    pg_dump --format=custom --no-owner --no-acl --file="${outfile}" --dbname="${db}"
+    "${PG_ENV[@]}" pg_dump --format=custom --no-owner --no-acl --file="${outfile}" --dbname="${db}"
   done <<<"${databases}"
 
   log "  -> dumping globals"
-  pg_dumpall --globals-only --no-password > "${target_dir}/globals.sql"
+  "${PG_ENV[@]}" pg_dumpall --globals-only --no-password > "${target_dir}/globals.sql"
 
   if (( LOGICAL_BACKUP_RETENTION_DAYS > 0 )); then
     find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d -mtime +"${LOGICAL_BACKUP_RETENTION_DAYS}" -print -exec rm -rf {} + 2>/dev/null || true
