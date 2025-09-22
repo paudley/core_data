@@ -24,6 +24,8 @@ source "${SCRIPT_DIR}/lib/maintenance_actions.sh"
 source "${SCRIPT_DIR}/lib/extensions.sh"
 # shellcheck source=scripts/lib/partman.sh
 source "${SCRIPT_DIR}/lib/partman.sh"
+# shellcheck source=scripts/lib/async_queue.sh
+source "${SCRIPT_DIR}/lib/async_queue.sh"
 
 CORE_DATA_EXTENSIONS=(
   age
@@ -122,7 +124,8 @@ BEGIN
          'tiger_data',
          'partman',
          'address_standardizer',
-         'address_standardizer_data_us'
+         'address_standardizer_data_us',
+         'asyncq'
        )
   LOOP
     PERFORM squeeze.squeeze_table(rec.schema_name, rec.table_name);
@@ -199,6 +202,8 @@ Commands:
   exercise-extensions [--db DB]
                               Run smoke queries across the core extension bundle.
   pgtap-smoke [--db DB]       Execute a pgTap plan validating the bundled extensions.
+  async-queue bootstrap [--db DB] [--schema NAME]
+                             Install the lightweight async queue schema/functions.
   partman-maintenance [--db DB]
                              Run partman.run_maintenance_proc() in the target database.
   partman-show-config [--db DB] [--parent schema.table]
@@ -781,6 +786,44 @@ USAGE
       esac
     done
     run_pgtap_smoke "${db}"
+    ;;
+  async-queue)
+    subcommand=${1:-help}
+    shift || true
+    case "${subcommand}" in
+      bootstrap)
+        db=""
+        schema=""
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --db)
+              db=$2; shift 2 ;;
+            --db=*)
+              db=${1#*=}; shift ;;
+            --schema)
+              schema=$2; shift 2 ;;
+            --schema=*)
+              schema=${1#*=}; shift ;;
+            -h|--help)
+              echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+              exit 0 ;;
+            --)
+              shift; break ;;
+            *)
+              echo "Unknown option for async-queue bootstrap: $1" >&2
+              exit 1 ;;
+          esac
+        done
+        async_queue_bootstrap "${db:-${POSTGRES_DB:-postgres}}" "${schema:-${ASYNCQ_DEFAULT_SCHEMA:-asyncq}}"
+        ;;
+      help|-h|--help)
+        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+        ;;
+      *)
+        echo "Unknown async-queue subcommand: ${subcommand}" >&2
+        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+        exit 1 ;;
+    esac
     ;;
   partman-maintenance)
     db=""

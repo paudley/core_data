@@ -41,6 +41,8 @@ The same bundle is installed into `template1` so freshly created databases inher
 
 Use `./scripts/manage.sh partman-show-config` to inspect tracked parents, `partman-maintenance` to run `run_maintenance_proc()` on demand, and `partman-create-parent schema.table control_column '1 day'` to bootstrap new partition sets without hand-writing SQL.
 
+Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight background-job queue. It provisions an `asyncq.jobs` table plus helpers (`enqueue`, `dequeue`, `complete`, `fail`, `extend_lease`) that rely on `FOR UPDATE SKIP LOCKED`, `pg_notify`, and UUID leasing. Point a worker at the queue with `SELECT * FROM asyncq.dequeue('default');` in a loop and call `asyncq.complete(...)` or `asyncq.fail(...)` as you process jobs.
+
 ## Quick Start
 1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
 2. Build and start the stack:
@@ -97,6 +99,7 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
 | `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, hypopg, pg_partman, etc.). |
 | `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including hypopg/pg_partman) are registered. |
+| `async-queue bootstrap` | Install the lightweight async queue schema (`asyncq`) with enqueue/dequeue helpers. |
 | `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
 | `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
 | `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |

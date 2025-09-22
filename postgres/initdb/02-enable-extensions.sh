@@ -109,7 +109,8 @@ BEGIN
          'tiger_data',
          'partman',
          'address_standardizer',
-         'address_standardizer_data_us'
+         'address_standardizer_data_us',
+         'asyncq'
        )
   LOOP
     PERFORM squeeze.squeeze_table(rec.schema_name, rec.table_name);
