@@ -38,6 +38,8 @@ The same bundle is installed into `template1` so freshly created databases inher
 
 `pg_partman_bgw` is preloaded with a one-hour interval targeting the `postgres` database under the `postgres` superuser. Adjust `pg_partman_bgw.dbname`/`role` in `postgresql.conf.tpl` (or via `postgresql.pgtune.conf`) if you manage partitions from a different control schema.
 
+Use `./scripts/manage.sh partman-show-config` to inspect tracked parents, `partman-maintenance` to run `run_maintenance_proc()` on demand, and `partman-create-parent schema.table control_column '1 day'` to bootstrap new partition sets without hand-writing SQL.
+
 ## Quick Start
 1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
 2. Build and start the stack:
@@ -94,6 +96,9 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
 | `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, pg_partman, etc.). |
 | `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including pg_partman) are registered. |
+| `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
+| `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
+| `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
