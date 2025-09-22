@@ -13,23 +13,7 @@ _update_env_var() {
     echo "[core_data] Cannot update ${key}; ${file} not found." >&2
     exit 1
   fi
-  python3 - "$file" "$key" "$value" <<'PY'
-import sys
-from pathlib import Path
-file_path, key, value = sys.argv[1:4]
-path = Path(file_path)
-lines = []
-found = False
-for line in path.read_text().splitlines():
-    if line.startswith(f"{key}="):
-        lines.append(f"{key}={value}")
-        found = True
-    else:
-        lines.append(line)
-if not found:
-    lines.append(f"{key}={value}")
-path.write_text("\n".join(lines) + "\n")
-PY
+  python3 "${SCRIPT_DIR}/lib/update_env_var.py" "${file}" "${key}" "${value}"
 }
 
 # _ensure_base_image pulls the postgres base image for the target version.
