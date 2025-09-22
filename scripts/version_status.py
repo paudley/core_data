@@ -37,33 +37,76 @@ class ComponentConfig:
 
 
 CONFIG: Dict[str, ComponentConfig] = {
-    "postgresql": ComponentConfig(name="postgresql", source="github", repo="postgres/postgres", kind="server"),
+    "postgresql": ComponentConfig(
+        name="postgresql", source="github", repo="postgres/postgres", kind="server"
+    ),
     "postgis": ComponentConfig(name="postgis", source="github", repo="postgis/postgis"),
-    "postgis_raster": ComponentConfig(name="postgis_raster", source="alias", alias="postgis"),
-    "postgis_topology": ComponentConfig(name="postgis_topology", source="alias", alias="postgis"),
-    "postgis_tiger_geocoder": ComponentConfig(name="postgis_tiger_geocoder", source="alias", alias="postgis"),
-    "address_standardizer": ComponentConfig(name="address_standardizer", source="alias", alias="postgis"),
-    "address_standardizer_data_us": ComponentConfig(name="address_standardizer_data_us", source="alias", alias="postgis"),
+    "postgis_raster": ComponentConfig(
+        name="postgis_raster", source="alias", alias="postgis"
+    ),
+    "postgis_topology": ComponentConfig(
+        name="postgis_topology", source="alias", alias="postgis"
+    ),
+    "postgis_tiger_geocoder": ComponentConfig(
+        name="postgis_tiger_geocoder", source="alias", alias="postgis"
+    ),
+    "address_standardizer": ComponentConfig(
+        name="address_standardizer", source="alias", alias="postgis"
+    ),
+    "address_standardizer_data_us": ComponentConfig(
+        name="address_standardizer_data_us", source="alias", alias="postgis"
+    ),
     "vector": ComponentConfig(name="vector", source="github", repo="pgvector/pgvector"),
     "pgvector": ComponentConfig(name="pgvector", source="alias", alias="vector"),
     "age": ComponentConfig(name="age", source="github", repo="apache/age"),
-    "pg_cron": ComponentConfig(name="pg_cron", source="github", repo="citusdata/pg_cron"),
-    "pg_partman": ComponentConfig(name="pg_partman", source="github", repo="pgpartman/pg_partman"),
-    "pg_partman_bgw": ComponentConfig(name="pg_partman_bgw", source="alias", alias="pg_partman"),
+    "pg_cron": ComponentConfig(
+        name="pg_cron", source="github", repo="citusdata/pg_cron"
+    ),
+    "pg_partman": ComponentConfig(
+        name="pg_partman", source="github", repo="pgpartman/pg_partman"
+    ),
+    "pg_partman_bgw": ComponentConfig(
+        name="pg_partman_bgw", source="alias", alias="pg_partman"
+    ),
     "hypopg": ComponentConfig(name="hypopg", source="github", repo="HypoPG/hypopg"),
-    "pg_repack": ComponentConfig(name="pg_repack", source="github", repo="reorg/pg_repack", pattern=r"(?i)(?:ver[_-])?([0-9_.]+)"),
-    "pg_squeeze": ComponentConfig(name="pg_squeeze", source="github", repo="cybertec-postgresql/pg_squeeze"),
+    "pg_repack": ComponentConfig(
+        name="pg_repack",
+        source="github",
+        repo="reorg/pg_repack",
+        pattern=r"(?i)(?:ver[_-])?([0-9_.]+)",
+    ),
+    "pg_squeeze": ComponentConfig(
+        name="pg_squeeze", source="github", repo="cybertec-postgresql/pg_squeeze"
+    ),
     "pgtap": ComponentConfig(name="pgtap", source="github", repo="theory/pgtap"),
-    "pgrouting": ComponentConfig(name="pgrouting", source="github", repo="pgRouting/pgrouting"),
+    "pgrouting": ComponentConfig(
+        name="pgrouting", source="github", repo="pgRouting/pgrouting"
+    ),
     # Core extensions follow server lifecycle
-    "pg_stat_statements": ComponentConfig(name="pg_stat_statements", source="alias", alias="postgresql", kind="core"),
-    "pg_buffercache": ComponentConfig(name="pg_buffercache", source="alias", alias="postgresql", kind="core"),
-    "pgcrypto": ComponentConfig(name="pgcrypto", source="alias", alias="postgresql", kind="core"),
-    "citext": ComponentConfig(name="citext", source="alias", alias="postgresql", kind="core"),
-    "hstore": ComponentConfig(name="hstore", source="alias", alias="postgresql", kind="core"),
-    "pg_trgm": ComponentConfig(name="pg_trgm", source="alias", alias="postgresql", kind="core"),
-    "uuid-ossp": ComponentConfig(name="uuid-ossp", source="alias", alias="postgresql", kind="core"),
-    "fuzzystrmatch": ComponentConfig(name="fuzzystrmatch", source="alias", alias="postgresql", kind="core"),
+    "pg_stat_statements": ComponentConfig(
+        name="pg_stat_statements", source="alias", alias="postgresql", kind="core"
+    ),
+    "pg_buffercache": ComponentConfig(
+        name="pg_buffercache", source="alias", alias="postgresql", kind="core"
+    ),
+    "pgcrypto": ComponentConfig(
+        name="pgcrypto", source="alias", alias="postgresql", kind="core"
+    ),
+    "citext": ComponentConfig(
+        name="citext", source="alias", alias="postgresql", kind="core"
+    ),
+    "hstore": ComponentConfig(
+        name="hstore", source="alias", alias="postgresql", kind="core"
+    ),
+    "pg_trgm": ComponentConfig(
+        name="pg_trgm", source="alias", alias="postgresql", kind="core"
+    ),
+    "uuid-ossp": ComponentConfig(
+        name="uuid-ossp", source="alias", alias="postgresql", kind="core"
+    ),
+    "fuzzystrmatch": ComponentConfig(
+        name="fuzzystrmatch", source="alias", alias="postgresql", kind="core"
+    ),
 }
 
 
@@ -95,23 +138,41 @@ def load_env(path: Path) -> Dict[str, str]:
 
 
 def run_command(cmd: List[str]) -> str:
-    result = subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    result = subprocess.run(
+        cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
     return result.stdout.strip()
 
 
-def fetch_installed_versions(args: argparse.Namespace, env: Dict[str, str]) -> Tuple[str, Dict[str, str]]:
+def fetch_installed_versions(
+    args: argparse.Namespace, env: Dict[str, str]
+) -> Tuple[str, Dict[str, str]]:
     superuser = env.get("POSTGRES_SUPERUSER", "postgres")
     database = env.get("POSTGRES_DB", "postgres")
 
     if args.inside_container:
         base_cmd = ["psql", "--username", superuser, "--dbname", database]
     else:
-        base_cmd = args.compose_bin.split() + ["exec", "-T", args.service, "psql", "--username", superuser, "--dbname", database]
+        base_cmd = args.compose_bin.split() + [
+            "exec",
+            "-T",
+            args.service,
+            "psql",
+            "--username",
+            superuser,
+            "--dbname",
+            database,
+        ]
 
     server_cmd = base_cmd + ["-t", "--command", "SHOW server_version;"]
     server_version = run_command(server_cmd).strip()
 
-    ext_cmd = base_cmd + ["--csv", "--no-align", "--command", "SELECT extname, extversion FROM pg_extension;"]
+    ext_cmd = base_cmd + [
+        "--csv",
+        "--no-align",
+        "--command",
+        "SELECT extname, extversion FROM pg_extension;",
+    ]
     output = run_command(ext_cmd)
     installed: Dict[str, str] = {}
     reader = csv.reader(output.splitlines())
@@ -210,7 +271,9 @@ def main() -> int:
     rows: List[Dict[str, str]] = []
 
     for name, cfg in CONFIG.items():
-        installed_version = server_version if cfg.kind == "server" else installed.get(name)
+        installed_version = (
+            server_version if cfg.kind == "server" else installed.get(name)
+        )
         if cfg.kind == "core":
             latest_version = server_version
         else:
@@ -218,13 +281,15 @@ def main() -> int:
             if latest_version and cfg.kind == "server":
                 latest_version = normalize_version(latest_version)
         status = compare_versions(installed_version, latest_version)
-        rows.append({
-            "component": name,
-            "installed_version": installed_version or "",
-            "latest_version": latest_version or "",
-            "status": status,
-            "source": (cfg.alias or cfg.repo or cfg.source or ""),
-        })
+        rows.append(
+            {
+                "component": name,
+                "installed_version": installed_version or "",
+                "latest_version": latest_version or "",
+                "status": status,
+                "source": (cfg.alias or cfg.repo or cfg.source or ""),
+            }
+        )
 
     display_rows = rows
     if args.only_outdated:
@@ -233,7 +298,16 @@ def main() -> int:
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         with args.output.open("w", newline="") as fh:
-            writer = csv.DictWriter(fh, fieldnames=["component", "installed_version", "latest_version", "status", "source"])
+            writer = csv.DictWriter(
+                fh,
+                fieldnames=[
+                    "component",
+                    "installed_version",
+                    "latest_version",
+                    "status",
+                    "source",
+                ],
+            )
             writer.writeheader()
             writer.writerows(display_rows)
 
@@ -250,12 +324,14 @@ def main() -> int:
             print(header)
             print("-" * len(header))
             for row in display_rows:
-                print(fmt.format(
-                    row["component"],
-                    row["installed_version"],
-                    row["latest_version"],
-                    row["status"],
-                ))
+                print(
+                    fmt.format(
+                        row["component"],
+                        row["installed_version"],
+                        row["latest_version"],
+                        row["status"],
+                    )
+                )
 
     return 0
 

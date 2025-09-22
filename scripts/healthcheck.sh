@@ -18,6 +18,16 @@ PGSSLMODE=${POSTGRES_HEALTHCHECK_SSLMODE:-require}
 
 export PGUSER PGDATABASE PGHOST PGPORT PGSSLMODE
 
+if [[ -z "${PGPASSWORD:-}" ]]; then
+  if [[ -n "${POSTGRES_SUPERUSER_PASSWORD_FILE:-}" && -r "${POSTGRES_SUPERUSER_PASSWORD_FILE}" ]]; then
+    PGPASSWORD=$(<"${POSTGRES_SUPERUSER_PASSWORD_FILE}")
+    export PGPASSWORD
+  elif [[ -n "${POSTGRES_PASSWORD_FILE:-}" && -r "${POSTGRES_PASSWORD_FILE}" ]]; then
+    PGPASSWORD=$(<"${POSTGRES_PASSWORD_FILE}")
+    export PGPASSWORD
+  fi
+fi
+
 if ! pg_isready -q; then
   log "pg_isready failed"
   exit 1

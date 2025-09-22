@@ -20,10 +20,18 @@ OPERATORS = {
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group()
-    group.add_argument("--lt", action="store_true", help="Return success when lhs < rhs")
-    group.add_argument("--le", action="store_true", help="Return success when lhs <= rhs (default)")
-    group.add_argument("--gt", action="store_true", help="Return success when lhs > rhs")
-    group.add_argument("--ge", action="store_true", help="Return success when lhs >= rhs")
+    group.add_argument(
+        "--lt", action="store_true", help="Return success when lhs < rhs"
+    )
+    group.add_argument(
+        "--le", action="store_true", help="Return success when lhs <= rhs (default)"
+    )
+    group.add_argument(
+        "--gt", action="store_true", help="Return success when lhs > rhs"
+    )
+    group.add_argument(
+        "--ge", action="store_true", help="Return success when lhs >= rhs"
+    )
     parser.add_argument("lhs", help="Left-hand-side value")
     parser.add_argument("rhs", help="Right-hand-side value")
     return parser.parse_args(argv)

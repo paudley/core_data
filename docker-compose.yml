@@ -44,12 +44,12 @@ services:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
-    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     env_file:
       - .env
     environment:
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_DB: ${POSTGRES_DB}
       DATABASES_TO_CREATE: ${DATABASES_TO_CREATE}
       PGBOUNCER_AUTH_USER: ${PGBOUNCER_AUTH_USER}
@@ -83,6 +83,9 @@ services:
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
       - ./scripts:/opt/core_data/scripts:ro
+      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
+      - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
+      - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
     networks:
       - core_data
     depends_on:
@@ -99,19 +102,11 @@ services:
     mem_limit: ${POSTGRES_MEMORY_LIMIT}
     cpus: ${POSTGRES_CPU_LIMIT}
     logging: *logging_defaults
-    secrets:
-      - source: postgres_superuser_password
-        target: /run/secrets/postgres_superuser_password
-      - source: pgbouncer_auth_password
-        target: /run/secrets/pgbouncer_auth_password
-      - source: pgbouncer_stats_password
-        target: /run/secrets/pgbouncer_stats_password
 
   pghero:
     image: ankane/pghero:latest
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
     restart: unless-stopped
-    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -130,16 +125,13 @@ services:
       - core_data
     volumes:
       - ./scripts/pghero_entrypoint.sh:/opt/core_data/scripts/pghero_entrypoint.sh:ro
-    secrets:
-      - source: postgres_superuser_password
-        target: /run/secrets/postgres_superuser_password
+      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
     logging: *logging_defaults
 
   logical_backup:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
-    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -155,11 +147,9 @@ services:
     volumes:
       - ./backups:/backups
       - ./scripts/logical_backup_runner.sh:/opt/core_data/scripts/logical_backup_runner.sh:ro
+      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
     networks:
       - core_data
-    secrets:
-      - source: postgres_superuser_password
-        target: /run/secrets/postgres_superuser_password
     logging: *logging_defaults
 
   valkey:
@@ -168,7 +158,6 @@ services:
     restart: unless-stopped
     profiles:
       - valkey
-    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     environment:
       VALKEY_PORT: ${VALKEY_PORT}
       VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}
@@ -180,13 +169,11 @@ services:
     volumes:
       - valkey_data:/data
       - ./valkey/entrypoint.sh:/opt/core_data/valkey-entrypoint.sh:ro
+      - ./secrets/valkey_password:/run/secrets/valkey_password:ro
     networks:
       - core_data
     ports:
       - "${VALKEY_PORT}:6379"
-    secrets:
-      - source: valkey_password
-        target: /run/secrets/valkey_password
     healthcheck:
       test: ["CMD-SHELL", "REDISCLI_AUTH=$(cat /run/secrets/valkey_password) valkey-cli -h 127.0.0.1 -p ${VALKEY_PORT} ping | grep -q PONG"]
       interval: 10s
@@ -223,15 +210,12 @@ services:
       - ./pgbouncer/pgbouncer.ini.tpl:/opt/core_data/pgbouncer.ini.tpl:ro
       - ./pgbouncer/entrypoint.sh:/opt/core_data/pgbouncer-entrypoint.sh:ro
       - ./pgbouncer/userlist.txt.tpl:/opt/core_data/userlist.txt.tpl:ro
+      - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
+      - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
     networks:
       - core_data
     ports:
       - "${PGBOUNCER_PORT}:6432"
-    secrets:
-      - source: pgbouncer_auth_password
-        target: /run/secrets/pgbouncer_auth_password
-      - source: pgbouncer_stats_password
-        target: /run/secrets/pgbouncer_stats_password
     healthcheck:
       test: ["CMD-SHELL", "pgrep pgbouncer >/dev/null"]
       interval: 10s
@@ -279,13 +263,3 @@ volumes:
   pgwal:
   pgbackrest:
   valkey_data:
-
-secrets:
-  postgres_superuser_password:
-    file: ${POSTGRES_SUPERUSER_PASSWORD_FILE}
-  valkey_password:
-    file: ${VALKEY_PASSWORD_FILE}
-  pgbouncer_auth_password:
-    file: ${PGBOUNCER_AUTH_PASSWORD_FILE}
-  pgbouncer_stats_password:
-    file: ${PGBOUNCER_STATS_PASSWORD_FILE}

@@ -25,7 +25,7 @@ logs/
 # Database dumps and artifacts
 *.sql
 *.sql.gz
-/backups/
+/backups/*
 !/backups/.gitkeep
 
 # Docker volumes/data

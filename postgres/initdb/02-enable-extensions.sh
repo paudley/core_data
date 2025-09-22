@@ -4,6 +4,18 @@
 
 set -euo pipefail
 
+if [[ -z "${POSTGRES_PASSWORD:-}" && -n "${POSTGRES_PASSWORD_FILE:-}" && -r "${POSTGRES_PASSWORD_FILE}" ]]; then
+  POSTGRES_PASSWORD=$(<"${POSTGRES_PASSWORD_FILE}")
+fi
+
+if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
+  export PGPASSWORD="${POSTGRES_PASSWORD}"
+fi
+
+until psql --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" --command "SELECT 1;" >/dev/null 2>&1; do
+  sleep 1
+done
+
 # shellcheck disable=SC1091
 # shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
 source /opt/core_data/scripts/lib/extensions_list.sh

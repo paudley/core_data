@@ -25,10 +25,16 @@ SECTION_FILES: List[Tuple[str, str]] = [
     ("Buffer Cache Snapshot", "pg_buffercache.csv"),
     ("Schema Snapshot", "schema_snapshot.csv"),
     ("pgAudit Summary", "pgaudit_summary.csv"),
+    ("ValKey INFO", "valkey-info.txt"),
+    ("PgBouncer Stats", "pgbouncer-stats.csv"),
+    ("PgBouncer Pools", "pgbouncer-pools.csv"),
+    ("Memcached Stats", "memcached-stats.txt"),
 ]
 
 
-def load_csv(path: Path, limit: int = 10) -> Tuple[List[str], List[Dict[str, str]], int]:
+def load_csv(
+    path: Path, limit: int = 10
+) -> Tuple[List[str], List[Dict[str, str]], int]:
     headers: List[str] = []
     preview: List[Dict[str, str]] = []
     total = 0
@@ -51,7 +57,7 @@ def render_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
     body_rows: List[str] = []
     if not rows:
         colspan = max(len(headers), 1)
-        body_rows.append(f"<tr><td colspan=\"{colspan}\">No rows</td></tr>")
+        body_rows.append(f'<tr><td colspan="{colspan}">No rows</td></tr>')
     else:
         for row in rows:
             cells = []
@@ -63,7 +69,9 @@ def render_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
             body_rows.append(f"<tr>{''.join(cells)}</tr>")
 
     body_html = "".join(body_rows)
-    return f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+    return (
+        f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+    )
 
 
 def render_text(path: Path, limit: int = 2000) -> str:
@@ -90,7 +98,9 @@ def main() -> int:
             continue
         if path.suffix == ".txt":
             content = render_text(path)
-            sections.append(f"<section><h2>{html.escape(title)}</h2>{content}</section>")
+            sections.append(
+                f"<section><h2>{html.escape(title)}</h2>{content}</section>"
+            )
             continue
         headers, rows, total = load_csv(path, args.rows)
         table_html = render_table(headers, rows)
@@ -104,7 +114,7 @@ def main() -> int:
     pg_badger = args.input / "pgbadger.html"
     if pg_badger.exists():
         sections.append(
-            f"<section><h2>pgBadger Report</h2><p>See <a href='pgbadger.html'>pgbadger.html</a></p></section>"
+            "<section><h2>pgBadger Report</h2><p>See <a href='pgbadger.html'>pgbadger.html</a></p></section>"
         )
 
     if not sections:
@@ -129,7 +139,9 @@ def main() -> int:
   {sections}
 </body>
 </html>
-""".format(directory=html.escape(str(args.input)), sections="\n".join(sections))
+""".format(
+        directory=html.escape(str(args.input)), sections="\n".join(sections)
+    )
 
     args.output.write_text(html_doc)
     return 0

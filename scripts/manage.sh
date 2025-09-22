@@ -227,7 +227,18 @@ shift || true
     ;;
   build-image)
     ensure_env
-    compose build postgres
+    uid=${POSTGRES_UID:-$(id -u)}
+    gid=${POSTGRES_GID:-$(id -g)}
+    runtime_user=${POSTGRES_RUNTIME_USER:-postgres}
+    runtime_gecos=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL Administrator"}
+    runtime_home=${POSTGRES_RUNTIME_HOME:-/home/${runtime_user}}
+    compose build \
+      --build-arg CORE_UID="${uid}" \
+      --build-arg CORE_GID="${gid}" \
+      --build-arg CORE_USERNAME="${runtime_user}" \
+      --build-arg CORE_GECOS="${runtime_gecos}" \
+      --build-arg CORE_HOME="${runtime_home}" \
+      postgres
     ;;
   up)
     ensure_env

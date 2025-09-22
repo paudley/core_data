@@ -42,6 +42,10 @@ def manage_env(tmp_path_factory):
         "VALKEY_PORT": str(valkey_port),
         "PGBOUNCER_PORT": str(pgbouncer_port),
         "MEMCACHED_PORT": str(memcached_port),
+        "POSTGRES_UID": str(os.getuid()),
+        "POSTGRES_GID": str(os.getgid()),
+        "POSTGRES_RUNTIME_HOME": "/home/postgres",
+        "POSTGRES_RUNTIME_GECOS": "CI_PostgreSQL_Administrator",
     }
 
     lines = []
@@ -207,6 +211,7 @@ def test_full_workflow(manage_env):
     run_manage(env, "build-image")
     run_manage(env, "up")
     wait_for_ready(env)
+    run_manage(env, "stanza-create")
 
     run_manage(env, "create-user", "ci_user", "ci_password")
     run_manage(env, "create-db", "ci_db", "ci_user")
@@ -260,6 +265,7 @@ def test_full_workflow(manage_env):
     daily_dirs = sorted((ROOT / "backups" / "ci").glob("*/"))
     assert daily_dirs
     daily_dir = daily_dirs[-1]
+    print("daily_dir entries:", sorted(p.name for p in daily_dir.iterdir()))
     assert (daily_dir / "index_bloat.csv").exists()
     assert (daily_dir / "schema_snapshot.csv").exists()
     assert (daily_dir / "maintenance_report.html").exists()
@@ -280,7 +286,6 @@ def test_full_workflow(manage_env):
     assert repack_logs
     assert vacuum_logs
 
-    run_manage(env, "stanza-create")
     run_manage(env, "backup", "--type=full")
 
     run_manage(env, "upgrade", "--new-version", "17")

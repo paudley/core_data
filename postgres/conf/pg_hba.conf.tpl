@@ -4,7 +4,7 @@
 # pg_hba.conf template rendered during init
 
 # TYPE  DATABASE        USER            ADDRESS                 METHOD
-local   all             all                                     peer
+local   all             all                                     scram-sha-256
 host    all             all             127.0.0.1/32            scram-sha-256
 host    all             all             ::1/128                 scram-sha-256
 hostnossl all          all             0.0.0.0/0               reject

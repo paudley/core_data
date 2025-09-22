@@ -1,25 +1,25 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
-set -euo pipefail
+set -eu
 
-password="${VALKEY_PASSWORD:-}"
-if [[ -z "${password}" && -n "${VALKEY_PASSWORD_FILE:-}" && -r "${VALKEY_PASSWORD_FILE}" ]]; then
-  password=$(<"${VALKEY_PASSWORD_FILE}")
+password=${VALKEY_PASSWORD:-}
+if [ -z "${password}" ] && [ -n "${VALKEY_PASSWORD_FILE:-}" ] && [ -r "${VALKEY_PASSWORD_FILE}" ]; then
+  password=$(cat "${VALKEY_PASSWORD_FILE}")
 fi
 
-if [[ -z "${password}" ]]; then
+if [ -z "${password}" ]; then
   echo "[valkey] ERROR: password not provided via VALKEY_PASSWORD or VALKEY_PASSWORD_FILE" >&2
   exit 1
 fi
 
 export VALKEY_PASSWORD="${password}"
-export VALKEY_PORT=${VALKEY_PORT:-6379}
-export VALKEY_APPENDONLY=${VALKEY_APPENDONLY:-yes}
-export VALKEY_MAXMEMORY=${VALKEY_MAXMEMORY:-256mb}
-export VALKEY_MAXMEMORY_POLICY=${VALKEY_MAXMEMORY_POLICY:-allkeys-lru}
-export VALKEY_DATABASES=${VALKEY_DATABASES:-16}
+export VALKEY_PORT="${VALKEY_PORT:-6379}"
+export VALKEY_APPENDONLY="${VALKEY_APPENDONLY:-yes}"
+export VALKEY_MAXMEMORY="${VALKEY_MAXMEMORY:-256mb}"
+export VALKEY_MAXMEMORY_POLICY="${VALKEY_MAXMEMORY_POLICY:-allkeys-lru}"
+export VALKEY_DATABASES="${VALKEY_DATABASES:-16}"
 
 umask 077
 cat > /data/valkey.conf <<EOF
