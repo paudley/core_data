@@ -26,8 +26,8 @@ copy_query_to_file() {
 _snapshot_pg_stat_statements() {
   local target_path=$1
   local limit=${2:-100}
-  local query
 query=$(cat <<SQL
+SELECT now() AS collected_at,
 SELECT now() AS collected_at,
        d.datname,
        s.queryid,
