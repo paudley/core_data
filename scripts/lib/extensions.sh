@@ -91,6 +91,12 @@ SELECT relid::regclass::text AS partition_name
    AND level = 1
  LIMIT 1;
 
+-- hypopg smoke
+SELECT indexrelid AS hypo_idx
+  FROM hypopg_create_index('CREATE INDEX ON core_data_partman_tmp.partman_demo (created_at)');
+\gset
+SELECT hypopg_drop_index(:hypo_idx);
+
 -- PostGIS ecosystem helpers
 SELECT EXISTS (
   SELECT 1 FROM information_schema.schemata WHERE schema_name = 'tiger'
@@ -118,7 +124,7 @@ run_pgtap_smoke() {
     psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(28);
+SELECT plan(29);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
 SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
@@ -147,6 +153,7 @@ SELECT has_extension('postgis_tiger_geocoder', 'postgis_tiger_geocoder extension
 SELECT has_extension('address_standardizer', 'address_standardizer extension installed');
 SELECT has_extension('address_standardizer_data_us', 'address_standardizer_data_us extension installed');
 SELECT has_extension('pgrouting', 'pgRouting extension installed');
+SELECT has_extension('hypopg', 'hypopg extension installed');
 SELECT has_extension('pg_partman', 'pg_partman extension installed');
 SELECT * FROM finish();
 SQL

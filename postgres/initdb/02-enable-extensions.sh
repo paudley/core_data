@@ -15,6 +15,7 @@ EXTENSIONS=(
   pg_buffercache
   pg_cron
   pg_partman
+  hypopg
   pg_repack
   pg_squeeze
   pg_stat_statements

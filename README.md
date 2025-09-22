@@ -29,7 +29,7 @@ core_data provisions a batteries-included extension stack in every non-template 
 
 - **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`.
 - **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
-- **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`.
+- **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`.
 - **Connectivity** — `postgres_fdw`, `dblink`.
 - **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
 - **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
@@ -95,8 +95,8 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `snapshot-pgstat` | Capture a `pg_stat_statements` baseline (CSV output) for performance trending. |
 | `diff-pgstat --base --compare` | Diff two snapshots (CSV-in/CSV-out) to highlight hot queries. |
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
-| `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, pg_partman, etc.). |
-| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including pg_partman) are registered. |
+| `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, hypopg, pg_partman, etc.). |
+| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including hypopg/pg_partman) are registered. |
 | `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
 | `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
 | `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
