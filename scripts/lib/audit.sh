@@ -214,6 +214,10 @@ audit_pg_buffercache() {
   ensure_env
   local target_path=${1:-}
   local limit=${2:-50}
+  if ! [[ ${limit} =~ ^[0-9]+$ ]]; then
+    echo "[audit] invalid limit '${limit}', falling back to 50" >&2
+    limit=50
+  fi
   local query
 query=$(cat <<SQL
 SELECT now() AS collected_at,
