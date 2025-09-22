@@ -32,6 +32,8 @@ SELECT * FROM cypher('core_data_smoke_graph', $$ CREATE (n:person {name: 'Alice'
 SELECT * FROM cypher('core_data_smoke_graph', $$ MATCH (n:person) RETURN n.name $$) AS (name agtype);
 SELECT drop_graph('core_data_smoke_graph', true);
 
+RESET search_path;
+
 -- pgcrypto smoke
 SELECT encode(digest('core_data', 'sha256'), 'hex');
 
@@ -45,6 +47,51 @@ SELECT similarity('core data', 'core_data');
 
 -- pg_buffercache visibility
 SELECT count(*) FROM pg_buffercache;
+
+-- pg_partman smoke
+CREATE SCHEMA IF NOT EXISTS core_data_partman_tmp;
+SET search_path = core_data_partman_tmp, public;
+DROP TABLE IF EXISTS partman_demo CASCADE;
+CREATE TABLE partman_demo (id bigint, created_at timestamptz NOT NULL DEFAULT now()) PARTITION BY RANGE (created_at);
+DO
+$$
+DECLARE
+  partman_schema text;
+BEGIN
+  SELECT n.nspname INTO partman_schema
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+   WHERE e.extname = 'pg_partman';
+  IF partman_schema IS NULL THEN
+    RAISE EXCEPTION 'pg_partman extension not installed';
+  END IF;
+  EXECUTE format('DELETE FROM %I.part_config WHERE parent_table = %L;', partman_schema, 'core_data_partman_tmp.partman_demo');
+  EXECUTE format('DROP TABLE IF EXISTS %I.template_core_data_partman_tmp_partman_demo CASCADE;', partman_schema);
+  EXECUTE format('SELECT %I.create_parent(''core_data_partman_tmp.partman_demo'', ''created_at'', ''1 day'', ''range'');', partman_schema);
+END;
+$$;
+INSERT INTO partman_demo (id, created_at)
+VALUES
+  (1, now()),
+  (2, now() + interval '1 day');
+SELECT n.nspname AS partman_schema
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+ WHERE e.extname = 'pg_partman'
+\gset
+\if :{?partman_schema}
+SELECT format('CALL %I.run_maintenance_proc();', :'partman_schema');
+\gexec
+\else
+SELECT 'pg_partman extension not installed' AS warning;
+\endif
+SELECT relid::regclass::text AS partition_name
+  FROM pg_partition_tree('core_data_partman_tmp.partman_demo')
+ WHERE parentrelid = 'core_data_partman_tmp.partman_demo'::regclass
+   AND level = 1
+ LIMIT 1;
+SET search_path = public;
+DROP SCHEMA core_data_partman_tmp CASCADE;
 SQL
 }
 
@@ -56,7 +103,7 @@ run_pgtap_smoke() {
     psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(23);
+SELECT plan(24);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
 SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
@@ -80,6 +127,7 @@ SELECT has_extension('pgaudit', 'pgaudit extension installed');
 SELECT has_extension('postgis_raster', 'postgis_raster extension installed');
 SELECT has_extension('postgis_topology', 'postgis_topology extension installed');
 SELECT has_extension('pgstattuple', 'pgstattuple extension installed');
+SELECT has_extension('pg_partman', 'pg_partman extension installed');
 SELECT * FROM finish();
 SQL
 }

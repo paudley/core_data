@@ -77,6 +77,23 @@ snapshot_pg_stat_statements "${CONTAINER_TARGET_DIR}/pg_stat_statements.csv" "${
 echo "[daily] snapshotting buffer cache allocation"
 audit_pg_buffercache "${CONTAINER_TARGET_DIR}/pg_buffercache.csv" "${BUFFERCACHE_LIMIT}" || true
 
+echo "[daily] running pg_partman maintenance"
+while IFS= read -r db; do
+  [[ -z "${db}" ]] && continue
+  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
+SELECT n.nspname AS partman_schema
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+ WHERE e.extname = 'pg_partman'
+\gset
+\if :{?partman_schema}
+SELECT format('CALL %I.run_maintenance_proc();', :'partman_schema');
+\gexec
+\endif
+SQL
+done <<<"${databases}"
+
 echo "[daily] auditing roles"
 audit_roles "${CONTAINER_TARGET_DIR}/role_audit.csv" || true
 

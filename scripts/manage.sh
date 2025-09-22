@@ -32,6 +32,7 @@ CORE_DATA_EXTENSIONS=(
   hstore
   pg_buffercache
   pg_cron
+  pg_partman
   pg_repack
   pg_squeeze
   pg_stat_statements
@@ -53,6 +54,31 @@ bootstrap_database() {
 
   for ext in "${CORE_DATA_EXTENSIONS[@]}"; do
     if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
+      continue
+    fi
+    if [[ "${ext}" == "pg_partman" ]]; then
+      compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+        psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null
+DO
+$$
+DECLARE
+  ext_schema text;
+BEGIN
+  SELECT n.nspname INTO ext_schema
+    FROM pg_extension e
+    JOIN pg_namespace n ON n.oid = e.extnamespace
+   WHERE e.extname = 'pg_partman';
+  IF ext_schema IS NOT NULL AND ext_schema <> 'partman' THEN
+    RAISE NOTICE 'Recreating pg_partman extension in schema partman (was %).', ext_schema;
+    EXECUTE 'DROP EXTENSION pg_partman CASCADE';
+  END IF;
+END;
+$$;
+CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION CURRENT_USER;
+SET search_path TO partman;
+CREATE EXTENSION IF NOT EXISTS pg_partman;
+RESET search_path;
+SQL
       continue
     fi
     compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \

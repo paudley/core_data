@@ -32,9 +32,11 @@ core_data provisions a batteries-included extension stack in every non-template 
 - **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`.
 - **Connectivity** — `postgres_fdw`, `dblink`.
 - **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
-- **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
+- **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
 
 The same bundle is installed into `template1` so freshly created databases inherit the tooling automatically.
+
+`pg_partman_bgw` is preloaded with a one-hour interval targeting the `postgres` database under the `postgres` superuser. Adjust `pg_partman_bgw.dbname`/`role` in `postgresql.conf.tpl` (or via `postgresql.pgtune.conf`) if you manage partitions from a different control schema.
 
 ## Quick Start
 1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
@@ -90,13 +92,13 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `snapshot-pgstat` | Capture a `pg_stat_statements` baseline (CSV output) for performance trending. |
 | `diff-pgstat --base --compare` | Diff two snapshots (CSV-in/CSV-out) to highlight hot queries. |
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
-| `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, etc.). |
-| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions are registered. |
+| `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, pg_partman, etc.). |
+| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including pg_partman) are registered. |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
-`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed. Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 
 Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
 
@@ -118,7 +120,7 @@ All runs write logs under `backups/` for auditing (`pg_repack-*.log`, `vacuum-fu
 - **CI Workflow:** `.github/workflows/ci.yml` builds the image, runs `python -m pytest -k full_workflow`, and uploads generated backups for inspection.
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
 - **Fast Tests:** `tests/test_lightweight.py` validates offline flows like help output and the vendored tooling without needing Docker.
-- **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that the entire core extension bundle (vector/PostGIS/AGE/hstore/citext/pgcrypto/etc.) is ready for use.
+- **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that the entire core extension bundle (vector/PostGIS/AGE/hstore/citext/pgcrypto/pg_partman/etc.) is ready for use.
 - **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits
