@@ -76,11 +76,7 @@ compose() {
 
 # compose_exec runs docker compose exec with the postgres user (no TTY).
 compose_exec() {
-  local exec_args=("-T" "--user" "${POSTGRES_EXEC_USER}")
-  if [[ -n "${PGPASSWORD:-}" ]]; then
-    exec_args+=("--env" "PGPASSWORD=${PGPASSWORD}")
-  fi
-  compose exec "${exec_args[@]}" "${PG_CONTAINER}" "$@"
+  compose exec -T --user "${POSTGRES_EXEC_USER}" "${PG_CONTAINER}" "$@"
 }
 
 # compose_run runs docker compose run for ephemeral helper containers.
