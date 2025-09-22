@@ -27,7 +27,6 @@ _snapshot_pg_stat_statements() {
   local target_path=$1
   local limit=${2:-100}
   local query
-  local query
 query=$(cat <<SQL
 SELECT now() AS collected_at,
        d.datname,
