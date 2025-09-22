@@ -9,11 +9,13 @@ VALKEY_HOST=${VALKEY_HOST:-127.0.0.1}
 VALKEY_PORT=${VALKEY_PORT:-6379}
 
 valkey_exec_cli() {
-  local auth_env=(env)
-  if [[ -n ${VALKEY_PASSWORD:-} ]]; then
-    auth_env+=(REDISCLI_AUTH="${VALKEY_PASSWORD}")
+  local pass_args=()
+  if compose exec -T "${VALKEY_SERVICE_NAME}" test -r /run/secrets/valkey_password 2>/dev/null; then
+    pass_args=(--passfile /run/secrets/valkey_password)
+  elif [[ -n ${VALKEY_PASSWORD:-} ]]; then
+    pass_args=(--no-auth-warning -a "${VALKEY_PASSWORD}")
   fi
-  compose_exec_service "${VALKEY_SERVICE_NAME}" "${auth_env[@]}" valkey-cli -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" "$@"
+  compose_exec_service "${VALKEY_SERVICE_NAME}" valkey-cli "${pass_args[@]}" -h "${VALKEY_HOST}" -p "${VALKEY_PORT}" "$@"
 }
 
 cmd_valkey_cli() {
