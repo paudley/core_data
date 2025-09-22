@@ -13,6 +13,7 @@ import os
 import re
 import subprocess
 import sys
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -164,16 +165,17 @@ def compare_versions(installed: Optional[str], latest: Optional[str]) -> str:
 
 def fetch_github_latest(repo: str) -> Optional[str]:
     url = f"https://api.github.com/repos/{repo}/releases/latest"
-    try:
-        import urllib.request
+    headers = {"User-Agent": "core-data-version-check"}
+    if GITHUB_TOKEN:
+        headers["Authorization"] = f"token {GITHUB_TOKEN}"  # pragma: allowlist secret
 
-        headers = {"User-Agent": "core-data-version-check"}
-        if GITHUB_TOKEN:
-            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"  # pragma: allowlist secret
-        req = urllib.request.Request(url, headers=headers)
+    req = urllib.request.Request(url, headers=headers)
+    try:
         with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.load(resp)
     except Exception:
         return None
+
     tag = data.get("tag_name") or data.get("name")
     return tag
 

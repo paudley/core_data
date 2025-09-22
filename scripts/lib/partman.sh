@@ -93,8 +93,8 @@ SQL
 #                         <automatic_mode> <jobmon> <time_encoder> <time_decoder>
 partman_create_parent() {
   ensure_env
-  if [[ $# -ne 12 ]]; then
-    echo "[partman] internal error: unexpected argument count to partman_create_parent" >&2
+  if [[ $# -lt 4 ]]; then
+    echo "Usage: partman_create_parent <db> <schema.table> <control_column> <interval> [type] [start_partition] [premake] [default_table] [automatic_mode] [jobmon] [time_encoder] [time_decoder]" >&2
     exit 1
   fi
 
@@ -102,14 +102,14 @@ partman_create_parent() {
   local parent_table=$2
   local control_column=$3
   local interval=$4
-  local type=$5
-  local start_partition=$6
-  local premake=$7
-  local default_table=$8
-  local automatic_mode=$9
-  local jobmon=${10}
-  local time_encoder=${11}
-  local time_decoder=${12}
+  local type=${5:-range}
+  local start_partition=${6:-}
+  local premake=${7:-}
+  local default_table=${8:-true}
+  local automatic_mode=${9:-on}
+  local jobmon=${10:-true}
+  local time_encoder=${11:-}
+  local time_decoder=${12:-}
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
