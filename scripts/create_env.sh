@@ -155,17 +155,54 @@ chmod 0600 "${secret_file}" || true
 set_env_value POSTGRES_SUPERUSER_PASSWORD ""
 set_env_value POSTGRES_SUPERUSER_PASSWORD_FILE "./secrets/postgres_superuser_password"
 
-# UID/GID alignment
+valkey_secret_file="${secret_dir}/valkey_password"
+valkey_default_password="$(generate_password)"
+valkey_password="$(prompt_secret "ValKey password (written to secrets/valkey_password)" "${valkey_default_password}")"
+printf '%s\n' "${valkey_password}" > "${valkey_secret_file}"
+chmod 0600 "${valkey_secret_file}" || true
+set_env_value VALKEY_PASSWORD_FILE "./secrets/valkey_password"
+
+pgbouncer_auth_secret="${secret_dir}/pgbouncer_auth_password"
+pgbouncer_auth_default="$(generate_password)"
+pgbouncer_auth_password="$(prompt_secret "PgBouncer auth user password (written to secrets/pgbouncer_auth_password)" "${pgbouncer_auth_default}")"
+printf '%s\n' "${pgbouncer_auth_password}" > "${pgbouncer_auth_secret}"
+chmod 0600 "${pgbouncer_auth_secret}" || true
+set_env_value PGBOUNCER_AUTH_PASSWORD_FILE "./secrets/pgbouncer_auth_password"
+
+pgbouncer_stats_secret="${secret_dir}/pgbouncer_stats_password"
+pgbouncer_stats_default="$(generate_password)"
+pgbouncer_stats_password="$(prompt_secret "PgBouncer stats user password (written to secrets/pgbouncer_stats_password)" "${pgbouncer_stats_default}")"
+printf '%s\n' "${pgbouncer_stats_password}" > "${pgbouncer_stats_secret}"
+chmod 0600 "${pgbouncer_stats_secret}" || true
+set_env_value PGBOUNCER_STATS_PASSWORD_FILE "./secrets/pgbouncer_stats_password"
+
+# UID/GID alignment (default to current host user)
 user_uid=$(id -u)
 user_gid=$(id -g)
-use_host_ids=$(prompt_default "Use current host UID/GID (${user_uid}:${user_gid}) inside the container?" "yes")
-if [[ ${use_host_ids,,} == yes || ${use_host_ids,,} == y ]]; then
-  set_env_value POSTGRES_UID "${user_uid}"
-  set_env_value POSTGRES_GID "${user_gid}"
-else
-  set_env_value POSTGRES_UID "999"
-  set_env_value POSTGRES_GID "999"
+uid_choice=$(prompt_default "Container runtime UID" "${user_uid}")
+gid_choice=$(prompt_default "Container runtime GID" "${user_gid}")
+set_env_value POSTGRES_UID "${uid_choice}"
+set_env_value POSTGRES_GID "${gid_choice}"
+
+runtime_user_default="postgres"
+runtime_user=$(prompt_default "Container runtime username" "${runtime_user_default}")
+if [[ -z ${runtime_user} ]]; then
+  runtime_user=${runtime_user_default}
 fi
+runtime_gecos_default="Core Data PostgreSQL Administrator"
+runtime_gecos=$(prompt_default "Container runtime full name" "${runtime_gecos_default}")
+if [[ -z ${runtime_gecos} ]]; then
+  runtime_gecos=${runtime_gecos_default}
+fi
+runtime_gecos_escaped=${runtime_gecos// /\\ }
+container_home_default="/home/${runtime_user}"
+container_home=$(prompt_default "Container home directory" "${container_home_default}")
+if [[ -z ${container_home} ]]; then
+  container_home=${container_home_default}
+fi
+set_env_value POSTGRES_RUNTIME_USER "${runtime_user}"
+set_env_value POSTGRES_RUNTIME_GECOS "${runtime_gecos_escaped}"
+set_env_value POSTGRES_RUNTIME_HOME "${container_home}"
 
 # Resource sizing suggestions
 mem_total_gb=$(detect_total_memory_gb)

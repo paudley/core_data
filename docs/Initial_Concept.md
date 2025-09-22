@@ -75,8 +75,32 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `DOCKER_NETWORK_NAME` | Name for the dedicated bridge network. | `core_data_network` |
 | `DOCKER_NETWORK_SUBNET` | Subnet allocated to the bridge network; also rendered into `pg_hba.conf`. | `172.25.0.0/16` |
 | `TZ` | Time zone shared by containers and rendered into `postgresql.conf`. | `UTC` |
+| `COMPOSE_PROFILES` | Comma-separated Docker Compose profiles to start (`valkey`, `pgbouncer`, `memcached`). | `valkey,pgbouncer,memcached` |
+| `LOGICAL_BACKUP_INTERVAL_SECONDS` | Frequency of logical backup sidecar runs. | `86400` |
+| `LOGICAL_BACKUP_RETENTION_DAYS` | Days to retain logical backups before pruning. | `7` |
+| `LOGICAL_BACKUP_EXCLUDE` | Comma-separated database names the sidecar should skip. | `postgres` |
+| `VALKEY_PORT` | Host/container port for ValKey. | `6379` |
+| `VALKEY_PASSWORD_FILE` | Secret containing the ValKey password (host path). | `./secrets/valkey_password` |
+| `VALKEY_MAXMEMORY` / `VALKEY_MAXMEMORY_POLICY` | Memory ceiling and eviction strategy. | `256mb` / `allkeys-lru` |
+| `PGBOUNCER_PORT` | Host port exposing PgBouncer. | `6432` |
+| `PGBOUNCER_AUTH_USER` | Superuser used by PgBouncer to run `auth_query`. | `pgbouncer_auth` |
+| `PGBOUNCER_AUTH_PASSWORD_FILE` | Secret file with the PgBouncer auth user password. | `./secrets/pgbouncer_auth_password` |
+| `PGBOUNCER_STATS_USER` | Role used for PgBouncer admin/stat connections. | `pgbouncer_stats` |
+| `PGBOUNCER_STATS_PASSWORD_FILE` | Secret file with the PgBouncer stats user password. | `./secrets/pgbouncer_stats_password` |
+| `PGBOUNCER_POOL_MODE` | Connection pool mode (`session`, `transaction`, `statement`). | `transaction` |
+| `PGBOUNCER_MAX_CLIENT_CONN` / `PGBOUNCER_DEFAULT_POOL_SIZE` | Client cap and per-database pool size. | `200` / `20` |
+| `MEMCACHED_PORT` | Host port exposing Memcached. | `11211` |
+| `MEMCACHED_MEMORY_MB` / `MEMCACHED_THREADS` | Memcached memory budget (MB) and worker threads. | `128` / `4` |
 
 > **Note:** Named volumes (`pgdata`, `pgwal`, `pgbackrest`) back PGDATA, WAL, and the archive by default. Set `PG_DATA_DIR` / `PG_WAL_DIR` if you intentionally revert to bind mounts for those paths.
+
+Compose profiles expose supporting services on demand:
+
+- `valkey` profile turns on ValKey with append-only persistence, password enforcement, and CLI helpers.
+- `pgbouncer` profile launches PgBouncer with SCRAM auth, config templating, and the admin/stats helpers wired through `manage.sh`.
+- `memcached` profile adds a Memcached cache sized via the `MEMCACHED_*` knobs.
+
+Adjust `COMPOSE_PROFILES` in `.env` to remove profiles you don't need without editing `docker-compose.yml`.
 
 ## Image Build & Extensions
 `postgres/Dockerfile` extends the official `postgres:<PG_VERSION>-bookworm` image. It installs packaged extensions (`postgis`, `pgvector`, `pgaudit`, `pg_cron`, `pg_repack`, `pgtap`) and compiles Apache AGE plus `pg_squeeze` from source. The image also includes `pgbadger`, `pgbackrest`, and helper scripts under `/opt/core_data`. A container health check ensures `pg_isready` succeeds before dependent services start.

@@ -4,12 +4,23 @@
 # syntax=docker/dockerfile:1.7
 ARG PG_VERSION=17
 ARG AGE_VERSION=master
+ARG CORE_UID=1000
+ARG CORE_GID=1000
+ARG CORE_USERNAME=postgres
+ARG CORE_GECOS="Core Data PostgreSQL Administrator"
+ARG CORE_HOME=/home/postgres
+
 FROM postgres:${PG_VERSION}-bookworm
 
 LABEL maintainer="core_data team"
 
 ARG PG_VERSION
 ARG AGE_VERSION
+ARG CORE_UID
+ARG CORE_GID
+ARG CORE_USERNAME
+ARG CORE_GECOS
+ARG CORE_HOME
 
 ENV DEBIAN_FRONTEND=noninteractive \
     AGE_VERSION=${AGE_VERSION}
@@ -45,8 +56,16 @@ RUN set -eux; \
       postgresql-${PG_MAJOR}-pgtap \
       postgresql-contrib \
       pgbadger \
-      pgbackrest; \
-    rm -rf /var/lib/apt/lists/*
+    pgbackrest; \
+    rm -rf /var/lib/apt/lists/*;
+
+# Recreate postgres system user with operator-selected UID/GID and home
+RUN set -eux; \
+    groupmod --gid "${CORE_GID}" postgres; \
+    usermod --uid "${CORE_UID}" --gid "${CORE_GID}" --home "${CORE_HOME}" --comment "${CORE_GECOS}" --shell /bin/bash postgres; \
+    install -d -o "${CORE_UID}" -g "${CORE_GID}" "${CORE_HOME}"; \
+    install -d -o "${CORE_UID}" -g "${CORE_GID}" /tmp/pgbackrest; \
+    chown -R "${CORE_UID}:${CORE_GID}" /var/lib/postgresql /var/lib/pgbackrest;
 
 # Build Apache AGE from source
 RUN set -eux; \
@@ -74,7 +93,7 @@ COPY scripts /opt/core_data/scripts
 RUN chmod +x /docker-entrypoint-initdb.d/*.sh
 
 # Provide default volume locations in the image
-VOLUME ["/var/lib/postgresql/data", "/var/lib/pgbackrest"]
+VOLUME ["/var/lib/postgresql/data", "/var/lib/pgbackrest", "/home/postgres"]
 
 HEALTHCHECK --start-period=30s --interval=10s --timeout=5s --retries=5 \
     CMD pg_isready -U "$${POSTGRES_USER:-postgres}" || exit 1

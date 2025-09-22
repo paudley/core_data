@@ -89,13 +89,13 @@ repo1-retention-full=7
 process-max=4
 start-fast=y
 log-level-console=info
+archive-check=n
 
 [main]
 pg1-path=${PGDATA}
 pg1-port=5432
 CONF
 
-chmod 600 "${PGBACKREST_CONF_PATH}"
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
 

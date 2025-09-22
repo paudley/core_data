@@ -4,6 +4,18 @@
 
 set -euo pipefail
 
+if [[ -z "${POSTGRES_PASSWORD:-}" && -n "${POSTGRES_PASSWORD_FILE:-}" && -r "${POSTGRES_PASSWORD_FILE}" ]]; then
+  POSTGRES_PASSWORD=$(<"${POSTGRES_PASSWORD_FILE}")
+fi
+
+if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
+  export PGPASSWORD="${POSTGRES_PASSWORD}"
+fi
+
+until psql --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" --command "SELECT 1;" >/dev/null 2>&1; do
+  sleep 1
+done
+
 if [[ -z "${DATABASES_TO_CREATE:-}" ]]; then
   echo "[core_data] DATABASES_TO_CREATE not defined; skipping additional database provisioning." >&2
   exit 0
@@ -31,3 +43,35 @@ WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = '${db_name}');
 SQL
 
 done
+
+if [[ -n "${PGBOUNCER_AUTH_USER:-}" ]]; then
+  if [[ -r /run/secrets/pgbouncer_auth_password ]]; then
+    pgbouncer_auth_password=$(</run/secrets/pgbouncer_auth_password)
+    echo "[core_data] Ensuring PgBouncer auth user '${PGBOUNCER_AUTH_USER}' exists." >&2
+    psql --set ON_ERROR_STOP=on \
+         --username "${POSTGRES_USER}" \
+         --dbname "${POSTGRES_DB}" <<SQL
+SELECT format('CREATE ROLE %I WITH SUPERUSER LOGIN PASSWORD %L', '${PGBOUNCER_AUTH_USER}', '${pgbouncer_auth_password}')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${PGBOUNCER_AUTH_USER}');
+\gexec
+SQL
+  else
+    echo "[core_data] WARNING: /run/secrets/pgbouncer_auth_password not readable; skipping PgBouncer auth user." >&2
+  fi
+fi
+
+if [[ -n "${PGBOUNCER_STATS_USER:-}" ]]; then
+  if [[ -r /run/secrets/pgbouncer_stats_password ]]; then
+    pgbouncer_stats_password=$(</run/secrets/pgbouncer_stats_password)
+    echo "[core_data] Ensuring PgBouncer stats user '${PGBOUNCER_STATS_USER}' exists." >&2
+    psql --set ON_ERROR_STOP=on \
+         --username "${POSTGRES_USER}" \
+         --dbname "${POSTGRES_DB}" <<SQL
+SELECT format('CREATE ROLE %I WITH LOGIN PASSWORD %L', '${PGBOUNCER_STATS_USER}', '${pgbouncer_stats_password}')
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '${PGBOUNCER_STATS_USER}');
+\gexec
+SQL
+  else
+    echo "[core_data] WARNING: /run/secrets/pgbouncer_stats_password not readable; skipping PgBouncer stats user." >&2
+  fi
+fi

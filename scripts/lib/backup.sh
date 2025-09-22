@@ -88,7 +88,7 @@ USAGE
     cmd+=("--type=${backup_type}")
   fi
   cmd+=(backup)
-  compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
+  POSTGRES_EXEC_USER="0:0" compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     "${cmd[@]}"
@@ -120,7 +120,7 @@ verify_latest_backup() {
   config_dir=$(mktemp -d)
   chmod 0777 "${restore_dir}" "${config_dir}"
   local config_file="${config_dir}/pgbackrest.conf"
-  if ! compose_exec cat "${PGBACKREST_CONF}" >"${config_file}"; then
+  if ! POSTGRES_EXEC_USER="0:0" compose_exec cat "${PGBACKREST_CONF}" >"${config_file}"; then
     echo "[backup] Unable to fetch pgBackRest configuration from container." >&2
     rm -rf "${restore_dir}" "${config_dir}"
     return 1
@@ -145,7 +145,7 @@ verify_latest_backup() {
 # cmd_stanza_create initializes the pgBackRest stanza inside the container.
 cmd_stanza_create() {
   ensure_env
-  compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
+  POSTGRES_EXEC_USER="0:0" compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     pgbackrest --config="${PGBACKREST_CONF}" --stanza=main stanza-create
@@ -154,7 +154,7 @@ cmd_stanza_create() {
 # cmd_restore_snapshot proxies pgBackRest restore with arbitrary arguments.
 cmd_restore_snapshot() {
   ensure_env
-  compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
+  POSTGRES_EXEC_USER="0:0" compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     pgbackrest --config="${PGBACKREST_CONF}" --stanza=main --log-level-console=info restore "$@"
@@ -168,11 +168,11 @@ cmd_provision_qa() {
     exit 1
   fi
   local target=$1
-  compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
+  POSTGRES_EXEC_USER="0:0" compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     bash -lc "pgbackrest --config='${PGBACKREST_CONF}' --stanza=main --type=diff backup"
-  compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
+  POSTGRES_EXEC_USER="0:0" compose_exec env -u PGBACKREST_REPO_DIR PGHOST="${POSTGRES_HOST}" \
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     bash -lc "pgbackrest --config='${PGBACKREST_CONF}' --stanza=main --delta --target=name=latest --db-include='${target}' restore"

@@ -62,15 +62,19 @@ def main() -> int:
     limit = args.limit if args.limit > 0 else len(deltas)
 
     writer = csv.writer(sys.stdout)
-    writer.writerow(["datname", "queryid", "calls_delta", "exec_time_delta", "rows_delta"])
+    writer.writerow(
+        ["datname", "queryid", "calls_delta", "exec_time_delta", "rows_delta"]
+    )
     for row in deltas[:limit]:
-        writer.writerow([
-            row["datname"],
-            row["queryid"],
-            f"{row['calls_delta']:.2f}",
-            f"{row['exec_time_delta']:.2f}",
-            f"{row['rows_delta']:.2f}",
-        ])
+        writer.writerow(
+            [
+                row["datname"],
+                row["queryid"],
+                f"{row['calls_delta']:.2f}",
+                f"{row['exec_time_delta']:.2f}",
+                f"{row['rows_delta']:.2f}",
+            ]
+        )
     return 0
 
 

@@ -2,15 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import secrets
 import socket
-import random
 import stat
 import subprocess
 import time
 import uuid
 from pathlib import Path
-
-import secrets
 
 import pytest
 
@@ -30,6 +28,9 @@ def manage_env(tmp_path_factory):
             return s.getsockname()[1]
 
     pghero_port = find_free_port()
+    valkey_port = find_free_port()
+    pgbouncer_port = find_free_port()
+    memcached_port = find_free_port()
 
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
@@ -38,6 +39,13 @@ def manage_env(tmp_path_factory):
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
         "DATABASES_TO_CREATE": "app_main:app_user:change_me",
+        "VALKEY_PORT": str(valkey_port),
+        "PGBOUNCER_PORT": str(pgbouncer_port),
+        "MEMCACHED_PORT": str(memcached_port),
+        "POSTGRES_UID": str(os.getuid()),
+        "POSTGRES_GID": str(os.getgid()),
+        "POSTGRES_RUNTIME_HOME": "/home/postgres",
+        "POSTGRES_RUNTIME_GECOS": "CI_PostgreSQL_Administrator",
     }
 
     lines = []
@@ -59,12 +67,21 @@ def manage_env(tmp_path_factory):
     except PermissionError:
         pass
 
-    secret_path = ROOT / "secrets" / "postgres_superuser_password"
-    secret_path.parent.mkdir(parents=True, exist_ok=True)
-    had_secret = secret_path.exists()
-    secret_backup = secret_path.read_bytes() if had_secret else None
-    random_secret = secrets.token_urlsafe(32)
-    secret_path.write_text(f"{random_secret}\n")
+    managed_secrets = []
+
+    def seed_secret(relative_path):
+        path = ROOT / relative_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        existed = path.exists()
+        backup = path.read_bytes() if existed else None
+        secret_value = secrets.token_urlsafe(32)
+        path.write_text(f"{secret_value}\n")
+        managed_secrets.append((path, existed, backup))
+
+    seed_secret("secrets/postgres_superuser_password")
+    seed_secret("secrets/valkey_password")
+    seed_secret("secrets/pgbouncer_auth_password")
+    seed_secret("secrets/pgbouncer_stats_password")
 
     backups_link = ROOT / "backups"
     had_existing_backups = backups_link.exists() or backups_link.is_symlink()
@@ -82,7 +99,9 @@ def manage_env(tmp_path_factory):
 
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_file)
-    project_name = env.setdefault("COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}")
+    project_name = env.setdefault(
+        "COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}"
+    )
     env["PG_BADGER_JOBS"] = "1"
 
     repo_env_path = ROOT / ".env"
@@ -93,19 +112,37 @@ def manage_env(tmp_path_factory):
     try:
         yield env, project_name
     finally:
-        subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
-        subprocess.run(["docker", "pull", "busybox"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False
+        )
+        subprocess.run(
+            ["docker", "pull", "busybox"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
         if backups_target.exists():
-            subprocess.run([
-                "docker", "run", "--rm",
-                "-v", f"{backups_target.resolve()}:/target",
-                "busybox", "sh", "-c",
-                "rm -rf /target/* /target/.[!.]* /target/..?*"
-            ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if had_secret and secret_backup is not None:
-            secret_path.write_bytes(secret_backup)
-        else:
-            secret_path.unlink(missing_ok=True)
+            subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "-v",
+                    f"{backups_target.resolve()}:/target",
+                    "busybox",
+                    "sh",
+                    "-c",
+                    "rm -rf /target/* /target/.[!.]* /target/..?*",
+                ],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        for path, existed, backup in managed_secrets:
+            if existed and backup is not None:
+                path.write_bytes(backup)
+            else:
+                path.unlink(missing_ok=True)
         if backups_link.is_symlink():
             backups_link.unlink()
         if had_existing_backups and original_backups.exists():
@@ -115,6 +152,7 @@ def manage_env(tmp_path_factory):
             repo_env_path.write_bytes(backup_env_bytes)
         else:
             repo_env_path.unlink(missing_ok=True)
+
 
 def run_manage(env, *args, check=True):
     result = subprocess.run(
@@ -173,24 +211,61 @@ def test_full_workflow(manage_env):
     run_manage(env, "build-image")
     run_manage(env, "up")
     wait_for_ready(env)
+    run_manage(env, "stanza-create")
 
     run_manage(env, "create-user", "ci_user", "ci_password")
     run_manage(env, "create-db", "ci_db", "ci_user")
     run_manage(env, "dump", "ci_db")
     run_manage(env, "dump-sql", "ci_db")
-    run_manage(env, "psql", "-d", "ci_db", "-c", "CREATE TABLE IF NOT EXISTS public.space_test(id serial PRIMARY KEY, payload text);")
-    run_manage(env, "psql", "-d", "ci_db", "-c", "INSERT INTO public.space_test(payload) SELECT repeat('x', 1000) FROM generate_series(1, 1000);")
-    run_manage(env, "psql", "-d", "ci_db", "-c", "DELETE FROM public.space_test WHERE id % 2 = 0;")
+    run_manage(
+        env,
+        "psql",
+        "-d",
+        "ci_db",
+        "-c",
+        "CREATE TABLE IF NOT EXISTS public.space_test(id serial PRIMARY KEY, payload text);",
+    )
+    run_manage(
+        env,
+        "psql",
+        "-d",
+        "ci_db",
+        "-c",
+        "INSERT INTO public.space_test(payload) SELECT repeat('x', 1000) FROM generate_series(1, 1000);",
+    )
+    run_manage(
+        env,
+        "psql",
+        "-d",
+        "ci_db",
+        "-c",
+        "DELETE FROM public.space_test WHERE id % 2 = 0;",
+    )
     run_manage(env, "exercise-extensions", "--db", "ci_db")
     run_manage(env, "pgtap-smoke", "--db", "ci_db")
 
-    run_manage(env, "pgbadger-report", "--since", "yesterday", "--output", "/backups/ci-report.html")
-    run_manage(env, "daily-maintenance", "--root", "./backups/ci", "--container-root", "/backups/ci")
+    run_manage(
+        env,
+        "pgbadger-report",
+        "--since",
+        "yesterday",
+        "--output",
+        "/backups/ci-report.html",
+    )
+    run_manage(
+        env,
+        "daily-maintenance",
+        "--root",
+        "./backups/ci",
+        "--container-root",
+        "/backups/ci",
+    )
     run_manage(env, "audit-cron")
     run_manage(env, "audit-squeeze")
     daily_dirs = sorted((ROOT / "backups" / "ci").glob("*/"))
     assert daily_dirs
     daily_dir = daily_dirs[-1]
+    print("daily_dir entries:", sorted(p.name for p in daily_dir.iterdir()))
     assert (daily_dir / "index_bloat.csv").exists()
     assert (daily_dir / "schema_snapshot.csv").exists()
     assert (daily_dir / "maintenance_report.html").exists()
@@ -211,13 +286,14 @@ def test_full_workflow(manage_env):
     assert repack_logs
     assert vacuum_logs
 
-    run_manage(env, "stanza-create")
     run_manage(env, "backup", "--type=full")
 
     run_manage(env, "upgrade", "--new-version", "17")
     wait_for_ready(env)
 
-    status = subprocess.run([str(MANAGE), "status"], cwd=ROOT, env=env, capture_output=True, text=True)
+    status = subprocess.run(
+        [str(MANAGE), "status"], cwd=ROOT, env=env, capture_output=True, text=True
+    )
     assert status.returncode == 0
     assert f"{project_name}_postgres" in status.stdout
 
@@ -231,12 +307,22 @@ def test_full_workflow(manage_env):
 def test_create_env_noninteractive(manage_env, tmp_path):
     env, _ = manage_env
     target = tmp_path / "generated.env"
-    secret_path = ROOT / "secrets" / "postgres_superuser_password"
-    if secret_path.exists():
-        secret_path.unlink()
+    postgres_secret = ROOT / "secrets" / "postgres_superuser_password"
+    valkey_secret = ROOT / "secrets" / "valkey_password"
+    pgbouncer_auth_secret = ROOT / "secrets" / "pgbouncer_auth_password"
+    pgbouncer_stats_secret = ROOT / "secrets" / "pgbouncer_stats_password"
+    for path in (
+        postgres_secret,
+        valkey_secret,
+        pgbouncer_auth_secret,
+        pgbouncer_stats_secret,
+    ):
+        path.unlink(missing_ok=True)
 
     try:
-        result = run_manage(env, "create-env", "--non-interactive", "--force", "--output", str(target))
+        result = run_manage(
+            env, "create-env", "--non-interactive", "--force", "--output", str(target)
+        )
         assert result.returncode == 0
         assert target.exists()
         content = target.read_text().splitlines()
@@ -246,7 +332,10 @@ def test_create_env_noninteractive(manage_env, tmp_path):
                 key, value = line.split("=", 1)
                 env_map[key.strip()] = value.strip()
 
-        assert env_map["POSTGRES_SUPERUSER_PASSWORD_FILE"] == "./secrets/postgres_superuser_password"
+        assert (
+            env_map["POSTGRES_SUPERUSER_PASSWORD_FILE"]
+            == "./secrets/postgres_superuser_password"
+        )
         assert env_map["POSTGRES_SUPERUSER_PASSWORD"] == ""
         assert env_map["POSTGRES_UID"] == str(os.getuid())
         assert env_map["POSTGRES_GID"] == str(os.getgid())
@@ -257,10 +346,31 @@ def test_create_env_noninteractive(manage_env, tmp_path):
         env_mode = stat.S_IMODE(os.stat(target).st_mode)
         assert env_mode == 0o600
 
-        assert secret_path.exists()
-        secret_mode = stat.S_IMODE(os.stat(secret_path).st_mode)
-        assert secret_mode == 0o600
-        secret_contents = secret_path.read_text().strip()
-        assert secret_contents != ""
+        assert env_map["VALKEY_PASSWORD_FILE"] == "./secrets/valkey_password"
+        assert (
+            env_map["PGBOUNCER_AUTH_PASSWORD_FILE"]
+            == "./secrets/pgbouncer_auth_password"
+        )
+        assert (
+            env_map["PGBOUNCER_STATS_PASSWORD_FILE"]
+            == "./secrets/pgbouncer_stats_password"
+        )
+
+        for path in (
+            postgres_secret,
+            valkey_secret,
+            pgbouncer_auth_secret,
+            pgbouncer_stats_secret,
+        ):
+            assert path.exists()
+            mode = stat.S_IMODE(os.stat(path).st_mode)
+            assert mode == 0o600
+            assert path.read_text().strip() != ""
     finally:
-        secret_path.unlink(missing_ok=True)
+        for path in (
+            postgres_secret,
+            valkey_secret,
+            pgbouncer_auth_secret,
+            pgbouncer_stats_secret,
+        ):
+            path.unlink(missing_ok=True)

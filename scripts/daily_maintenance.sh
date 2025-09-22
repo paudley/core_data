@@ -11,8 +11,23 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${SCRIPT_DIR}/lib/common.sh"
 # shellcheck source=scripts/lib/audit.sh
 source "${SCRIPT_DIR}/lib/audit.sh"
+# shellcheck source=scripts/lib/valkey.sh
+source "${SCRIPT_DIR}/lib/valkey.sh"
+# shellcheck source=scripts/lib/pgbouncer.sh
+source "${SCRIPT_DIR}/lib/pgbouncer.sh"
+# shellcheck source=scripts/lib/memcached.sh
+source "${SCRIPT_DIR}/lib/memcached.sh"
 
 ensure_env
+load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+if [[ -z "${POSTGRES_SUPERUSER_PASSWORD:-}" ]]; then
+  default_secret="${ROOT_DIR}/secrets/postgres_superuser_password"
+  if [[ -r "${default_secret}" ]]; then
+    POSTGRES_SUPERUSER_PASSWORD=$(tr -d '\r\n' <"${default_secret}")
+    export POSTGRES_SUPERUSER_PASSWORD
+  fi
+fi
+export PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}"
 
 echo "[daily] starting"
 
@@ -46,17 +61,79 @@ CONTAINER_TARGET_DIR="${CONTAINER_BACKUP_ROOT}/${TIMESTAMP}"
 
 mkdir -p "${HOST_TARGET_DIR}"
 chmod 0777 "${HOST_TARGET_DIR}"
+
+echo "[daily] capturing optional cache / pool services"
+
+if compose_has_service valkey; then
+  echo "[daily]  -> valkey snapshot"
+  if compose exec -T valkey sh -c "test -r /run/secrets/valkey_password"; then
+    if compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb && valkey-cli --passfile /run/secrets/valkey_password --rdb /tmp/core_data_valkey.rdb"; then
+      if compose exec -T valkey sh -c "test -f /tmp/core_data_valkey.rdb"; then
+        compose exec -T valkey sh -c "cat /tmp/core_data_valkey.rdb" > "${HOST_TARGET_DIR}/valkey-dump.rdb" || true
+        compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb" || true
+        if [[ -f "${HOST_TARGET_DIR}/valkey-dump.rdb" ]]; then
+          chmod 0600 "${HOST_TARGET_DIR}/valkey-dump.rdb" || true
+        fi
+      fi
+    else
+      echo "[daily] WARNING: valkey-cli --rdb failed" >&2
+    fi
+    compose exec -T valkey sh -c "valkey-cli --passfile /run/secrets/valkey_password info" > "${HOST_TARGET_DIR}/valkey-info.txt" || true
+    if [[ -f "${HOST_TARGET_DIR}/valkey-info.txt" ]]; then
+      chmod 0600 "${HOST_TARGET_DIR}/valkey-info.txt" || true
+    fi
+  else
+    echo "[daily] WARNING: /run/secrets/valkey_password not available; skipping." >&2
+  fi
+fi
+
+if compose_has_service pgbouncer; then
+  echo "[daily]  -> pgbouncer stats"
+  load_secret_from_file PGBOUNCER_STATS_PASSWORD
+  stats_password="${PGBOUNCER_STATS_PASSWORD:-}"
+  stats_user="${PGBOUNCER_STATS_USER:-pgbouncer_stats}"
+  pgbouncer_port="${PGBOUNCER_PORT:-6432}"
+  if [[ -z ${stats_password} ]]; then
+    echo "[daily] WARNING: PGBOUNCER_STATS_PASSWORD not available; skipping." >&2
+  else
+    compose exec -T postgres env \
+      PGPASSWORD="${stats_password}" \
+      psql --host pgbouncer --port "${pgbouncer_port}" --username "${stats_user}" --dbname pgbouncer --csv --command "SHOW STATS;" \
+      > "${HOST_TARGET_DIR}/pgbouncer-stats.csv" || true
+    compose exec -T postgres env \
+      PGPASSWORD="${stats_password}" \
+      psql --host pgbouncer --port "${pgbouncer_port}" --username "${stats_user}" --dbname pgbouncer --csv --command "SHOW POOLS;" \
+      > "${HOST_TARGET_DIR}/pgbouncer-pools.csv" || true
+    if [[ -f "${HOST_TARGET_DIR}/pgbouncer-stats.csv" ]]; then
+      chmod 0600 "${HOST_TARGET_DIR}/pgbouncer-stats.csv" 2>/dev/null || true
+    fi
+    if [[ -f "${HOST_TARGET_DIR}/pgbouncer-pools.csv" ]]; then
+      chmod 0600 "${HOST_TARGET_DIR}/pgbouncer-pools.csv" 2>/dev/null || true
+    fi
+  fi
+  unset PGBOUNCER_STATS_PASSWORD
+fi
+
+if compose_has_service memcached; then
+  echo "[daily]  -> memcached stats"
+  if compose exec -T memcached sh -c "printf 'stats\\r\\n' | nc -w 2 127.0.0.1 11211" > "${HOST_TARGET_DIR}/memcached-stats.txt"; then
+    chmod 0600 "${HOST_TARGET_DIR}/memcached-stats.txt" 2>/dev/null || true
+  else
+    echo "[daily] WARNING: memcached stats command failed." >&2
+  fi
+fi
+
 echo "[daily] dumping databases into ${CONTAINER_TARGET_DIR}"
 databases=$(compose_exec bash -lc "psql --tuples-only --no-align --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' -c \"SELECT datname FROM pg_database WHERE datistemplate = false;\"")
 while IFS= read -r db; do
   [[ -z "$db" ]] && continue
   outfile="${CONTAINER_TARGET_DIR}/${db}-$(date +%Y%m%d%H%M%S).dump.gz"
   echo "[daily]  -> ${db}"
-  compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" bash -lc "pg_dump --format=custom --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' | gzip > '${outfile}'"
+  compose_exec bash -lc "pg_dump --format=custom --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' | gzip > '${outfile}'"
 done <<<"${databases}"
 
 echo "[daily] creating plain SQL dump for postgres"
-compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" bash -lc "pg_dump --format=plain --create --clean --if-exists --no-owner --no-acl --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' > '${CONTAINER_TARGET_DIR}/postgres.sql'"
+compose_exec bash -lc "pg_dump --format=plain --create --clean --if-exists --no-owner --no-acl --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' > '${CONTAINER_TARGET_DIR}/postgres.sql'"
 
 echo "[daily] copying logs"
 compose_exec bash -lc "cp /var/lib/postgresql/data/log/postgresql-*.log '${CONTAINER_TARGET_DIR}' 2>/dev/null || true"
@@ -66,10 +143,14 @@ if [[ ${REMOVE_SOURCE} == true ]]; then
 fi
 
 echo "[daily] generating pgBadger report"
-if [[ -n ${SINCE} ]]; then
-  compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --begin '${SINCE}' --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
+if compose_exec bash -lc "compgen -G '${CONTAINER_TARGET_DIR}/postgresql-*.csv' >/dev/null"; then
+  if [[ -n ${SINCE} ]]; then
+    compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --begin '${SINCE}' --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
+  else
+    compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
+  fi
 else
-  compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
+  echo "[daily] skipping pgBadger (no CSV logs present)" >&2
 fi
 
 echo "[daily] capturing pg_stat_statements baseline"
@@ -81,8 +162,7 @@ audit_pg_buffercache "${CONTAINER_TARGET_DIR}/pg_buffercache.csv" "${BUFFERCACHE
 echo "[daily] running pg_partman maintenance"
 while IFS= read -r db; do
   [[ -z "${db}" ]] && continue
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
+  compose_exec psql --host "${POSTGRES_HOST}" --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
 SELECT n.nspname AS partman_schema
   FROM pg_extension e
   JOIN pg_namespace n ON n.oid = e.extnamespace
@@ -126,11 +206,10 @@ echo "[daily] summarizing pgaudit events"
 summarize_pgaudit_logs "${CONTAINER_TARGET_DIR}" || true
 
 echo "[daily] checking extension version drift"
-compose_exec python3 /opt/core_data/scripts/version_status.py \
-  --inside-container \
+python3 "${SCRIPT_DIR}/version_status.py" \
   --only-outdated \
   --quiet \
-  --output "${CONTAINER_TARGET_DIR}/version_status.csv" || true
+  --output "${HOST_TARGET_DIR}/version_status.csv" || true
 
 echo "[daily] summarizing logical backup sidecar"
 LOGICAL_STATUS_FILE="${HOST_TARGET_DIR}/logical_backup_status.txt"
@@ -158,9 +237,9 @@ fi
 
 if [[ ${GENERATE_HTML} == true ]]; then
   echo "[daily] generating html maintenance summary"
-  compose_exec python3 /opt/core_data/scripts/generate_report.py \
-    --input "${CONTAINER_TARGET_DIR}" \
-    --output "${CONTAINER_TARGET_DIR}/maintenance_report.html" || true
+  python3 "${SCRIPT_DIR}/generate_report.py" \
+    --input "${HOST_TARGET_DIR}" \
+    --output "${HOST_TARGET_DIR}/maintenance_report.html" || true
 fi
 
 if [[ ${EMAIL_REPORT} == true && -n ${REPORT_RECIPIENT} ]]; then

@@ -23,6 +23,15 @@ else
   echo "[core_data] WARNING: ${ENV_FILE} not found; using defaults where possible." >&2
 fi
 
+HOST_UID=$(id -u)
+HOST_GID=$(id -g)
+POSTGRES_UID=${POSTGRES_UID:-${HOST_UID}}
+POSTGRES_GID=${POSTGRES_GID:-${HOST_GID}}
+POSTGRES_RUNTIME_USER=${POSTGRES_RUNTIME_USER:-postgres}
+POSTGRES_RUNTIME_GECOS=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL"}
+POSTGRES_RUNTIME_HOME=${POSTGRES_RUNTIME_HOME:-/home/postgres}
+export POSTGRES_UID POSTGRES_GID POSTGRES_RUNTIME_USER POSTGRES_RUNTIME_GECOS POSTGRES_RUNTIME_HOME
+
 load_secret_from_file() {
   local var_name=$1
   local file_var_name="${var_name}_FILE"
@@ -45,6 +54,20 @@ load_secret_from_file() {
 }
 
 load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+load_secret_from_file VALKEY_PASSWORD
+load_secret_from_file PGBOUNCER_AUTH_PASSWORD
+load_secret_from_file PGBOUNCER_STATS_PASSWORD
+
+compose_exec_service() {
+  local service=$1
+  shift
+  compose exec -T "$service" "$@"
+}
+
+compose_has_service() {
+  local service=$1
+  compose config --services 2>/dev/null | grep -Fxq "${service}"
+}
 
 # compose runs docker compose with the arguments provided.
 compose() {
