@@ -1,7 +1,6 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
-import base64
 import os
 import socket
 import random
@@ -10,6 +9,8 @@ import subprocess
 import time
 import uuid
 from pathlib import Path
+
+import secrets
 
 import pytest
 
@@ -62,7 +63,7 @@ def manage_env(tmp_path_factory):
     secret_path.parent.mkdir(parents=True, exist_ok=True)
     had_secret = secret_path.exists()
     secret_backup = secret_path.read_bytes() if had_secret else None
-    random_secret = base64.urlsafe_b64encode(os.urandom(24)).decode("ascii").rstrip("=")
+    random_secret = secrets.token_urlsafe(32)
     secret_path.write_text(f"{random_secret}\n")
 
     backups_link = ROOT / "backups"
