@@ -4,12 +4,14 @@
 
 set -euo pipefail
 
+# shellcheck disable=SC1091
 # shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
 source /opt/core_data/scripts/lib/extensions_list.sh
+# shellcheck disable=SC1091
 # shellcheck source=/opt/core_data/scripts/lib/extensions_helpers.sh
 source /opt/core_data/scripts/lib/extensions_helpers.sh
 
-EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
+EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
 DOLLAR='$'
 

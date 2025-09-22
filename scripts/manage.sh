@@ -639,7 +639,7 @@ shift || true
       echo "--base and --compare are required" >&2
       exit 1
     fi
-    python3 '${SCRIPT_DIR}/perf_diff.py' --base "${base}" --compare "${compare}" --limit "${limit}"
+    python3 "${SCRIPT_DIR}/perf_diff.py" --base "${base}" --compare "${compare}" --limit "${limit}"
     ;;
   compact)
     ensure_env

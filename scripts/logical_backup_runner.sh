@@ -61,7 +61,7 @@ perform_backup() {
   pg_dumpall --globals-only --no-password > "${target_dir}/globals.sql"
 
   if (( LOGICAL_BACKUP_RETENTION_DAYS > 0 )); then
-    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d -mtime +${LOGICAL_BACKUP_RETENTION_DAYS} -print -exec rm -rf {} + 2>/dev/null || true
+    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d -mtime +"${LOGICAL_BACKUP_RETENTION_DAYS}" -print -exec rm -rf {} + 2>/dev/null || true
   fi
 
   log "completed backup at ${timestamp}"
@@ -70,14 +70,16 @@ perform_backup() {
 main_loop() {
   wait_for_postgres
   while ${RUNNING}; do
-    local cycle_start=$(date +%s)
+    local cycle_start
+    cycle_start=$(date +%s)
     if ! perform_backup; then
       log "backup cycle failed"
     fi
     if ! ${RUNNING}; then
       break
     fi
-    local cycle_end=$(date +%s)
+    local cycle_end
+    cycle_end=$(date +%s)
     local elapsed=$((cycle_end - cycle_start))
     local sleep_seconds=$((LOGICAL_BACKUP_INTERVAL_SECONDS - elapsed))
     if (( sleep_seconds < 60 )); then
