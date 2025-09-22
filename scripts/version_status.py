@@ -144,13 +144,12 @@ def compare_versions(installed: Optional[str], latest: Optional[str]) -> str:
         return "not_installed"
     if not latest:
         return "unknown"
-    if Version:
-        try:
-            if Version(installed) < Version(latest):
-                return "outdated"
-            return "current"
-        except Exception:
-            pass
+    try:
+        if Version(installed) < Version(latest):
+            return "outdated"
+        return "current"
+    except Exception:
+        pass
 
     def split(ver: str) -> List[int]:
         return [int(part) for part in re.findall(r"\d+", ver)]
