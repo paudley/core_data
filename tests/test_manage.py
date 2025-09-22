@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import socket
 import subprocess
 import time
 import uuid
@@ -21,11 +22,16 @@ def manage_env(tmp_path_factory):
 
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
+    def find_free_port():
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            return s.getsockname()[1]
+
     replacements = {
         "PG_DATA_DIR": str(workdir / "postgres_data"),
         "CORE_DATA_PGBACKREST_REPO_DIR": str(workdir / "pgbackrest_repo"),
         "PGHERO_DATA_DIR": str(workdir / "pghero_data"),
-        "PGHERO_PORT": "18080",
+        "PGHERO_PORT": str(find_free_port()),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
         "DATABASES_TO_CREATE": "app_main:app_user:change_me",
