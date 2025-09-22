@@ -143,9 +143,12 @@ Thank you to the maintainers and communities behind the components that make cor
 - [pg_cron](https://github.com/citusdata/pg_cron) – database-native scheduling.
 - [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) – automatic bloat mitigation.
 - [pgvector](https://github.com/pgvector/pgvector) – high-dimensional vector search.
-- [PostGIS](https://postgis.net/) – spatial superpowers for PostgreSQL.
+- [PostGIS](https://postgis.net/) – spatial superpowers for PostgreSQL (including Tiger Geocoder & Address Standardizer).
+- [pgRouting](https://pgrouting.org/) – network routing & graph analysis atop PostGIS.
 - [Apache AGE](https://age.apache.org/) – graph database extension.
 - [pgaudit](https://github.com/pgaudit/pgaudit) – enhanced auditing.
+- [pg_partman](https://github.com/pgpartman/pg_partman) – automated time/ID partition management.
+- [HypoPG](https://github.com/HypoPG/hypopg) – hypothetical index exploration for query tuning.
 - [pg_repack](https://github.com/reorg/pg_repack) & [pgtap](https://github.com/theory/pgtap) – maintenance & testing extensions.
 
 Their work powers the database-as-code experience delivered by core_data.
