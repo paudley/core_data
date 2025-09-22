@@ -121,13 +121,33 @@ prompt_secret() {
   echo "${secret}"
 }
 
+generate_password() {
+  local value
+  if command -v openssl >/dev/null 2>&1; then
+    value=$(openssl rand -base64 24 2>/dev/null || true)
+    if [[ -n ${value} ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+  if [[ -r /dev/urandom ]]; then
+    value=$(head -c 24 /dev/urandom | base64 2>/dev/null || true)
+    if [[ -n ${value} ]]; then
+      printf '%s\n' "${value}"
+      return 0
+    fi
+  fi
+  echo "[create-env] ERROR: unable to generate a secure random password. Install openssl or ensure /dev/urandom is accessible." >&2
+  exit 1
+}
+
 # PostgreSQL superuser password is stored in secrets/postgres_superuser_password by default.
 secret_dir="${ROOT_DIR}/secrets"
 secret_file="${secret_dir}/postgres_superuser_password"
 mkdir -p "${secret_dir}"
 chmod 0700 "${secret_dir}" || true
 
-default_password="$(openssl rand -base64 24 2>/dev/null || echo change_me)"
+default_password="$(generate_password)"
 password="$(prompt_secret "PostgreSQL superuser password (written to secrets/postgres_superuser_password)" "${default_password}")"
 printf '%s\n' "${password}" > "${secret_file}"
 
