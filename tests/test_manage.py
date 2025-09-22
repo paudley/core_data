@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+import base64
 import os
 import socket
 import random
@@ -61,7 +62,8 @@ def manage_env(tmp_path_factory):
     secret_path.parent.mkdir(parents=True, exist_ok=True)
     had_secret = secret_path.exists()
     secret_backup = secret_path.read_bytes() if had_secret else None
-    secret_path.write_text("change_me\n")
+    random_secret = base64.urlsafe_b64encode(os.urandom(24)).decode("ascii").rstrip("=")
+    secret_path.write_text(f"{random_secret}\n")
 
     backups_link = ROOT / "backups"
     had_existing_backups = backups_link.exists() or backups_link.is_symlink()
