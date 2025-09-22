@@ -215,6 +215,8 @@ Commands:
                              [--time-decoder FUNC]
                              Create a new managed parent (args:
                              schema.table control_column interval).
+  version-status [--only-outdated] [--output PATH]
+                             Compare installed versions against upstream releases.
   diff-pgstat --base PATH --compare PATH [--limit N]
                               Compare two pg_stat_statements snapshots.
   compact --level N [...options]
@@ -965,6 +967,36 @@ USAGE
       "${jobmon}" \
       "${time_encoder}" \
       "${time_decoder}"
+    ;;
+  version-status)
+    output=""
+    only_outdated=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --only-outdated)
+          only_outdated=true; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} version-status [--only-outdated] [--output PATH]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for version-status: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    cmd=(python3 "${SCRIPT_DIR}/version_status.py")
+    if [[ ${only_outdated} == true ]]; then
+      cmd+=("--only-outdated")
+    fi
+    if [[ -n ${output} ]]; then
+      cmd+=("--output" "${output}")
+    fi
+    "${cmd[@]}"
     ;;
   upgrade)
     cmd_upgrade "$@"

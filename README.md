@@ -103,11 +103,12 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
 | `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
 | `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
+| `version-status` | Compare installed Postgres/extension versions with upstream releases (CSV via `--output`). |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
-`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed. Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and it records any version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 
 Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
 

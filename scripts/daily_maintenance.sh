@@ -124,6 +124,13 @@ audit_schema_snapshot "${CONTAINER_TARGET_DIR}/schema_snapshot.csv" || true
 echo "[daily] summarizing pgaudit events"
 summarize_pgaudit_logs "${CONTAINER_TARGET_DIR}" || true
 
+echo "[daily] checking extension version drift"
+compose_exec python3 /opt/core_data/scripts/version_status.py \
+  --inside-container \
+  --only-outdated \
+  --quiet \
+  --output "${CONTAINER_TARGET_DIR}/version_status.csv" || true
+
 if [[ ${GENERATE_HTML} == true ]]; then
   echo "[daily] generating html maintenance summary"
   compose_exec python3 /opt/core_data/scripts/generate_report.py \
