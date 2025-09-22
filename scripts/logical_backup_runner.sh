@@ -61,7 +61,7 @@ perform_backup() {
   pg_dumpall --globals-only --no-password > "${target_dir}/globals.sql"
 
   if (( LOGICAL_BACKUP_RETENTION_DAYS > 0 )); then
-    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d -mtime +$((LOGICAL_BACKUP_RETENTION_DAYS - 1)) -print -exec rm -rf {} + 2>/dev/null || true
+    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d -mtime +${LOGICAL_BACKUP_RETENTION_DAYS} -print -exec rm -rf {} + 2>/dev/null || true
   fi
 
   log "completed backup at ${timestamp}"
