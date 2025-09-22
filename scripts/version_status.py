@@ -243,16 +243,17 @@ def main() -> int:
                 key: max(len(key), *(len(row[key]) for row in display_rows))
                 for key in ["component", "installed_version", "latest_version"]
             }
-            header = f"{ 'Component'.ljust(widths['component']) }  { 'Installed'.ljust(widths['installed_version']) }  { 'Latest'.ljust(widths['latest_version']) }  Status"
+            fmt = f"{{:<{widths['component']}}}  {{:<{widths['installed_version']}}}  {{:<{widths['latest_version']}}}  {{}}"
+            header = fmt.format("Component", "Installed", "Latest", "Status")
             print(header)
             print("-" * len(header))
             for row in display_rows:
-                print(
-                    f"{row['component'].ljust(widths['component'])}  "
-                    f"{row['installed_version'].ljust(widths['installed_version'])}  "
-                    f"{row['latest_version'].ljust(widths['latest_version'])}  "
-                    f"{row['status']}"
-                )
+                print(fmt.format(
+                    row["component"],
+                    row["installed_version"],
+                    row["latest_version"],
+                    row["status"]
+                ))
 
     return 0
 
