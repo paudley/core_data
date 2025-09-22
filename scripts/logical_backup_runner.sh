@@ -80,8 +80,8 @@ main_loop() {
     local cycle_end=$(date +%s)
     local elapsed=$((cycle_end - cycle_start))
     local sleep_seconds=$((LOGICAL_BACKUP_INTERVAL_SECONDS - elapsed))
-    if (( sleep_seconds < 0 )); then
-      sleep_seconds=${LOGICAL_BACKUP_INTERVAL_SECONDS}
+    if (( sleep_seconds < 60 )); then
+      sleep_seconds=60
     fi
     log "sleeping ${sleep_seconds}s before next backup"
     sleep "${sleep_seconds}" &
