@@ -31,7 +31,7 @@ source "${SCRIPT_DIR}/lib/extensions_list.sh"
 # shellcheck source=scripts/lib/extensions_helpers.sh
 source "${SCRIPT_DIR}/lib/extensions_helpers.sh"
 
-CORE_DATA_EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
+CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
 bootstrap_database() {
   local db="$1"
