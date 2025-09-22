@@ -99,7 +99,7 @@ def run_command(cmd: List[str]) -> str:
     return result.stdout.strip()
 
 
-def fetch_installed_versions(args: argparse.Namespace, env: Dict[str, str]) -> (str, Dict[str, str]):
+def fetch_installed_versions(args: argparse.Namespace, env: Dict[str, str]) -> Tuple[str, Dict[str, str]]:
     superuser = env.get("POSTGRES_SUPERUSER", "postgres")
     database = env.get("POSTGRES_DB", "postgres")
 
