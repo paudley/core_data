@@ -1,6 +1,15 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+x-logging-default: &logging_defaults
+  driver: local
+  options:
+    max-size: ${POSTGRES_LOG_MAX_SIZE}
+    max-file: "${POSTGRES_LOG_MAX_FILE}"
+    mode: ${POSTGRES_LOG_MODE}
+    max-buffer-size: ${POSTGRES_LOG_BUFFER}
+    compress: "true"
+
 services:
   volume_prep:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
@@ -23,14 +32,7 @@ services:
       - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH}
     networks:
       - core_data
-    logging:
-      driver: local
-      options:
-        max-size: ${POSTGRES_LOG_MAX_SIZE}
-        max-file: "${POSTGRES_LOG_MAX_FILE}"
-        mode: ${POSTGRES_LOG_MODE}
-        max-buffer-size: ${POSTGRES_LOG_BUFFER}
-        compress: "true"
+    logging: *logging_defaults
 
   postgres:
     build:
@@ -94,14 +96,7 @@ services:
     shm_size: ${POSTGRES_SHM_SIZE}
     mem_limit: ${POSTGRES_MEMORY_LIMIT}
     cpus: ${POSTGRES_CPU_LIMIT}
-    logging:
-      driver: local
-      options:
-        max-size: ${POSTGRES_LOG_MAX_SIZE}
-        max-file: "${POSTGRES_LOG_MAX_FILE}"
-        mode: ${POSTGRES_LOG_MODE}
-        max-buffer-size: ${POSTGRES_LOG_BUFFER}
-        compress: "true"
+    logging: *logging_defaults
     secrets:
       - source: postgres_superuser_password
         target: /run/secrets/postgres_superuser_password
@@ -132,14 +127,7 @@ services:
     secrets:
       - source: postgres_superuser_password
         target: /run/secrets/postgres_superuser_password
-    logging:
-      driver: local
-      options:
-        max-size: ${POSTGRES_LOG_MAX_SIZE}
-        max-file: "${POSTGRES_LOG_MAX_FILE}"
-        mode: ${POSTGRES_LOG_MODE}
-        max-buffer-size: ${POSTGRES_LOG_BUFFER}
-        compress: "true"
+    logging: *logging_defaults
 
   logical_backup:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
@@ -166,14 +154,7 @@ services:
     secrets:
       - source: postgres_superuser_password
         target: /run/secrets/postgres_superuser_password
-    logging:
-      driver: local
-      options:
-        max-size: ${POSTGRES_LOG_MAX_SIZE}
-        max-file: "${POSTGRES_LOG_MAX_FILE}"
-        mode: ${POSTGRES_LOG_MODE}
-        max-buffer-size: ${POSTGRES_LOG_BUFFER}
-        compress: "true"
+    logging: *logging_defaults
 
 networks:
   core_data:
