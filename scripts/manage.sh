@@ -547,9 +547,9 @@ case "${COMMAND}" in
     snapshot_pg_stat_statements "${output}" "${limit}"
     ;;
   diff-pgstat)
-    local base=""
-    local compare=""
-    local limit=${PG_STAT_STATEMENTS_LIMIT:-100}
+    base=""
+    compare=""
+    limit=${PG_STAT_STATEMENTS_LIMIT:-100}
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --base)
@@ -582,10 +582,10 @@ case "${COMMAND}" in
     ;;
   compact)
     ensure_env
-    local level=""
-    local tables=""
-    local scope="all"
-    local confirm=false
+    level=""
+    tables=""
+    scope="all"
+    confirm=false
     while [[ $# -gt 0 ]]; do
       case "$1" in
         --level)

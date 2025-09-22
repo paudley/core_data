@@ -10,7 +10,7 @@ import argparse
 import csv
 import html
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, List, Tuple
 
 SECTION_FILES: List[Tuple[str, str]] = [
     ("Autovacuum Findings", "autovacuum_findings.csv"),
@@ -28,20 +28,39 @@ SECTION_FILES: List[Tuple[str, str]] = [
 
 
 def load_csv(path: Path, limit: int = 10) -> Tuple[List[str], List[Dict[str, str]], int]:
+    headers: List[str] = []
+    preview: List[Dict[str, str]] = []
+    total = 0
     with path.open(newline="") as fh:
         reader = csv.DictReader(fh)
-        rows = list(reader)
-    return reader.fieldnames or [], rows[:limit], len(rows)
+        if reader.fieldnames:
+            headers = list(reader.fieldnames)
+        for row in reader:
+            total += 1
+            if len(preview) < limit:
+                preview.append(row)
+    return headers, preview, total
 
 
 def render_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
-    if not headers or not rows:
-        return "<p>No rows</p>"
+    if not headers:
+        return "<p>No columns reported.</p>"
+
     head_html = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
-    body_rows = []
-    for row in rows:
-        body_cells = "".join(html.escape(row.get(h, "")) for h in headers)
-        body_rows.append(f"<tr><td>{'</td><td>'.join(html.escape(row.get(h, '')) for h in headers)}</td></tr>")
+    body_rows: List[str] = []
+    if not rows:
+        colspan = max(len(headers), 1)
+        body_rows.append(f"<tr><td colspan=\"{colspan}\">No rows</td></tr>")
+    else:
+        for row in rows:
+            cells = []
+            for header in headers:
+                value = row.get(header, "")
+                if value is None:
+                    value = ""
+                cells.append(f"<td>{html.escape(str(value))}</td>")
+            body_rows.append(f"<tr>{''.join(cells)}</tr>")
+
     body_html = "".join(body_rows)
     return f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
 
@@ -94,11 +113,11 @@ def main() -> int:
   <meta charset=\"utf-8\">
   <title>core_data Maintenance Report</title>
   <style>
-    body { font-family: sans-serif; margin: 1.5rem; }
-    table { border-collapse: collapse; margin-bottom: 1.5rem; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 0.4rem; font-size: 0.9rem; }
-    th { background-color: #f2f2f2; text-align: left; }
-    section { margin-bottom: 2rem; }
+    body {{ font-family: sans-serif; margin: 1.5rem; }}
+    table {{ border-collapse: collapse; margin-bottom: 1.5rem; width: 100%; }}
+    th, td {{ border: 1px solid #ddd; padding: 0.4rem; font-size: 0.9rem; }}
+    th {{ background-color: #f2f2f2; text-align: left; }}
+    section {{ margin-bottom: 2rem; }}
   </style>
 </head>
 <body>

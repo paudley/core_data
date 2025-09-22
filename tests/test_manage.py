@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import os
+import random
 import subprocess
 import time
 import uuid
@@ -19,13 +20,15 @@ def manage_env(tmp_path_factory):
     workdir = tmp_path_factory.mktemp("core_data_ci")
     env_file = ROOT / ".env.test"
 
+    pghero_port = random.randint(20000, 40000)
+
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
         "PG_DATA_DIR": str(workdir / "postgres_data"),
         "CORE_DATA_PGBACKREST_REPO_DIR": str(workdir / "pgbackrest_repo"),
         "PGHERO_DATA_DIR": str(workdir / "pghero_data"),
-        "PGHERO_PORT": "18080",
+        "PGHERO_PORT": str(pghero_port),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
         "DATABASES_TO_CREATE": "app_main:app_user:change_me",
@@ -114,7 +117,18 @@ def manage_env(tmp_path_factory):
             repo_env_path.unlink(missing_ok=True)
 
 def run_manage(env, *args, check=True):
-    subprocess.run([str(MANAGE), *args], cwd=ROOT, env=env, check=check)
+    result = subprocess.run(
+        [str(MANAGE), *args],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if check and result.returncode != 0:
+        print(result.stdout)
+        print(result.stderr)
+        raise subprocess.CalledProcessError(result.returncode, result.args)
+    return result
 
 
 def relation_size(env, table):

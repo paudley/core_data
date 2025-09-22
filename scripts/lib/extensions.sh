@@ -26,10 +26,9 @@ SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT(0 0)'), 1.0));
 -- Apache AGE smoke
 LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
-SELECT create_graph('core_data_smoke_graph');
-SELECT create_vlabel('core_data_smoke_graph', 'person')
-  WHERE NOT EXISTS (SELECT 1 FROM ag_catalog.ag_label WHERE name = 'person');
-SELECT create_vertex('core_data_smoke_graph', 'person', '{"name":"Alice"}'::jsonb);
+SELECT create_graph('core_data_smoke_graph')
+  WHERE NOT EXISTS (SELECT 1 FROM ag_catalog.ag_graph WHERE name = 'core_data_smoke_graph');
+SELECT * FROM cypher('core_data_smoke_graph', $$ CREATE (n:person {name: 'Alice'}) RETURN n.name $$) AS (name agtype);
 SELECT * FROM cypher('core_data_smoke_graph', $$ MATCH (n:person) RETURN n.name $$) AS (name agtype);
 SELECT drop_graph('core_data_smoke_graph', true);
 SQL
