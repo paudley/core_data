@@ -4,6 +4,7 @@
 import os
 import socket
 import random
+import stat
 import subprocess
 import time
 import uuid
@@ -31,9 +32,6 @@ def manage_env(tmp_path_factory):
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
-        "PG_DATA_DIR": str(workdir / "postgres_data"),
-        "CORE_DATA_PGBACKREST_REPO_DIR": str(workdir / "pgbackrest_repo"),
-        "PGHERO_DATA_DIR": str(workdir / "pghero_data"),
         "PGHERO_PORT": str(pghero_port),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
@@ -52,20 +50,18 @@ def manage_env(tmp_path_factory):
             lines.append(line)
     env_file.write_text("\n".join(lines) + "\n")
 
-    managed_paths = [Path(replacements[key]) for key in ("PG_DATA_DIR", "CORE_DATA_PGBACKREST_REPO_DIR", "PGHERO_DATA_DIR")]
-    for directory in managed_paths:
-        directory.mkdir(parents=True, exist_ok=True)
-        try:
-            directory.chmod(0o777)
-        except PermissionError:
-            pass
-
     backups_target = workdir / "backups"
     backups_target.mkdir(parents=True, exist_ok=True)
     try:
         backups_target.chmod(0o777)
     except PermissionError:
         pass
+
+    secret_path = ROOT / "secrets" / "postgres_superuser_password"
+    secret_path.parent.mkdir(parents=True, exist_ok=True)
+    had_secret = secret_path.exists()
+    secret_backup = secret_path.read_bytes() if had_secret else None
+    secret_path.write_text("change_me\n")
 
     backups_link = ROOT / "backups"
     had_existing_backups = backups_link.exists() or backups_link.is_symlink()
@@ -96,15 +92,6 @@ def manage_env(tmp_path_factory):
     finally:
         subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
         subprocess.run(["docker", "pull", "busybox"], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        for directory in managed_paths:
-            if directory.exists():
-                subprocess.run([
-                    "docker", "run", "--rm",
-                    "-v", f"{directory.resolve()}:/target",
-                    "busybox", "sh", "-c",
-                    "rm -rf /target/* /target/.[!.]* /target/..?*"
-                ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                subprocess.run(["rmdir", str(directory)], check=False)
         if backups_target.exists():
             subprocess.run([
                 "docker", "run", "--rm",
@@ -112,6 +99,10 @@ def manage_env(tmp_path_factory):
                 "busybox", "sh", "-c",
                 "rm -rf /target/* /target/.[!.]* /target/..?*"
             ], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if had_secret and secret_backup is not None:
+            secret_path.write_bytes(secret_backup)
+        else:
+            secret_path.unlink(missing_ok=True)
         if backups_link.is_symlink():
             backups_link.unlink()
         if had_existing_backups and original_backups.exists():
@@ -232,3 +223,41 @@ def test_full_workflow(manage_env):
     assert "PG_VERSION=17" in contents
 
     run_manage(env, "down")
+
+
+def test_create_env_noninteractive(manage_env, tmp_path):
+    env, _ = manage_env
+    target = tmp_path / "generated.env"
+    secret_path = ROOT / "secrets" / "postgres_superuser_password"
+    if secret_path.exists():
+        secret_path.unlink()
+
+    try:
+        result = run_manage(env, "create-env", "--non-interactive", "--force", "--output", str(target))
+        assert result.returncode == 0
+        assert target.exists()
+        content = target.read_text().splitlines()
+        env_map = {}
+        for line in content:
+            if "=" in line and not line.startswith("#"):
+                key, value = line.split("=", 1)
+                env_map[key.strip()] = value.strip()
+
+        assert env_map["POSTGRES_SUPERUSER_PASSWORD_FILE"] == "./secrets/postgres_superuser_password"
+        assert env_map["POSTGRES_SUPERUSER_PASSWORD"] == ""
+        assert env_map["POSTGRES_UID"] == str(os.getuid())
+        assert env_map["POSTGRES_GID"] == str(os.getgid())
+        assert env_map["POSTGRES_MEMORY_LIMIT"].lower().endswith("g")
+        assert env_map["POSTGRES_SHM_SIZE"].lower().endswith("g")
+        assert float(env_map["POSTGRES_CPU_LIMIT"]) >= 1
+
+        env_mode = stat.S_IMODE(os.stat(target).st_mode)
+        assert env_mode == 0o600
+
+        assert secret_path.exists()
+        secret_mode = stat.S_IMODE(os.stat(secret_path).st_mode)
+        assert secret_mode == 0o600
+        secret_contents = secret_path.read_text().strip()
+        assert secret_contents != ""
+    finally:
+        secret_path.unlink(missing_ok=True)

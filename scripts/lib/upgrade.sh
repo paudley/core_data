@@ -129,8 +129,26 @@ USAGE
     exit 0
   fi
 
-  local data_dir
-  data_dir=$(realpath -m "${PG_DATA_DIR}")
+  local project_name
+  project_name=${COMPOSE_PROJECT_NAME:-$(basename "${ROOT_DIR}")}
+
+  local data_mount
+  if [[ -n ${PG_DATA_DIR:-} ]]; then
+    local data_dir
+    data_dir=$(realpath -m "${PG_DATA_DIR}")
+    data_mount=(--mount "type=bind,src=${data_dir},dst=/var/lib/postgresql/data")
+  else
+    data_mount=(--mount "type=volume,src=${project_name}_pgdata,dst=/var/lib/postgresql/data")
+  fi
+
+  local wal_mount
+  if [[ -n ${PG_WAL_DIR:-} ]]; then
+    local wal_dir
+    wal_dir=$(realpath -m "${PG_WAL_DIR}")
+    wal_mount=(--mount "type=bind,src=${wal_dir},dst=/var/lib/postgresql/wal")
+  else
+    wal_mount=(--mount "type=volume,src=${project_name}_pgwal,dst=/var/lib/postgresql/wal")
+  fi
 
   echo "[upgrade] ensuring latest full backup before upgrade" >&2
   cmd_backup --type=full
@@ -150,7 +168,8 @@ USAGE
     --env POSTGRES_DB="${POSTGRES_DB:-postgres}" \
     --env PGAUTO_ONESHOT=yes \
     --env PGDATA=/var/lib/postgresql/data \
-    --mount type=bind,src="${data_dir}",dst=/var/lib/postgresql/data \
+    "${data_mount[@]}" \
+    "${wal_mount[@]}" \
     "${helper_image}" >&2
 
   echo "[upgrade] updating PG_VERSION in ${ENV_FILE}" >&2

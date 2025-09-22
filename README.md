@@ -21,7 +21,10 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - Custom Docker image with PostGIS, pgvector, Apache AGE, pg_cron, pg_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 - Init scripts render configuration from templates, create application databases, and enable extensions automatically.
 - `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
-- PgBackRest repository and PostgreSQL data directories mount from the host for durable backups and WAL archival.
+- PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `./backups` remains a bind mount for easy artifact exports.
+- Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
+- TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
+- Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
 - CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ### Default Extension Bundle
@@ -44,18 +47,27 @@ Use `./scripts/manage.sh partman-show-config` to inspect tracked parents, `partm
 Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight background-job queue. It provisions an `asyncq.jobs` table plus helpers (`enqueue`, `dequeue`, `complete`, `fail`, `extend_lease`) that rely on `FOR UPDATE SKIP LOCKED`, `pg_notify`, and UUID leasing. Point a worker at the queue with `SELECT * FROM asyncq.dequeue('default');` in a loop and call `asyncq.complete(...)` or `asyncq.fail(...)` as you process jobs.
 
 ## Quick Start
-1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
+1. Bootstrap environment config: `./scripts/manage.sh create-env` to walk through password creation, host UID/GID selection, and resource sizing (writes `.env` + secrets).
 2. Build and start the stack:
    ```bash
    ./scripts/manage.sh build-image
    ./scripts/manage.sh up
    ```
-3. Verify health:
+3. Verify health (multi-stage probe):
    ```bash
-   docker compose exec postgres pg_isready
+   docker compose exec postgres /opt/core_data/scripts/healthcheck.sh
    ./scripts/manage.sh psql -c 'SELECT 1;'
-   ```
+ ```
 4. Explore the CLI: `./scripts/manage.sh help`
+
+## Operational Defaults
+- **Resource guardrails.** Container memory, CPU, and shared memory limits come from `.env`, keeping pgtune advice and runtime constraints aligned. Adjust `POSTGRES_MEMORY_LIMIT`, `POSTGRES_CPU_LIMIT`, and `POSTGRES_SHM_SIZE` to match the host.
+- **TLS everywhere.** PostgreSQL refuses non-SSL connections from the bridge network. Provide your own certificate/key via Docker secrets or rely on the init hook to mint a self-signed pair under `${PGDATA}/tls`.
+- **Named volumes for PGDATA/WAL.** `pgdata`, `pgwal`, and `pgbackrest` volumes provide near-native I/O on Linux. Override the volume definitions if you pin WAL/data to specific devices.
+- **Non-root from the start.** A one-shot `volume_prep` helper chowns the volumes before Postgres launches so the main service and sidecars run entirely as UID/GID `${POSTGRES_UID}`.
+- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, and prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`. `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
+- **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
+- **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 
 ## Project Layout
 ```
@@ -65,12 +77,12 @@ core_data/
 ├── scripts/                  # Operator tooling (manage.sh + lib modules + maintenance workflow)
 ├── postgres/                 # Custom image build assets, configs, and initdb scripts
 ├── backups/                  # Host output directory for logical dumps and reports
-├── data/                     # Host bind mounts for postgres_data / pgbackrest_repo / pghero_data
+├── secrets/                  # Docker secret material (e.g., postgres_superuser_password)
 ├── README.md                 # This guide
 ├── THIRD_PARTY_LICENSES.md   # Upstream license attributions for vendored tooling
 └── AGENTS.md                 # Contributor quick-reference & runbooks
 ```
-Keep `data/` out of version control—it holds live cluster state and backup archives.
+If you override the named volumes with host bind mounts, keep those directories out of version control—they contain live cluster state and pgBackRest archives.
 
 ## Management CLI
 `./scripts/manage.sh` is the operator entry point. Frequently used commands:
@@ -78,6 +90,7 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | Command | Description |
 | --- | --- |
 | `build-image` | Build the custom PostgreSQL image defined in `postgres/Dockerfile`. |
+| `create-env` | Interactive wizard that copies `.env.example`, sizes resources, seeds secrets, and writes `.env`. |
 | `up` / `down` | Start or stop the Compose stack (volumes preserved). |
 | `psql` | Open psql inside the container (respects `PGHOST`, `PGUSER`, etc.). |
 | `dump` / `dump-sql` | Produce logical backups (custom or plain format) under `/backups`. |
@@ -108,7 +121,7 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
-`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and it records any version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also records the most recent sidecar dump run in `logical_backup_status.txt`, runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and captures version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 
 Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
 

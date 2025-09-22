@@ -38,6 +38,7 @@ INDEX_MIN_SIZE_MB=${DAILY_INDEX_MIN_SIZE_MB:-10}
 GENERATE_HTML=${DAILY_HTML_REPORT:-true}
 EMAIL_REPORT=${DAILY_EMAIL_REPORT:-false}
 REPORT_RECIPIENT=${DAILY_REPORT_RECIPIENT:-}
+LOGICAL_BACKUP_HOST_OUTPUT=${LOGICAL_BACKUP_HOST_OUTPUT:-./backups/logical}
 
 TIMESTAMP=$(date +%Y%m%d)
 HOST_TARGET_DIR="${HOST_BACKUP_ROOT}/${TIMESTAMP}"
@@ -130,6 +131,30 @@ compose_exec python3 /opt/core_data/scripts/version_status.py \
   --only-outdated \
   --quiet \
   --output "${CONTAINER_TARGET_DIR}/version_status.csv" || true
+
+echo "[daily] summarizing logical backup sidecar"
+LOGICAL_STATUS_FILE="${HOST_TARGET_DIR}/logical_backup_status.txt"
+if [[ -d "${LOGICAL_BACKUP_HOST_OUTPUT}" ]]; then
+  latest_dir=$(find "${LOGICAL_BACKUP_HOST_OUTPUT}" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+  if [[ -n "${latest_dir}" ]]; then
+    latest_name=$(basename "${latest_dir}")
+    latest_epoch=$(stat -c %Y "${latest_dir}" 2>/dev/null || stat -f %m "${latest_dir}" 2>/dev/null || echo 0)
+    now_epoch=$(date +%s)
+    age_seconds=$((now_epoch - latest_epoch))
+    file_count=$(find "${latest_dir}" -type f | wc -l | tr -d ' ')
+    size_bytes=$(du -sb "${latest_dir}" 2>/dev/null | awk '{print $1}')
+    {
+      echo "latest_directory=${latest_name}"
+      echo "age_seconds=${age_seconds}"
+      echo "file_count=${file_count}"
+      echo "size_bytes=${size_bytes:-0}"
+    } >"${LOGICAL_STATUS_FILE}"
+  else
+    echo "status=no_backups_detected" >"${LOGICAL_STATUS_FILE}"
+  fi
+else
+  echo "status=logical_backup_path_missing" >"${LOGICAL_STATUS_FILE}"
+fi
 
 if [[ ${GENERATE_HTML} == true ]]; then
   echo "[daily] generating html maintenance summary"

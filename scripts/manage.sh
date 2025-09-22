@@ -105,13 +105,14 @@ SELECT cron.schedule_in_database('${job_name}', '15 3 * * *', \$\$SELECT core_da
 SQL
 }
 
-usage() {
+  usage() {
   cat <<USAGE
 core_data management CLI
 
 Usage: ${0##*/} <command> [options]
 
 Commands:
+  create-env                  Interactive helper to generate a tailored .env file.
   build-image                 Build the custom PostgreSQL image.
   up                          Start the stack in detached mode.
   down                        Stop the stack (preserving volumes).
@@ -208,7 +209,11 @@ ensure_compose
 COMMAND=${1:-help}
 shift || true
 
-case "${COMMAND}" in
+  case "${COMMAND}" in
+  create-env)
+    shift
+    bash "${SCRIPT_DIR}/create_env.sh" "$@"
+    ;;
   build-image)
     ensure_env
     compose build postgres

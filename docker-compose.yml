@@ -1,8 +1,28 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
-
 services:
+  volume_prep:
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
+    restart: "no"
+    user: "0:0"
+    command: ["/bin/sh", "-c", "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} /var/lib/postgresql/data /var/lib/postgresql/wal /var/lib/pgbackrest"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pgwal:/var/lib/postgresql/wal
+      - pgbackrest:/var/lib/pgbackrest
+    networks:
+      - core_data
+    logging:
+      driver: local
+      options:
+        max-size: ${POSTGRES_LOG_MAX_SIZE}
+        max-file: "${POSTGRES_LOG_MAX_FILE}"
+        mode: ${POSTGRES_LOG_MODE}
+        max-buffer-size: ${POSTGRES_LOG_BUFFER}
+        compress: "true"
+
   postgres:
     build:
       context: .
@@ -10,47 +30,141 @@ services:
       args:
         PG_VERSION: ${PG_VERSION}
         AGE_VERSION: ${AGE_VERSION:-master}
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     env_file:
       - .env
     environment:
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
-      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_DB: ${POSTGRES_DB}
       DATABASES_TO_CREATE: ${DATABASES_TO_CREATE}
       TZ: ${TZ}
+      POSTGRES_LISTEN_ADDRESSES: ${POSTGRES_LISTEN_ADDRESSES}
+      POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS}
+      PG_SHARED_BUFFERS: ${PG_SHARED_BUFFERS}
+      PG_EFFECTIVE_CACHE_SIZE: ${PG_EFFECTIVE_CACHE_SIZE}
+      PG_WORK_MEM: ${PG_WORK_MEM}
+      PG_MAINTENANCE_WORK_MEM: ${PG_MAINTENANCE_WORK_MEM}
+      PG_RANDOM_PAGE_COST: ${PG_RANDOM_PAGE_COST}
+      PG_EFFECTIVE_IO_CONCURRENCY: ${PG_EFFECTIVE_IO_CONCURRENCY}
+      PG_MAX_WAL_SIZE: ${PG_MAX_WAL_SIZE}
+      PG_MIN_WAL_SIZE: ${PG_MIN_WAL_SIZE}
+      PG_WAL_KEEP_SIZE: ${PG_WAL_KEEP_SIZE}
+      PG_MAX_WAL_SENDERS: ${PG_MAX_WAL_SENDERS}
+      PG_CHECKPOINT_COMPLETION_TARGET: ${PG_CHECKPOINT_COMPLETION_TARGET}
+      PG_LOG_MIN_DURATION_STATEMENT: ${PG_LOG_MIN_DURATION_STATEMENT}
+      POSTGRES_SSL_ENABLED: ${POSTGRES_SSL_ENABLED}
+      POSTGRES_SSL_CERT_FILE: ${POSTGRES_SSL_CERT_FILE}
+      POSTGRES_SSL_KEY_FILE: ${POSTGRES_SSL_KEY_FILE}
+      POSTGRES_SSL_SELF_SIGNED_SUBJECT: ${POSTGRES_SSL_SELF_SIGNED_SUBJECT}
+      POSTGRES_SSL_SELF_SIGNED_DAYS: ${POSTGRES_SSL_SELF_SIGNED_DAYS}
+      POSTGRES_INITDB_WALDIR: /var/lib/postgresql/wal
     volumes:
-      - ${PG_DATA_DIR}:/var/lib/postgresql/data
-      - ${CORE_DATA_PGBACKREST_REPO_DIR}:/var/lib/pgbackrest
+      - pgdata:/var/lib/postgresql/data
+      - pgwal:/var/lib/postgresql/wal
+      - pgbackrest:/var/lib/pgbackrest
       - ./backups:/backups
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+      - ./scripts:/opt/core_data/scripts:ro
     networks:
       - core_data
+    depends_on:
+      volume_prep:
+        condition: service_completed_successfully
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_SUPERUSER}"]
+      test: ["CMD-SHELL", "/opt/core_data/scripts/healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    stop_grace_period: 1m
+    shm_size: ${POSTGRES_SHM_SIZE}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT}
+    cpus: ${POSTGRES_CPU_LIMIT}
+    logging:
+      driver: local
+      options:
+        max-size: ${POSTGRES_LOG_MAX_SIZE}
+        max-file: "${POSTGRES_LOG_MAX_FILE}"
+        mode: ${POSTGRES_LOG_MODE}
+        max-buffer-size: ${POSTGRES_LOG_BUFFER}
+        compress: "true"
+    secrets:
+      - source: postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
 
   pghero:
     image: ankane/pghero:latest
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
     restart: unless-stopped
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     depends_on:
       postgres:
         condition: service_healthy
+    entrypoint: ["/bin/sh", "/opt/core_data/scripts/pghero_entrypoint.sh"]
     environment:
-      DATABASE_URL: postgres://${POSTGRES_SUPERUSER}:${POSTGRES_SUPERUSER_PASSWORD}@postgres:5432/${POSTGRES_DB}
       PGHERO_USERNAME: ${PGHERO_USER}
       PGHERO_PASSWORD: ${PGHERO_PASSWORD}
+      POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: postgres
+      POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      TZ: ${TZ}
     ports:
       - "${PGHERO_PORT}:8080"
     networks:
       - core_data
+    volumes:
+      - ./scripts/pghero_entrypoint.sh:/opt/core_data/scripts/pghero_entrypoint.sh:ro
+    secrets:
+      - source: postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
+    logging:
+      driver: local
+      options:
+        max-size: ${POSTGRES_LOG_MAX_SIZE}
+        max-file: "${POSTGRES_LOG_MAX_FILE}"
+        mode: ${POSTGRES_LOG_MODE}
+        max-buffer-size: ${POSTGRES_LOG_BUFFER}
+        compress: "true"
+
+  logical_backup:
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
+    restart: unless-stopped
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["/opt/core_data/scripts/logical_backup_runner.sh"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
+      POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
+      LOGICAL_BACKUP_INTERVAL_SECONDS: ${LOGICAL_BACKUP_INTERVAL_SECONDS}
+      LOGICAL_BACKUP_RETENTION_DAYS: ${LOGICAL_BACKUP_RETENTION_DAYS}
+      LOGICAL_BACKUP_OUTPUT: ${LOGICAL_BACKUP_OUTPUT}
+      TZ: ${TZ}
+    volumes:
+      - ./backups:/backups
+      - ./scripts/logical_backup_runner.sh:/opt/core_data/scripts/logical_backup_runner.sh:ro
+    networks:
+      - core_data
+    secrets:
+      - source: postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
+    logging:
+      driver: local
+      options:
+        max-size: ${POSTGRES_LOG_MAX_SIZE}
+        max-file: "${POSTGRES_LOG_MAX_FILE}"
+        mode: ${POSTGRES_LOG_MODE}
+        max-buffer-size: ${POSTGRES_LOG_BUFFER}
+        compress: "true"
 
 networks:
   core_data:
@@ -59,3 +173,12 @@ networks:
     ipam:
       config:
         - subnet: ${DOCKER_NETWORK_SUBNET}
+
+volumes:
+  pgdata:
+  pgwal:
+  pgbackrest:
+
+secrets:
+  postgres_superuser_password:
+    file: ${POSTGRES_SUPERUSER_PASSWORD_FILE}
