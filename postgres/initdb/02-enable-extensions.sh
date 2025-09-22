@@ -32,7 +32,7 @@ EXTENSIONS=(
   address_standardizer_data_us
   postgis_tiger_geocoder
   pgrouting
-  "uuid-ossp"
+  uuid-ossp
   vector
 )
 
