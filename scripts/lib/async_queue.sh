@@ -117,7 +117,7 @@ DECLARE
 BEGIN
   DELETE FROM jobs
    WHERE id = p_job_id
-     AND (reserved_by = p_worker OR reserved_by IS NULL)
+     AND reserved_by = p_worker
   RETURNING true INTO deleted;
   RETURN COALESCE(deleted, false);
 END;
@@ -144,7 +144,7 @@ BEGIN
          last_error = p_error,
          updated_at = now()
    WHERE id = p_job_id
-     AND (reserved_by = p_worker OR reserved_by IS NULL)
+     AND reserved_by = p_worker
   RETURNING true INTO updated;
   RETURN COALESCE(updated, false);
 END;
