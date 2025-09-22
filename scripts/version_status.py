@@ -15,7 +15,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 try:
     from packaging.version import Version  # type: ignore
@@ -25,6 +25,8 @@ except ImportError:  # pragma: no cover
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 DEFAULT_COMPOSE_BIN = os.environ.get("COMPOSE_BIN", "docker compose")
 DEFAULT_SERVICE = os.environ.get("POSTGRES_SERVICE_NAME", "postgres")
+GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
+
 
 @dataclass
 class ComponentConfig:
@@ -169,7 +171,10 @@ def fetch_github_latest(repo: str) -> Optional[str]:
     try:
         import urllib.request
 
-        req = urllib.request.Request(url, headers={"User-Agent": "core-data-version-check"})
+        headers = {"User-Agent": "core-data-version-check"}
+        if GITHUB_TOKEN:
+            headers["Authorization"] = f"token {GITHUB_TOKEN}"  # pragma: allowlist secret
+        req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.load(resp)
     except Exception:
@@ -252,7 +257,7 @@ def main() -> int:
                     row["component"],
                     row["installed_version"],
                     row["latest_version"],
-                    row["status"]
+                    row["status"],
                 ))
 
     return 0
