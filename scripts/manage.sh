@@ -26,38 +26,10 @@ source "${SCRIPT_DIR}/lib/extensions.sh"
 source "${SCRIPT_DIR}/lib/partman.sh"
 # shellcheck source=scripts/lib/async_queue.sh
 source "${SCRIPT_DIR}/lib/async_queue.sh"
+# shellcheck source=scripts/lib/extensions_list.sh
+source "${SCRIPT_DIR}/lib/extensions_list.sh"
 
-CORE_DATA_EXTENSIONS=(
-  age
-  btree_gin
-  btree_gist
-  citext
-  dblink
-  hstore
-  fuzzystrmatch
-  pg_buffercache
-  pg_cron
-  pg_partman
-  hypopg
-  pg_repack
-  pg_squeeze
-  pg_stat_statements
-  pg_trgm
-  pgcrypto
-  pgstattuple
-  pgtap
-  pgaudit
-  postgres_fdw
-  postgis
-  postgis_raster
-  postgis_topology
-  address_standardizer
-  address_standardizer_data_us
-  postgis_tiger_geocoder
-  pgrouting
-  uuid-ossp
-  vector
-)
+CORE_DATA_EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
 
 bootstrap_database() {
   local db="$1"

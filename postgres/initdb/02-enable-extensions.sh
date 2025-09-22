@@ -4,37 +4,10 @@
 
 set -euo pipefail
 
-EXTENSIONS=(
-  age
-  btree_gin
-  btree_gist
-  citext
-  dblink
-  hstore
-  fuzzystrmatch
-  pg_buffercache
-  pg_cron
-  pg_partman
-  hypopg
-  pg_repack
-  pg_squeeze
-  pg_stat_statements
-  pg_trgm
-  pgcrypto
-  pgstattuple
-  pgtap
-  pgaudit
-  postgres_fdw
-  postgis
-  postgis_raster
-  postgis_topology
-  address_standardizer
-  address_standardizer_data_us
-  postgis_tiger_geocoder
-  pgrouting
-  uuid-ossp
-  vector
-)
+# shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
+source /opt/core_data/scripts/lib/extensions_list.sh
+
+EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
 
 DOLLAR='$'
 
