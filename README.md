@@ -24,6 +24,25 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - PgBackRest repository and PostgreSQL data directories mount from the host for durable backups and WAL archival.
 - CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
+### Default Extension Bundle
+core_data provisions a batteries-included extension stack in every non-template database at init time:
+
+- **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`.
+- **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
+- **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`.
+- **Connectivity** — `postgres_fdw`, `dblink`.
+- **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
+- **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
+- **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
+
+The same bundle is installed into `template1` so freshly created databases inherit the tooling automatically.
+
+`pg_partman_bgw` is preloaded with a one-hour interval targeting the `postgres` database under the `postgres` superuser. Adjust `pg_partman_bgw.dbname`/`role` in `postgresql.conf.tpl` (or via `postgresql.pgtune.conf`) if you manage partitions from a different control schema.
+
+Use `./scripts/manage.sh partman-show-config` to inspect tracked parents, `partman-maintenance` to run `run_maintenance_proc()` on demand, and `partman-create-parent schema.table control_column '1 day'` to bootstrap new partition sets without hand-writing SQL.
+
+Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight background-job queue. It provisions an `asyncq.jobs` table plus helpers (`enqueue`, `dequeue`, `complete`, `fail`, `extend_lease`) that rely on `FOR UPDATE SKIP LOCKED`, `pg_notify`, and UUID leasing. Point a worker at the queue with `SELECT * FROM asyncq.dequeue('default');` in a loop and call `asyncq.complete(...)` or `asyncq.fail(...)` as you process jobs.
+
 ## Quick Start
 1. Copy the template: `cp .env.example .env` and customize credentials, host paths, and network settings (keep the generated `.env` local and untracked).
 2. Build and start the stack:
@@ -73,17 +92,23 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `audit-replication` | Summarise follower lag and sync state. |
 | `audit-cron` / `audit-squeeze` | Inspect pg_cron schedules and pg_squeeze activity tables. |
 | `audit-index-bloat` | Estimate index bloat using pgstattuple (supports `--min-size-mb`). |
+| `audit-buffercache` | Snapshot shared buffer usage per relation (supports `--limit`). |
 | `audit-schema` | Snapshot schema metadata for drift detection. |
 | `snapshot-pgstat` | Capture a `pg_stat_statements` baseline (CSV output) for performance trending. |
 | `diff-pgstat --base --compare` | Diff two snapshots (CSV-in/CSV-out) to highlight hot queries. |
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
-| `exercise-extensions` | Smoke-test pgvector, PostGIS, and Apache AGE features. |
-| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions are registered. |
+| `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, hypopg, pg_partman, etc.). |
+| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including hypopg/pg_partman) are registered. |
+| `async-queue bootstrap` | Install the lightweight async queue schema (`asyncq`) with enqueue/dequeue helpers. |
+| `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
+| `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
+| `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
+| `version-status` | Compare installed Postgres/extension versions with upstream releases (CSV via `--output`). |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
-`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and it records any version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 
 Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
 
@@ -105,7 +130,7 @@ All runs write logs under `backups/` for auditing (`pg_repack-*.log`, `vacuum-fu
 - **CI Workflow:** `.github/workflows/ci.yml` builds the image, runs `python -m pytest -k full_workflow`, and uploads generated backups for inspection.
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
 - **Fast Tests:** `tests/test_lightweight.py` validates offline flows like help output and the vendored tooling without needing Docker.
-- **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that pgvector, PostGIS, Apache AGE, and pgTap are ready for use.
+- **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that the entire core extension bundle (vector/PostGIS/AGE/hstore/citext/pgcrypto/pg_partman/etc.) is ready for use.
 - **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits
@@ -118,9 +143,12 @@ Thank you to the maintainers and communities behind the components that make cor
 - [pg_cron](https://github.com/citusdata/pg_cron) – database-native scheduling.
 - [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) – automatic bloat mitigation.
 - [pgvector](https://github.com/pgvector/pgvector) – high-dimensional vector search.
-- [PostGIS](https://postgis.net/) – spatial superpowers for PostgreSQL.
+- [PostGIS](https://postgis.net/) – spatial superpowers for PostgreSQL (including Tiger Geocoder & Address Standardizer).
+- [pgRouting](https://pgrouting.org/) – network routing & graph analysis atop PostGIS.
 - [Apache AGE](https://age.apache.org/) – graph database extension.
 - [pgaudit](https://github.com/pgaudit/pgaudit) – enhanced auditing.
+- [pg_partman](https://github.com/pgpartman/pg_partman) – automated time/ID partition management.
+- [HypoPG](https://github.com/HypoPG/hypopg) – hypothetical index exploration for query tuning.
 - [pg_repack](https://github.com/reorg/pg_repack) & [pgtap](https://github.com/theory/pgtap) – maintenance & testing extensions.
 
 Their work powers the database-as-code experience delivered by core_data.

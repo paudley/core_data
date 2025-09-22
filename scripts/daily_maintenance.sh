@@ -30,6 +30,7 @@ fi
 REMOVE_SOURCE=${DAILY_REMOVE_SOURCE_LOGS:-false}
 PG_BADGER_JOBS=${PG_BADGER_JOBS:-2}
 PG_STAT_LIMIT=${DAILY_PG_STAT_LIMIT:-100}
+BUFFERCACHE_LIMIT=${DAILY_BUFFERCACHE_LIMIT:-50}
 DEAD_TUPLE_THRESHOLD=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
 DEAD_TUPLE_RATIO=${DAILY_DEAD_TUPLE_RATIO:-0.2}
 REPLICATION_LAG_THRESHOLD=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
@@ -73,6 +74,26 @@ fi
 echo "[daily] capturing pg_stat_statements baseline"
 snapshot_pg_stat_statements "${CONTAINER_TARGET_DIR}/pg_stat_statements.csv" "${PG_STAT_LIMIT}" || true
 
+echo "[daily] snapshotting buffer cache allocation"
+audit_pg_buffercache "${CONTAINER_TARGET_DIR}/pg_buffercache.csv" "${BUFFERCACHE_LIMIT}" || true
+
+echo "[daily] running pg_partman maintenance"
+while IFS= read -r db; do
+  [[ -z "${db}" ]] && continue
+  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
+SELECT n.nspname AS partman_schema
+  FROM pg_extension e
+  JOIN pg_namespace n ON n.oid = e.extnamespace
+ WHERE e.extname = 'pg_partman'
+\gset
+\if :{?partman_schema}
+SELECT format('CALL %I.run_maintenance_proc();', :'partman_schema');
+\gexec
+\endif
+SQL
+done <<<"${databases}"
+
 echo "[daily] auditing roles"
 audit_roles "${CONTAINER_TARGET_DIR}/role_audit.csv" || true
 
@@ -102,6 +123,13 @@ audit_schema_snapshot "${CONTAINER_TARGET_DIR}/schema_snapshot.csv" || true
 
 echo "[daily] summarizing pgaudit events"
 summarize_pgaudit_logs "${CONTAINER_TARGET_DIR}" || true
+
+echo "[daily] checking extension version drift"
+compose_exec python3 /opt/core_data/scripts/version_status.py \
+  --inside-container \
+  --only-outdated \
+  --quiet \
+  --output "${CONTAINER_TARGET_DIR}/version_status.csv" || true
 
 if [[ ${GENERATE_HTML} == true ]]; then
   echo "[daily] generating html maintenance summary"

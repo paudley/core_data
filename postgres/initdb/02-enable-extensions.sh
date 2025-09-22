@@ -4,20 +4,12 @@
 
 set -euo pipefail
 
-EXTENSIONS=(
-  postgis
-  postgis_raster
-  postgis_topology
-  vector
-  age
-  pgaudit
-  pg_stat_statements
-  pg_cron
-  pgtap
-  pg_repack
-  pg_squeeze
-  pgstattuple
-)
+# shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
+source /opt/core_data/scripts/lib/extensions_list.sh
+# shellcheck source=/opt/core_data/scripts/lib/extensions_helpers.sh
+source /opt/core_data/scripts/lib/extensions_helpers.sh
+
+EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
 
 DOLLAR='$'
 
@@ -30,7 +22,15 @@ configure_database() {
     if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
       continue
     fi
-    if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS ${ext};"; then
+    if [[ "${ext}" == "pg_partman" ]]; then
+      local pg_partman_sql
+      pg_partman_sql=$(generate_pg_partman_sql)
+      if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "${pg_partman_sql}"; then
+        echo "[core_data] WARNING: failed to install extension '${ext}' in database '${db}'." >&2
+      fi
+      continue
+    fi
+    if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";"; then
       if [[ "${ext}" == "pgaudit" ]]; then
         echo "[core_data] WARNING: pgaudit extension requires shared_preload_libraries; run CREATE EXTENSION pgaudit; after restart." >&2
       else
@@ -57,7 +57,18 @@ BEGIN
      WHERE c.relkind IN ('r','m')
        AND n.nspname NOT LIKE 'pg_%'
        AND n.nspname <> 'information_schema'
-       AND n.nspname NOT IN ('ag_catalog','cron','squeeze','topology')
+       AND n.nspname NOT IN (
+         'ag_catalog',
+         'cron',
+         'squeeze',
+         'topology',
+         'tiger',
+         'tiger_data',
+         'partman',
+         'address_standardizer',
+         'address_standardizer_data_us',
+         'asyncq'
+       )
   LOOP
     PERFORM squeeze.squeeze_table(rec.schema_name, rec.table_name);
   END LOOP;

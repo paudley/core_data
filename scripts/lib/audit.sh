@@ -210,6 +210,48 @@ SQL
   echo "pg_cron schedule written to ${target_path}" >&2
 }
 
+audit_pg_buffercache() {
+  ensure_env
+  local target_path=${1:-}
+  local limit=${2:-50}
+  if ! [[ ${limit} =~ ^[0-9]+$ ]]; then
+    echo "[audit] invalid limit '${limit}', falling back to 50" >&2
+    limit=50
+  fi
+  local query
+query=$(cat <<SQL
+SELECT now() AS collected_at,
+       n.nspname AS schema_name,
+       c.relname AS relation_name,
+       COUNT(*) AS buffers,
+       ROUND(COUNT(*) * current_setting('block_size')::int / 1024.0 / 1024.0, 2) AS buffer_mb,
+       ROUND((COUNT(*) * current_setting('block_size')::numeric) / pg_size_bytes(current_setting('shared_buffers')) * 100, 2) AS pct_of_cache,
+       MAX(b.usagecount) AS max_usage_count,
+       BOOL_OR(b.isdirty) AS has_dirty_buffers
+  FROM pg_buffercache b
+  JOIN pg_class c ON pg_relation_filenode(c.oid) = b.relfilenode
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE b.reldatabase IN (0, (SELECT oid FROM pg_database WHERE datname = current_database()))
+   AND n.nspname NOT LIKE 'pg_%'
+   AND n.nspname <> 'information_schema'
+ GROUP BY n.nspname, c.relname
+ ORDER BY buffers DESC
+ LIMIT ${limit};
+SQL
+)
+  if [[ -z ${target_path} ]]; then
+    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+    return
+  fi
+  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+  if copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"; then
+    echo "Buffer cache snapshot written to ${target_path}" >&2
+  else
+    echo "[audit] WARNING: failed to capture pg_buffercache snapshot" >&2
+  fi
+}
+
 audit_pg_squeeze() {
   ensure_env
   local target_path=${1:-}

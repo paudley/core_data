@@ -22,21 +22,16 @@ source "${SCRIPT_DIR}/lib/audit.sh"
 source "${SCRIPT_DIR}/lib/maintenance_actions.sh"
 # shellcheck source=scripts/lib/extensions.sh
 source "${SCRIPT_DIR}/lib/extensions.sh"
+# shellcheck source=scripts/lib/partman.sh
+source "${SCRIPT_DIR}/lib/partman.sh"
+# shellcheck source=scripts/lib/async_queue.sh
+source "${SCRIPT_DIR}/lib/async_queue.sh"
+# shellcheck source=scripts/lib/extensions_list.sh
+source "${SCRIPT_DIR}/lib/extensions_list.sh"
+# shellcheck source=scripts/lib/extensions_helpers.sh
+source "${SCRIPT_DIR}/lib/extensions_helpers.sh"
 
-CORE_DATA_EXTENSIONS=(
-  postgis
-  postgis_raster
-  postgis_topology
-  vector
-  age
-  pgaudit
-  pg_stat_statements
-  pg_cron
-  pgtap
-  pg_repack
-  pg_squeeze
-  pgstattuple
-)
+CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
 bootstrap_database() {
   local db="$1"
@@ -45,8 +40,16 @@ bootstrap_database() {
     if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
       continue
     fi
+    if [[ "${ext}" == "pg_partman" ]]; then
+      local pg_partman_sql
+      pg_partman_sql=$(generate_pg_partman_sql)
+      compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+        psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" \
+             --command "${pg_partman_sql}" >/dev/null
+      continue
+    fi
     compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS ${ext};" >/dev/null
+      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
   done
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
@@ -69,7 +72,18 @@ BEGIN
      WHERE c.relkind IN ('r','m')
        AND n.nspname NOT LIKE 'pg_%'
        AND n.nspname <> 'information_schema'
-       AND n.nspname NOT IN ('ag_catalog','cron','squeeze','topology')
+       AND n.nspname NOT IN (
+         'ag_catalog',
+         'cron',
+         'squeeze',
+         'topology',
+         'tiger',
+         'tiger_data',
+         'partman',
+         'address_standardizer',
+         'address_standardizer_data_us',
+         'asyncq'
+       )
   LOOP
     PERFORM squeeze.squeeze_table(rec.schema_name, rec.table_name);
   END LOOP;
@@ -133,6 +147,8 @@ Commands:
   audit-index-bloat [options] Report index density using pgstattuple.
      --output PATH            Write CSV to container path.
      --min-size-mb N          Minimum index size in MB (default 10).
+  audit-buffercache [--output PATH] [--limit N]
+                             Snapshot shared buffer usage by relation.
   audit-schema [--output PATH]
                               Snapshot information_schema columns.
   snapshot-pgstat [--output PATH] [--limit N]
@@ -141,8 +157,23 @@ Commands:
   audit-squeeze [--output PATH]
                               Dump pg_squeeze activity table.
   exercise-extensions [--db DB]
-                              Run smoke queries across PostGIS, pgvector, AGE.
-  pgtap-smoke [--db DB]       Execute a short pgTap plan validating key extensions.
+                              Run smoke queries across the core extension bundle.
+  pgtap-smoke [--db DB]       Execute a pgTap plan validating the bundled extensions.
+  async-queue bootstrap [--db DB] [--schema NAME]
+                             Install the lightweight async queue schema/functions.
+  partman-maintenance [--db DB]
+                             Run partman.run_maintenance_proc() in the target database.
+  partman-show-config [--db DB] [--parent schema.table]
+                             Display entries from partman.part_config.
+  partman-create-parent [--db DB] [--type TYPE]
+                             [--start PARTITION] [--premake N]
+                             [--no-default-table] [--automatic on|off|none]
+                             [--no-jobmon] [--time-encoder FUNC]
+                             [--time-decoder FUNC]
+                             Create a new managed parent (args:
+                             schema.table control_column interval).
+  version-status [--only-outdated] [--output PATH]
+                             Compare installed versions against upstream releases.
   diff-pgstat --base PATH --compare PATH [--limit N]
                               Compare two pg_stat_statements snapshots.
   compact --level N [...options]
@@ -461,6 +492,31 @@ case "${COMMAND}" in
     done
     audit_index_bloat "${output}" "${min_size}"
     ;;
+  audit-buffercache)
+    output=""
+    limit=${PG_BUFFERCACHE_LIMIT:-50}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --limit)
+          limit=$2; shift 2 ;;
+        --limit=*)
+          limit=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-buffercache [--output PATH] [--limit N]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-buffercache: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_pg_buffercache "${output}" "${limit}"
+    ;;
   audit-schema)
     output=""
     while [[ $# -gt 0 ]]; do
@@ -689,6 +745,215 @@ USAGE
       esac
     done
     run_pgtap_smoke "${db}"
+    ;;
+  async-queue)
+    subcommand=${1:-help}
+    shift || true
+    case "${subcommand}" in
+      bootstrap)
+        db=""
+        schema=""
+        while [[ $# -gt 0 ]]; do
+          case "$1" in
+            --db)
+              db=$2; shift 2 ;;
+            --db=*)
+              db=${1#*=}; shift ;;
+            --schema)
+              schema=$2; shift 2 ;;
+            --schema=*)
+              schema=${1#*=}; shift ;;
+            -h|--help)
+              echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+              exit 0 ;;
+            --)
+              shift; break ;;
+            *)
+              echo "Unknown option for async-queue bootstrap: $1" >&2
+              exit 1 ;;
+          esac
+        done
+        async_queue_bootstrap "${db:-${POSTGRES_DB:-postgres}}" "${schema:-${ASYNCQ_DEFAULT_SCHEMA:-asyncq}}"
+        ;;
+      help|-h|--help)
+        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+        ;;
+      *)
+        echo "Unknown async-queue subcommand: ${subcommand}" >&2
+        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+        exit 1 ;;
+    esac
+    ;;
+  partman-maintenance)
+    db=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --db)
+          db=$2; shift 2 ;;
+        --db=*)
+          db=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} partman-maintenance [--db NAME]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for partman-maintenance: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    partman_run_maintenance "${db:-${POSTGRES_DB:-postgres}}"
+    ;;
+  partman-show-config)
+    db=""
+    parent=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --db)
+          db=$2; shift 2 ;;
+        --db=*)
+          db=${1#*=}; shift ;;
+        --parent)
+          parent=$2; shift 2 ;;
+        --parent=*)
+          parent=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} partman-show-config [--db NAME] [--parent schema.table]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for partman-show-config: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    partman_show_config "${db:-${POSTGRES_DB:-postgres}}" "${parent}"
+    ;;
+  partman-create-parent)
+    db=""
+    part_type="range"
+    start_partition=""
+    premake=""
+    default_table=true
+    automatic_mode="on"
+    jobmon=true
+    time_encoder=""
+    time_decoder=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --db)
+          db=$2; shift 2 ;;
+        --db=*)
+          db=${1#*=}; shift ;;
+        --type)
+          part_type=$2; shift 2 ;;
+        --type=*)
+          part_type=${1#*=}; shift ;;
+        --start)
+          start_partition=$2; shift 2 ;;
+        --start=*)
+          start_partition=${1#*=}; shift ;;
+        --premake)
+          premake=$2; shift 2 ;;
+        --premake=*)
+          premake=${1#*=}; shift ;;
+        --no-default-table)
+          default_table=false; shift ;;
+        --automatic)
+          automatic_mode=$2; shift 2 ;;
+        --automatic=*)
+          automatic_mode=${1#*=}; shift ;;
+        --no-jobmon)
+          jobmon=false; shift ;;
+        --time-encoder)
+          time_encoder=$2; shift 2 ;;
+        --time-encoder=*)
+          time_encoder=${1#*=}; shift ;;
+        --time-decoder)
+          time_decoder=$2; shift 2 ;;
+        --time-decoder=*)
+          time_decoder=${1#*=}; shift ;;
+        -h|--help)
+          cat <<'USAGE' >&2
+Usage: manage.sh partman-create-parent [options] schema.table control_column interval
+
+Options:
+  --db NAME                 Target database (default: POSTGRES_DB)
+  --type TYPE               Partitioning type (default: range)
+  --start PARTITION         Starting partition boundary
+  --premake N               Number of future partitions to premake
+  --no-default-table        Do not keep a default partition
+  --automatic on|off|none   Override automatic maintenance behaviour
+  --no-jobmon               Disable pg_jobmon integration
+  --time-encoder FUNC       Override time encoder function
+  --time-decoder FUNC       Override time decoder function
+USAGE
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          break ;;
+      esac
+    done
+
+    if [[ $# -lt 3 ]]; then
+      echo "Usage: ${0##*/} partman-create-parent [options] schema.table control_column interval" >&2
+      exit 1
+    fi
+
+    parent_table=$1
+    control_column=$2
+    interval=$3
+    shift 3
+
+    if [[ $# -gt 0 ]]; then
+      echo "Unknown positional arguments: $*" >&2
+      exit 1
+    fi
+
+    partman_create_parent \
+      "${db:-${POSTGRES_DB:-postgres}}" \
+      "${parent_table}" \
+      "${control_column}" \
+      "${interval}" \
+      "${part_type}" \
+      "${start_partition}" \
+      "${premake}" \
+      "${default_table}" \
+      "${automatic_mode}" \
+      "${jobmon}" \
+      "${time_encoder}" \
+      "${time_decoder}"
+    ;;
+  version-status)
+    output=""
+    only_outdated=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --only-outdated)
+          only_outdated=true; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} version-status [--only-outdated] [--output PATH]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for version-status: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    cmd=(python3 "${SCRIPT_DIR}/version_status.py")
+    if [[ ${only_outdated} == true ]]; then
+      cmd+=("--only-outdated")
+    fi
+    if [[ -n ${output} ]]; then
+      cmd+=("--output" "${output}")
+    fi
+    "${cmd[@]}"
     ;;
   upgrade)
     cmd_upgrade "$@"

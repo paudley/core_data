@@ -38,7 +38,10 @@ RUN set -eux; \
       postgresql-${PG_MAJOR}-postgis-3 \
       postgresql-${PG_MAJOR}-postgis-3-scripts \
       postgresql-${PG_MAJOR}-cron \
+      postgresql-${PG_MAJOR}-pgrouting \
+      postgresql-${PG_MAJOR}-partman \
       postgresql-${PG_MAJOR}-repack \
+      postgresql-${PG_MAJOR}-hypopg \
       postgresql-${PG_MAJOR}-pgtap \
       postgresql-contrib \
       pgbadger \
