@@ -66,12 +66,8 @@ echo "[daily] capturing optional cache / pool services"
 
 if compose_has_service valkey; then
   echo "[daily]  -> valkey snapshot"
-  load_secret_from_file VALKEY_PASSWORD
-  valkey_password="${VALKEY_PASSWORD:-}"
-  if [[ -z ${valkey_password} ]]; then
-    echo "[daily] WARNING: VALKEY_PASSWORD not available; skipping." >&2
-  else
-    if compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb && REDISCLI_AUTH='${valkey_password}' valkey-cli --rdb /tmp/core_data_valkey.rdb"; then
+  if compose exec -T valkey sh -c "test -r /run/secrets/valkey_password"; then
+    if compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb && valkey-cli --passfile /run/secrets/valkey_password --rdb /tmp/core_data_valkey.rdb"; then
       if compose exec -T valkey sh -c "test -f /tmp/core_data_valkey.rdb"; then
         compose exec -T valkey sh -c "cat /tmp/core_data_valkey.rdb" > "${HOST_TARGET_DIR}/valkey-dump.rdb" || true
         compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb" || true
@@ -82,12 +78,13 @@ if compose_has_service valkey; then
     else
       echo "[daily] WARNING: valkey-cli --rdb failed" >&2
     fi
-    compose exec -T valkey sh -c "REDISCLI_AUTH='${valkey_password}' valkey-cli info" > "${HOST_TARGET_DIR}/valkey-info.txt" || true
+    compose exec -T valkey sh -c "valkey-cli --passfile /run/secrets/valkey_password info" > "${HOST_TARGET_DIR}/valkey-info.txt" || true
     if [[ -f "${HOST_TARGET_DIR}/valkey-info.txt" ]]; then
       chmod 0600 "${HOST_TARGET_DIR}/valkey-info.txt" || true
     fi
+  else
+    echo "[daily] WARNING: /run/secrets/valkey_password not available; skipping." >&2
   fi
-  unset VALKEY_PASSWORD
 fi
 
 if compose_has_service pgbouncer; then
