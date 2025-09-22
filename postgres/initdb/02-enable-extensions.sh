@@ -6,6 +6,8 @@ set -euo pipefail
 
 # shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
 source /opt/core_data/scripts/lib/extensions_list.sh
+# shellcheck source=/opt/core_data/scripts/lib/extensions_helpers.sh
+source /opt/core_data/scripts/lib/extensions_helpers.sh
 
 EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
 
@@ -21,27 +23,9 @@ configure_database() {
       continue
     fi
     if [[ "${ext}" == "pg_partman" ]]; then
-      if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" <<'SQL'; then
-DO
-$$
-DECLARE
-  ext_schema text;
-BEGIN
-  SELECT n.nspname INTO ext_schema
-    FROM pg_extension e
-    JOIN pg_namespace n ON n.oid = e.extnamespace
-   WHERE e.extname = 'pg_partman';
-  IF ext_schema IS NOT NULL AND ext_schema <> 'partman' THEN
-    RAISE NOTICE 'Recreating pg_partman extension in schema partman (was %).', ext_schema;
-    EXECUTE 'DROP EXTENSION pg_partman CASCADE';
-  END IF;
-END;
-$$;
-CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION CURRENT_USER;
-SET search_path TO partman;
-CREATE EXTENSION IF NOT EXISTS pg_partman;
-RESET search_path;
-SQL
+      local pg_partman_sql
+      pg_partman_sql=$(generate_pg_partman_sql)
+      if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "${pg_partman_sql}"; then
         echo "[core_data] WARNING: failed to install extension '${ext}' in database '${db}'." >&2
       fi
       continue

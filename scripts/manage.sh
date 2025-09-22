@@ -28,6 +28,8 @@ source "${SCRIPT_DIR}/lib/partman.sh"
 source "${SCRIPT_DIR}/lib/async_queue.sh"
 # shellcheck source=scripts/lib/extensions_list.sh
 source "${SCRIPT_DIR}/lib/extensions_list.sh"
+# shellcheck source=scripts/lib/extensions_helpers.sh
+source "${SCRIPT_DIR}/lib/extensions_helpers.sh"
 
 CORE_DATA_EXTENSIONS=(${CORE_EXTENSION_LIST[@]})
 
@@ -39,28 +41,11 @@ bootstrap_database() {
       continue
     fi
     if [[ "${ext}" == "pg_partman" ]]; then
+      local pg_partman_sql
+      pg_partman_sql=$(generate_pg_partman_sql)
       compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-        psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null
-DO
-$$
-DECLARE
-  ext_schema text;
-BEGIN
-  SELECT n.nspname INTO ext_schema
-    FROM pg_extension e
-    JOIN pg_namespace n ON n.oid = e.extnamespace
-   WHERE e.extname = 'pg_partman';
-  IF ext_schema IS NOT NULL AND ext_schema <> 'partman' THEN
-    RAISE NOTICE 'Recreating pg_partman extension in schema partman (was %).', ext_schema;
-    EXECUTE 'DROP EXTENSION pg_partman CASCADE';
-  END IF;
-END;
-$$;
-CREATE SCHEMA IF NOT EXISTS partman AUTHORIZATION CURRENT_USER;
-SET search_path TO partman;
-CREATE EXTENSION IF NOT EXISTS pg_partman;
-RESET search_path;
-SQL
+        psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" \
+             --command "${pg_partman_sql}" >/dev/null
       continue
     fi
     compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
