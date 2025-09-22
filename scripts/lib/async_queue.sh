@@ -127,7 +127,7 @@ CREATE OR REPLACE FUNCTION fail(
     p_job_id bigint,
     p_worker uuid,
     p_error text,
-    p_retry_in interval DEFAULT '${ASYNCQ_DEFAULT_RETRY}')
+    p_retry_in interval)
 RETURNS boolean
 LANGUAGE plpgsql
 AS $$
