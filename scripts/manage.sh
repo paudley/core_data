@@ -49,7 +49,7 @@ bootstrap_database() {
       continue
     fi
     compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
+      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS ${ext};" >/dev/null
   done
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
