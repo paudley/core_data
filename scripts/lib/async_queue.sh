@@ -30,7 +30,7 @@ BEGIN
 END;
 $$;
 
-SET search_path = quote_ident(:'schema_name') || ', public';
+SET search_path = format('%I, public', :'schema_name');
 
 CREATE TABLE IF NOT EXISTS jobs (
   id              bigserial PRIMARY KEY,
