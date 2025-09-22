@@ -173,7 +173,7 @@ def fetch_github_latest(repo: str) -> Optional[str]:
             headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"  # pragma: allowlist secret
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp:
-            data = json.load(resp)
+            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"  # pragma: allowlist secret
     except Exception:
         return None
     tag = data.get("tag_name") or data.get("name")
