@@ -30,6 +30,12 @@ source "${SCRIPT_DIR}/lib/async_queue.sh"
 source "${SCRIPT_DIR}/lib/extensions_list.sh"
 # shellcheck source=scripts/lib/extensions_helpers.sh
 source "${SCRIPT_DIR}/lib/extensions_helpers.sh"
+# shellcheck source=scripts/lib/valkey.sh
+source "${SCRIPT_DIR}/lib/valkey.sh"
+# shellcheck source=scripts/lib/pgbouncer.sh
+source "${SCRIPT_DIR}/lib/pgbouncer.sh"
+# shellcheck source=scripts/lib/memcached.sh
+source "${SCRIPT_DIR}/lib/memcached.sh"
 
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
@@ -173,6 +179,11 @@ Commands:
                              [--time-decoder FUNC]
                              Create a new managed parent (args:
                              schema.table control_column interval).
+  valkey-cli [args]           Run valkey-cli within the ValKey service (auth handled automatically).
+  valkey-bgsave               Trigger a ValKey background save (RDB written under valkey_data volume).
+  pgbouncer-stats             Execute SHOW STATS via PgBouncer admin console.
+  pgbouncer-pools             Execute SHOW POOLS via PgBouncer admin console.
+  memcached-stats             Dump Memcached stats using nc.
   version-status [--only-outdated] [--output PATH]
                              Compare installed versions against upstream releases.
   diff-pgstat --base PATH --compare PATH [--limit N]
@@ -929,6 +940,21 @@ USAGE
       "${jobmon}" \
       "${time_encoder}" \
       "${time_decoder}"
+    ;;
+  valkey-cli)
+    cmd_valkey_cli "$@"
+    ;;
+  valkey-bgsave)
+    cmd_valkey_bgsave
+    ;;
+  pgbouncer-stats)
+    cmd_pgbouncer_stats
+    ;;
+  pgbouncer-pools)
+    cmd_pgbouncer_show_pools
+    ;;
+  memcached-stats)
+    cmd_memcached_stats
     ;;
   version-status)
     output=""

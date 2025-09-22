@@ -24,7 +24,7 @@ services:
       [
         "/bin/sh",
         "-c",
-        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} ${PGDATA_MOUNT} ${PGWAL_MOUNT} ${PGBACKREST_MOUNT}"
+        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}"
       ]
     volumes:
       - pgdata:${POSTGRES_DATA_MOUNT_PATH}
@@ -52,6 +52,8 @@ services:
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_DB: ${POSTGRES_DB}
       DATABASES_TO_CREATE: ${DATABASES_TO_CREATE}
+      PGBOUNCER_AUTH_USER: ${PGBOUNCER_AUTH_USER}
+      PGBOUNCER_STATS_USER: ${PGBOUNCER_STATS_USER}
       TZ: ${TZ}
       POSTGRES_LISTEN_ADDRESSES: ${POSTGRES_LISTEN_ADDRESSES}
       POSTGRES_MAX_CONNECTIONS: ${POSTGRES_MAX_CONNECTIONS}
@@ -100,6 +102,10 @@ services:
     secrets:
       - source: postgres_superuser_password
         target: /run/secrets/postgres_superuser_password
+      - source: pgbouncer_auth_password
+        target: /run/secrets/pgbouncer_auth_password
+      - source: pgbouncer_stats_password
+        target: /run/secrets/pgbouncer_stats_password
 
   pghero:
     image: ankane/pghero:latest
@@ -156,6 +162,110 @@ services:
         target: /run/secrets/postgres_superuser_password
     logging: *logging_defaults
 
+  valkey:
+    image: valkey/valkey:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
+    restart: unless-stopped
+    profiles:
+      - valkey
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
+    environment:
+      VALKEY_PORT: ${VALKEY_PORT}
+      VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}
+      VALKEY_MAXMEMORY: ${VALKEY_MAXMEMORY}
+      VALKEY_MAXMEMORY_POLICY: ${VALKEY_MAXMEMORY_POLICY}
+      VALKEY_DATABASES: ${VALKEY_DATABASES}
+      VALKEY_PASSWORD_FILE: /run/secrets/valkey_password
+    command: ["/opt/core_data/valkey-entrypoint.sh"]
+    volumes:
+      - valkey_data:/data
+      - ./valkey/entrypoint.sh:/opt/core_data/valkey-entrypoint.sh:ro
+    networks:
+      - core_data
+    ports:
+      - "${VALKEY_PORT}:6379"
+    secrets:
+      - source: valkey_password
+        target: /run/secrets/valkey_password
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$(cat /run/secrets/valkey_password) valkey-cli -h 127.0.0.1 -p ${VALKEY_PORT} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  pgbouncer:
+    image: bitnami/pgbouncer:1.23.0
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
+    restart: unless-stopped
+    profiles:
+      - pgbouncer
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      PGBOUNCER_PORT: ${PGBOUNCER_PORT}
+      PGBOUNCER_POOL_MODE: ${PGBOUNCER_POOL_MODE}
+      PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN}
+      PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE}
+      PGBOUNCER_RESERVE_POOL_SIZE: ${PGBOUNCER_RESERVE_POOL_SIZE}
+      PGBOUNCER_RESERVE_POOL_TIMEOUT: ${PGBOUNCER_RESERVE_POOL_TIMEOUT}
+      PGBOUNCER_MIN_POOL_SIZE: ${PGBOUNCER_MIN_POOL_SIZE}
+      PGBOUNCER_ADMIN_USERS: ${PGBOUNCER_ADMIN_USERS}
+      PGBOUNCER_STATS_USERS: ${PGBOUNCER_STATS_USERS}
+      PGBOUNCER_STATS_USER: ${PGBOUNCER_STATS_USER}
+      PGBOUNCER_AUTH_USER: ${PGBOUNCER_AUTH_USER}
+      PGBOUNCER_AUTH_PASSWORD_FILE: /run/secrets/pgbouncer_auth_password
+    entrypoint: ["/opt/core_data/pgbouncer-entrypoint.sh"]
+    volumes:
+      - ./pgbouncer/pgbouncer.ini.tpl:/opt/core_data/pgbouncer.ini.tpl:ro
+      - ./pgbouncer/entrypoint.sh:/opt/core_data/pgbouncer-entrypoint.sh:ro
+      - ./pgbouncer/userlist.txt.tpl:/opt/core_data/userlist.txt.tpl:ro
+    networks:
+      - core_data
+    ports:
+      - "${PGBOUNCER_PORT}:6432"
+    secrets:
+      - source: pgbouncer_auth_password
+        target: /run/secrets/pgbouncer_auth_password
+      - source: pgbouncer_stats_password
+        target: /run/secrets/pgbouncer_stats_password
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep pgbouncer >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  memcached:
+    image: memcached:1.6-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
+    restart: unless-stopped
+    profiles:
+      - memcached
+    command:
+      - memcached
+      - -m
+      - "${MEMCACHED_MEMORY_MB}"
+      - -c
+      - "${MEMCACHED_MAX_CONNECTIONS}"
+      - -t
+      - "${MEMCACHED_THREADS}"
+      - -o
+      - modern
+    networks:
+      - core_data
+    ports:
+      - "${MEMCACHED_PORT}:11211"
+    healthcheck:
+      test: ["CMD-SHELL", "printf 'version\\r\\n' | nc -w 2 127.0.0.1 11211 | grep -qi memcached"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
 networks:
   core_data:
     name: ${DOCKER_NETWORK_NAME}
@@ -168,7 +278,14 @@ volumes:
   pgdata:
   pgwal:
   pgbackrest:
+  valkey_data:
 
 secrets:
   postgres_superuser_password:
     file: ${POSTGRES_SUPERUSER_PASSWORD_FILE}
+  valkey_password:
+    file: ${VALKEY_PASSWORD_FILE}
+  pgbouncer_auth_password:
+    file: ${PGBOUNCER_AUTH_PASSWORD_FILE}
+  pgbouncer_stats_password:
+    file: ${PGBOUNCER_STATS_PASSWORD_FILE}

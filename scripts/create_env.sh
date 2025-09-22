@@ -155,6 +155,27 @@ chmod 0600 "${secret_file}" || true
 set_env_value POSTGRES_SUPERUSER_PASSWORD ""
 set_env_value POSTGRES_SUPERUSER_PASSWORD_FILE "./secrets/postgres_superuser_password"
 
+valkey_secret_file="${secret_dir}/valkey_password"
+valkey_default_password="$(generate_password)"
+valkey_password="$(prompt_secret "ValKey password (written to secrets/valkey_password)" "${valkey_default_password}")"
+printf '%s\n' "${valkey_password}" > "${valkey_secret_file}"
+chmod 0600 "${valkey_secret_file}" || true
+set_env_value VALKEY_PASSWORD_FILE "./secrets/valkey_password"
+
+pgbouncer_auth_secret="${secret_dir}/pgbouncer_auth_password"
+pgbouncer_auth_default="$(generate_password)"
+pgbouncer_auth_password="$(prompt_secret "PgBouncer auth user password (written to secrets/pgbouncer_auth_password)" "${pgbouncer_auth_default}")"
+printf '%s\n' "${pgbouncer_auth_password}" > "${pgbouncer_auth_secret}"
+chmod 0600 "${pgbouncer_auth_secret}" || true
+set_env_value PGBOUNCER_AUTH_PASSWORD_FILE "./secrets/pgbouncer_auth_password"
+
+pgbouncer_stats_secret="${secret_dir}/pgbouncer_stats_password"
+pgbouncer_stats_default="$(generate_password)"
+pgbouncer_stats_password="$(prompt_secret "PgBouncer stats user password (written to secrets/pgbouncer_stats_password)" "${pgbouncer_stats_default}")"
+printf '%s\n' "${pgbouncer_stats_password}" > "${pgbouncer_stats_secret}"
+chmod 0600 "${pgbouncer_stats_secret}" || true
+set_env_value PGBOUNCER_STATS_PASSWORD_FILE "./secrets/pgbouncer_stats_password"
+
 # UID/GID alignment
 user_uid=$(id -u)
 user_gid=$(id -g)

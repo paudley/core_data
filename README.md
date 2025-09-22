@@ -25,6 +25,7 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
 - TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
 - Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
+- Optional profiles bundle ValKey, PgBouncer, and Memcached with sensible defaults, secrets, and CLI helpers so you can layer caches and pooling alongside PostgreSQL in one step.
 - CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ### Default Extension Bundle
@@ -68,6 +69,12 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
 - **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
+- **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
+
+### Service Add-ons
+- **ValKey** — Requires authentication by default (`valkey_password` secret), persists to the `valkey_data` volume (`appendonly yes`), exposes `valkey-cli`/`valkey-bgsave`, and is tuned via `.env` knobs such as `VALKEY_MAXMEMORY` and `VALKEY_MAXMEMORY_POLICY`.
+- **PgBouncer** — Uses SCRAM auth backed by a dedicated superuser, renders config/userlist from templates, and offers `pgbouncer-stats` / `pgbouncer-pools` helpers. Pool sizing and admin/stat users are driven by the `PGBOUNCER_*` variables.
+- **Memcached** — Lightweight hot cache with configurable memory, connection, and thread limits (`MEMCACHED_*`). The `memcached-stats` helper pipes `stats` output for quick validation. All services stay on the internal bridge network by default.
 
 ## Project Layout
 ```
@@ -116,6 +123,10 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
 | `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
 | `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
+| `valkey-cli` | Run `valkey-cli` inside the ValKey container with secrets wired in. |
+| `valkey-bgsave` | Trigger `BGSAVE` so the ValKey RDB is flushed to the `valkey_data` volume. |
+| `pgbouncer-stats` / `pgbouncer-pools` | Emit PgBouncer `SHOW STATS` / `SHOW POOLS` via the admin console. |
+| `memcached-stats` | Fetch `stats` output from the Memcached service. |
 | `version-status` | Compare installed Postgres/extension versions with upstream releases (CSV via `--output`). |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 

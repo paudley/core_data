@@ -45,6 +45,15 @@ load_secret_from_file() {
 }
 
 load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+load_secret_from_file VALKEY_PASSWORD
+load_secret_from_file PGBOUNCER_AUTH_PASSWORD
+load_secret_from_file PGBOUNCER_STATS_PASSWORD
+
+compose_exec_service() {
+  local service=$1
+  shift
+  compose exec -T "$service" "$@"
+}
 
 # compose runs docker compose with the arguments provided.
 compose() {
