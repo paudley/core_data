@@ -21,15 +21,15 @@ def manage_env(tmp_path_factory):
     workdir = tmp_path_factory.mktemp("core_data_ci")
     env_file = ROOT / ".env.test"
 
-    pghero_port = find_free_port()
-
-    subnet_a = int(uuid.uuid4().hex[:2], 16)
-    subnet_b = int(uuid.uuid4().hex[2:4], 16)
     def find_free_port():
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(("127.0.0.1", 0))
             return s.getsockname()[1]
 
+    pghero_port = find_free_port()
+
+    subnet_a = int(uuid.uuid4().hex[:2], 16)
+    subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
         "PG_DATA_DIR": str(workdir / "postgres_data"),
         "CORE_DATA_PGBACKREST_REPO_DIR": str(workdir / "pgbackrest_repo"),
