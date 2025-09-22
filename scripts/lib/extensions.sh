@@ -90,6 +90,21 @@ SELECT relid::regclass::text AS partition_name
  WHERE parentrelid = 'core_data_partman_tmp.partman_demo'::regclass
    AND level = 1
  LIMIT 1;
+
+-- PostGIS ecosystem helpers
+SELECT EXISTS (
+  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'tiger'
+) AS tiger_schema_exists;
+SELECT EXISTS (
+  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'tiger_data'
+) AS tiger_data_schema_exists;
+SELECT EXISTS (
+  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'address_standardizer'
+) AS address_standardizer_schema;
+SELECT EXISTS (
+  SELECT 1 FROM information_schema.schemata WHERE schema_name = 'address_standardizer_data_us'
+) AS address_standardizer_data_schema;
+SELECT pgr_version();
 SET search_path = public;
 DROP SCHEMA core_data_partman_tmp CASCADE;
 SQL
@@ -103,7 +118,7 @@ run_pgtap_smoke() {
     psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(24);
+SELECT plan(28);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
 SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
@@ -123,10 +138,15 @@ SELECT has_extension('btree_gist', 'btree_gist extension installed');
 SELECT has_extension('postgres_fdw', 'postgres_fdw extension installed');
 SELECT has_extension('dblink', 'dblink extension installed');
 SELECT has_extension('uuid-ossp', 'uuid-ossp extension installed');
+SELECT has_extension('fuzzystrmatch', 'fuzzystrmatch extension installed');
 SELECT has_extension('pgaudit', 'pgaudit extension installed');
 SELECT has_extension('postgis_raster', 'postgis_raster extension installed');
 SELECT has_extension('postgis_topology', 'postgis_topology extension installed');
 SELECT has_extension('pgstattuple', 'pgstattuple extension installed');
+SELECT has_extension('postgis_tiger_geocoder', 'postgis_tiger_geocoder extension installed');
+SELECT has_extension('address_standardizer', 'address_standardizer extension installed');
+SELECT has_extension('address_standardizer_data_us', 'address_standardizer_data_us extension installed');
+SELECT has_extension('pgrouting', 'pgRouting extension installed');
 SELECT has_extension('pg_partman', 'pg_partman extension installed');
 SELECT * FROM finish();
 SQL

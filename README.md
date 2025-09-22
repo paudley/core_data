@@ -33,6 +33,7 @@ core_data provisions a batteries-included extension stack in every non-template 
 - **Connectivity** — `postgres_fdw`, `dblink`.
 - **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
 - **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
+- **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
 
 The same bundle is installed into `template1` so freshly created databases inherit the tooling automatically.
 

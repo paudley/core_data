@@ -32,6 +32,7 @@ CORE_DATA_EXTENSIONS=(
   citext
   dblink
   hstore
+  fuzzystrmatch
   pg_buffercache
   pg_cron
   pg_partman
@@ -47,6 +48,10 @@ CORE_DATA_EXTENSIONS=(
   postgis
   postgis_raster
   postgis_topology
+  address_standardizer
+  address_standardizer_data_us
+  postgis_tiger_geocoder
+  pgrouting
   "uuid-ossp"
   vector
 )
@@ -107,7 +112,17 @@ BEGIN
      WHERE c.relkind IN ('r','m')
        AND n.nspname NOT LIKE 'pg_%'
        AND n.nspname <> 'information_schema'
-       AND n.nspname NOT IN ('ag_catalog','cron','squeeze','topology')
+       AND n.nspname NOT IN (
+         'ag_catalog',
+         'cron',
+         'squeeze',
+         'topology',
+         'tiger',
+         'tiger_data',
+         'partman',
+         'address_standardizer',
+         'address_standardizer_data_us'
+       )
   LOOP
     PERFORM squeeze.squeeze_table(rec.schema_name, rec.table_name);
   END LOOP;
