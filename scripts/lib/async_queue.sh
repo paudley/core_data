@@ -20,18 +20,17 @@ async_queue_bootstrap() {
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
-         --set ON_ERROR_STOP=1 <<SQL
-\set schema_name '${schema}'
+         --set ON_ERROR_STOP=1 --set="schema_name=${schema}" <<'SQL'
 DO
 $$
 DECLARE
   target_schema text := :'schema_name';
 BEGIN
-  EXECUTE format('CREATE SCHEMA IF NOT EXISTS %I', target_schema);
+  EXECUTE format('CREATE SCHEMA IF NOT EXISTS %s', quote_ident(target_schema));
 END;
 $$;
 
-SET search_path = :'schema_name', public;
+SET search_path = quote_ident(:'schema_name') || ', public';
 
 CREATE TABLE IF NOT EXISTS jobs (
   id              bigserial PRIMARY KEY,
