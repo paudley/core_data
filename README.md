@@ -65,7 +65,7 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
 - **TLS everywhere.** PostgreSQL refuses non-SSL connections from the bridge network. Provide your own certificate/key via Docker secrets or rely on the init hook to mint a self-signed pair under `${PGDATA}/tls`.
 - **Named volumes for PGDATA/WAL.** `pgdata`, `pgwal`, and `pgbackrest` volumes provide near-native I/O on Linux. Override the volume definitions if you pin WAL/data to specific devices.
 - **Non-root from the start.** A one-shot `volume_prep` helper chowns the volumes before Postgres launches so the main service and sidecars run entirely as UID/GID `${POSTGRES_UID}`.
-- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, and prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`. `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
+- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 

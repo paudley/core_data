@@ -16,6 +16,7 @@ POSTGRES_SUPERUSER_PASSWORD_FILE=${POSTGRES_SUPERUSER_PASSWORD_FILE:-}
 LOGICAL_BACKUP_OUTPUT=${LOGICAL_BACKUP_OUTPUT:-/backups/logical}
 LOGICAL_BACKUP_INTERVAL_SECONDS=${LOGICAL_BACKUP_INTERVAL_SECONDS:-86400}
 LOGICAL_BACKUP_RETENTION_DAYS=${LOGICAL_BACKUP_RETENTION_DAYS:-7}
+LOGICAL_BACKUP_EXCLUDE=${LOGICAL_BACKUP_EXCLUDE:-postgres}
 
 if [[ -z "${POSTGRES_SUPERUSER_PASSWORD}" && -n "${POSTGRES_SUPERUSER_PASSWORD_FILE}" && -r "${POSTGRES_SUPERUSER_PASSWORD_FILE}" ]]; then
   POSTGRES_SUPERUSER_PASSWORD=$(<"${POSTGRES_SUPERUSER_PASSWORD_FILE}")
@@ -29,6 +30,15 @@ export PGDATABASE=${POSTGRES_DB:-postgres}
 export PGSSLMODE=require
 
 mkdir -p "${LOGICAL_BACKUP_OUTPUT}"
+
+IFS=',' read -ra EXCLUDE_RAW <<<"${LOGICAL_BACKUP_EXCLUDE}"
+declare -A EXCLUDE_MAP=()
+for entry in "${EXCLUDE_RAW[@]}"; do
+  entry=${entry// /}
+  if [[ -n ${entry} ]]; then
+    EXCLUDE_MAP["${entry}"]=1
+  fi
+done
 
 RUNNING=true
 trap 'RUNNING=false' TERM INT
@@ -52,6 +62,9 @@ perform_backup() {
   databases=$(psql -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;")
   while IFS= read -r db; do
     [[ -z "${db}" ]] && continue
+    if [[ -n ${EXCLUDE_MAP["${db}"]+x} ]]; then
+      continue
+    fi
     local outfile="${target_dir}/${db}.dump"
     log "  -> dumping ${db}"
     pg_dump --format=custom --no-owner --no-acl --file="${outfile}" --dbname="${db}"
