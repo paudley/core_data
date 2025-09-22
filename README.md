@@ -48,6 +48,7 @@ core_data/
 ├── backups/                  # Host output directory for logical dumps and reports
 ├── data/                     # Host bind mounts for postgres_data / pgbackrest_repo / pghero_data
 ├── README.md                 # This guide
+├── THIRD_PARTY_LICENSES.md   # Upstream license attributions for vendored tooling
 └── AGENTS.md                 # Contributor quick-reference & runbooks
 ```
 Keep `data/` out of version control—it holds live cluster state and backup archives.
@@ -62,16 +63,49 @@ Keep `data/` out of version control—it holds live cluster state and backup arc
 | `psql` | Open psql inside the container (respects `PGHOST`, `PGUSER`, etc.). |
 | `dump` / `dump-sql` | Produce logical backups (custom or plain format) under `/backups`. |
 | `restore-dump` | Drop and recreate a database before restoring a `.dump.gz`. |
-| `backup` / `stanza-create` / `restore-snapshot` | Manage pgBackRest backups and restores. |
+| `backup [--verify]` / `stanza-create` / `restore-snapshot` | Manage pgBackRest backups & optionally restore the latest backup into a throwaway data dir for checksum verification. |
 | `daily-maintenance` | Run dumps, log capture, pgBadger analysis, and retention pruning. |
 | `provision-qa` | Differential backup + targeted restore for QA databases. |
+| `config-check` | Compare live `postgresql.conf` / `pg_hba.conf` against rendered templates to catch drift. |
+| `audit-roles` / `audit-security` | Generate CSV/text reports covering role hygiene, passwords, and HBA/RLS posture. |
+| `audit-extensions` | Confirm bundled extensions are present and on expected versions. |
+| `audit-autovacuum` | Flag tables with high dead tuple counts or ratios. |
+| `audit-replication` | Summarise follower lag and sync state. |
+| `audit-cron` / `audit-squeeze` | Inspect pg_cron schedules and pg_squeeze activity tables. |
+| `audit-index-bloat` | Estimate index bloat using pgstattuple (supports `--min-size-mb`). |
+| `audit-schema` | Snapshot schema metadata for drift detection. |
+| `snapshot-pgstat` | Capture a `pg_stat_statements` baseline (CSV output) for performance trending. |
+| `diff-pgstat --base --compare` | Diff two snapshots (CSV-in/CSV-out) to highlight hot queries. |
+| `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
+| `exercise-extensions` | Smoke-test pgvector, PostGIS, and Apache AGE features. |
+| `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions are registered. |
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+
+Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
+
+Set `DAILY_EMAIL_REPORT=true` and `DAILY_REPORT_RECIPIENT=ops@example.com` in `.env` to have the maintenance job email the HTML summary via `sendmail` (if available inside the container).
+
+To compare performance snapshots between runs, capture CSVs with `snapshot-pgstat --output /backups/pg_stat_before.csv` and `snapshot-pgstat --output /backups/pg_stat_after.csv`, then run `./scripts/manage.sh diff-pgstat --base /backups/pg_stat_before.csv --compare /backups/pg_stat_after.csv --limit 25` for a ranked delta report.
+
+### Compacting storage
+`./scripts/manage.sh compact` provides escalating space-recovery options:
+
+- **Level 1** — run the autovacuum audit (no changes, just reporting).
+- **Level 2** — rerun `core_data_admin.refresh_pg_squeeze_targets()` and emit updated `pg_squeeze` findings.
+- **Level 3** — execute `pg_repack` for specific tables (`--tables schema.table[,schema.table...]`) without heavy locks.
+- **Level 4** — run `VACUUM (FULL, ANALYZE, VERBOSE)` across all tables or a comma-delimited `--scope` (requires `--yes`). Expect exclusive locks; schedule during maintenance windows.
+
+All runs write logs under `backups/` for auditing (`pg_repack-*.log`, `vacuum-full-*.log`).
+
 ## Automation & Testing
 - **CI Workflow:** `.github/workflows/ci.yml` builds the image, runs `python -m pytest -k full_workflow`, and uploads generated backups for inspection.
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
+- **Fast Tests:** `tests/test_lightweight.py` validates offline flows like help output and the vendored tooling without needing Docker.
+- **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that pgvector, PostGIS, Apache AGE, and pgTap are ready for use.
 - **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits

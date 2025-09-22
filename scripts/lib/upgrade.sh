@@ -175,5 +175,9 @@ USAGE
     psql --username "${POSTGRES_SUPERUSER:-postgres}" --tuples-only --no-align --command 'SHOW server_version;')
   echo "[upgrade] server now reporting version ${reported}" >&2
 
+  local snapshot_path
+  snapshot_path="/backups/pg_stat_statements-upgrade-$(date +%Y%m%d%H%M%S).csv"
+  snapshot_pg_stat_statements "${snapshot_path}" "${PG_STAT_STATEMENTS_LIMIT:-100}" || true
+
   echo "[upgrade] complete" >&2
 }

@@ -9,6 +9,8 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
+# shellcheck source=scripts/lib/audit.sh
+source "${SCRIPT_DIR}/lib/audit.sh"
 
 ensure_env
 
@@ -27,6 +29,14 @@ if [[ -n ${SINCE} ]]; then
 fi
 REMOVE_SOURCE=${DAILY_REMOVE_SOURCE_LOGS:-false}
 PG_BADGER_JOBS=${PG_BADGER_JOBS:-2}
+PG_STAT_LIMIT=${DAILY_PG_STAT_LIMIT:-100}
+DEAD_TUPLE_THRESHOLD=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
+DEAD_TUPLE_RATIO=${DAILY_DEAD_TUPLE_RATIO:-0.2}
+REPLICATION_LAG_THRESHOLD=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
+INDEX_MIN_SIZE_MB=${DAILY_INDEX_MIN_SIZE_MB:-10}
+GENERATE_HTML=${DAILY_HTML_REPORT:-true}
+EMAIL_REPORT=${DAILY_EMAIL_REPORT:-false}
+REPORT_RECIPIENT=${DAILY_REPORT_RECIPIENT:-}
 
 TIMESTAMP=$(date +%Y%m%d)
 HOST_TARGET_DIR="${HOST_BACKUP_ROOT}/${TIMESTAMP}"
@@ -58,6 +68,51 @@ if [[ -n ${SINCE} ]]; then
   compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --begin '${SINCE}' --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
 else
   compose_exec bash -lc "pgbadger --quiet --format csv --jobs ${PG_BADGER_JOBS} --outfile '${CONTAINER_TARGET_DIR}/pgbadger.html' ${CONTAINER_TARGET_DIR}/postgresql-*.csv"
+fi
+
+echo "[daily] capturing pg_stat_statements baseline"
+snapshot_pg_stat_statements "${CONTAINER_TARGET_DIR}/pg_stat_statements.csv" "${PG_STAT_LIMIT}" || true
+
+echo "[daily] auditing roles"
+audit_roles "${CONTAINER_TARGET_DIR}/role_audit.csv" || true
+
+echo "[daily] auditing extensions"
+audit_extensions "${CONTAINER_TARGET_DIR}/extension_audit.csv" || true
+
+echo "[daily] auditing autovacuum health"
+audit_autovacuum "${CONTAINER_TARGET_DIR}/autovacuum_findings.csv" "${DEAD_TUPLE_THRESHOLD}" "${DEAD_TUPLE_RATIO}" || true
+
+echo "[daily] auditing replication lag"
+audit_replication_lag "${CONTAINER_TARGET_DIR}/replication_lag.csv" "${REPLICATION_LAG_THRESHOLD}" || true
+
+echo "[daily] auditing security posture"
+audit_security "${CONTAINER_TARGET_DIR}/security_audit.txt" || true
+
+echo "[daily] auditing pg_cron schedule"
+audit_pg_cron "${CONTAINER_TARGET_DIR}/cron_schedule.csv" || true
+
+echo "[daily] auditing pg_squeeze activity"
+audit_pg_squeeze "${CONTAINER_TARGET_DIR}/pg_squeeze.csv" || true
+
+echo "[daily] auditing index bloat"
+audit_index_bloat "${CONTAINER_TARGET_DIR}/index_bloat.csv" "${INDEX_MIN_SIZE_MB}" || true
+
+echo "[daily] capturing schema snapshot"
+audit_schema_snapshot "${CONTAINER_TARGET_DIR}/schema_snapshot.csv" || true
+
+echo "[daily] summarizing pgaudit events"
+summarize_pgaudit_logs "${CONTAINER_TARGET_DIR}" || true
+
+if [[ ${GENERATE_HTML} == true ]]; then
+  echo "[daily] generating html maintenance summary"
+  compose_exec python3 /opt/core_data/scripts/generate_report.py \
+    --input "${CONTAINER_TARGET_DIR}" \
+    --output "${CONTAINER_TARGET_DIR}/maintenance_report.html" || true
+fi
+
+if [[ ${EMAIL_REPORT} == true && -n ${REPORT_RECIPIENT} ]]; then
+  echo "[daily] emailing maintenance report to ${REPORT_RECIPIENT}"
+  compose_exec bash -lc "if command -v sendmail >/dev/null 2>&1; then \n    ( \n      echo 'To: ${REPORT_RECIPIENT}'; \n      echo 'Subject: core_data maintenance report'; \n      echo 'Content-Type: text/html'; \n      echo; \n      cat '${CONTAINER_TARGET_DIR}/maintenance_report.html'; \n    ) | sendmail -t \n  else \n    echo '[daily] sendmail not available in container' >&2; \n  fi" || true
 fi
 
 echo "[daily] applying retention ${RETENTION_DAYS} days"
