@@ -8,6 +8,8 @@ log() {
   printf '[healthcheck] %s\n' "$1" >&2
 }
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
 PGUSER=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
 PGDATABASE=${POSTGRES_DB:-postgres}
 PGHOST=${POSTGRES_HEALTHCHECK_HOST:-${PGHOST:-/var/run/postgresql}}
@@ -34,18 +36,7 @@ if [[ -n ${CORE_DATA_HEALTHCHECK_MAX_REPLICATION_LAG:-} ]]; then
   fi
   replication_lag=$(psql -Atqc "SELECT COALESCE(MAX(EXTRACT(EPOCH FROM GREATEST(flush_lag, write_lag, replay_lag))), 0) FROM pg_stat_replication;" || echo "0")
   replication_lag=${replication_lag:-0}
-  if ! python3 - "$replication_lag" "$lag_threshold" <<'PY'
-import sys
-
-try:
-    lag = float(sys.argv[1])
-    threshold = float(sys.argv[2])
-except ValueError:
-    sys.exit(1)
-
-sys.exit(0 if lag <= threshold else 1)
-PY
-  then
+  if ! python3 "${SCRIPT_DIR}/lib/compare_float.py" --le "$replication_lag" "$lag_threshold"; then
     log "replication lag ${replication_lag}s exceeds threshold ${lag_threshold}s"
     exit 1
   fi
