@@ -17,10 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-try:
-    from packaging.version import Version  # type: ignore
-except ImportError:  # pragma: no cover
-    Version = None  # type: ignore
+from packaging.version import Version
 
 DEFAULT_ENV_PATH = Path(__file__).resolve().parents[1] / ".env"
 DEFAULT_COMPOSE_BIN = os.environ.get("COMPOSE_BIN", "docker compose")
