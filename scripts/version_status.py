@@ -173,7 +173,7 @@ def fetch_github_latest(repo: str) -> Optional[str]:
 
         headers = {"User-Agent": "core-data-version-check"}
         if GITHUB_TOKEN:
-            headers["Authorization"] = f"token {GITHUB_TOKEN}"  # pragma: allowlist secret
+            headers["Authorization"] = f"Bearer {GITHUB_TOKEN}"  # pragma: allowlist secret
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req, timeout=10) as resp:
             data = json.load(resp)
