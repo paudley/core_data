@@ -94,8 +94,10 @@ def main() -> int:
         headers, rows, total = load_csv(path, args.rows)
         table_html = render_table(headers, rows)
         sections.append(
-            f"<section><h2>{html.escape(title)} (showing {min(len(rows), args.rows)} of {total})" \
-            f"</h2>{table_html}</section>"
+            (
+                f"<section><h2>{html.escape(title)} (showing {min(len(rows), args.rows)} of {total})"
+                f"</h2>{table_html}</section>"
+            )
         )
 
     pg_badger = args.input / "pgbadger.html"
