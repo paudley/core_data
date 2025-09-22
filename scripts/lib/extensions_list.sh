@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 # Canonical list of default extensions enabled across bootstrap flows.
+# shellcheck disable=SC2034
 CORE_EXTENSION_LIST=(
   age
   btree_gin

@@ -99,11 +99,20 @@ USAGE
 
 verify_latest_backup() {
   ensure_env
-  local repo_dir
-  repo_dir=$(realpath -m "${CORE_DATA_PGBACKREST_REPO_DIR}")
-  if [[ ! -d ${repo_dir} ]]; then
-    echo "[backup] pgBackRest repository ${repo_dir} not found; skipping verification." >&2
-    return 1
+  local project_name
+  project_name=${COMPOSE_PROJECT_NAME:-$(basename "${ROOT_DIR}")}
+
+  local repo_mount
+  if [[ -n ${CORE_DATA_PGBACKREST_REPO_DIR:-} ]]; then
+    local repo_dir
+    repo_dir=$(realpath -m "${CORE_DATA_PGBACKREST_REPO_DIR}")
+    if [[ ! -d ${repo_dir} ]]; then
+      echo "[backup] pgBackRest repository ${repo_dir} not found; skipping verification." >&2
+      return 1
+    fi
+    repo_mount=(--mount "type=bind,src=${repo_dir},dst=/var/lib/pgbackrest:ro")
+  else
+    repo_mount=(--mount "type=volume,src=${project_name}_pgbackrest,dst=/var/lib/pgbackrest:ro")
   fi
   local restore_dir
   restore_dir=$(mktemp -d)
@@ -119,7 +128,7 @@ verify_latest_backup() {
   local image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}"
   echo "[backup] Verifying latest backup via restore and checksum validation." >&2
   if ! docker run --rm --user postgres \
-      -v "${repo_dir}:/var/lib/pgbackrest:ro" \
+      "${repo_mount[@]}" \
       -v "${restore_dir}:/var/lib/postgresql/data" \
       -v "${config_dir}:/etc/pgbackrest:ro" \
       "${image}" \

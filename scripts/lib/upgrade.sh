@@ -13,23 +13,7 @@ _update_env_var() {
     echo "[core_data] Cannot update ${key}; ${file} not found." >&2
     exit 1
   fi
-  python3 - "$file" "$key" "$value" <<'PY'
-import sys
-from pathlib import Path
-file_path, key, value = sys.argv[1:4]
-path = Path(file_path)
-lines = []
-found = False
-for line in path.read_text().splitlines():
-    if line.startswith(f"{key}="):
-        lines.append(f"{key}={value}")
-        found = True
-    else:
-        lines.append(line)
-if not found:
-    lines.append(f"{key}={value}")
-path.write_text("\n".join(lines) + "\n")
-PY
+  python3 "${SCRIPT_DIR}/lib/update_env_var.py" "${file}" "${key}" "${value}"
 }
 
 # _ensure_base_image pulls the postgres base image for the target version.
@@ -129,8 +113,26 @@ USAGE
     exit 0
   fi
 
-  local data_dir
-  data_dir=$(realpath -m "${PG_DATA_DIR}")
+  local project_name
+  project_name=${COMPOSE_PROJECT_NAME:-$(basename "${ROOT_DIR}")}
+
+  local data_mount
+  if [[ -n ${PG_DATA_DIR:-} ]]; then
+    local data_dir
+    data_dir=$(realpath -m "${PG_DATA_DIR}")
+    data_mount=(--mount "type=bind,src=${data_dir},dst=/var/lib/postgresql/data")
+  else
+    data_mount=(--mount "type=volume,src=${project_name}_pgdata,dst=/var/lib/postgresql/data")
+  fi
+
+  local wal_mount
+  if [[ -n ${PG_WAL_DIR:-} ]]; then
+    local wal_dir
+    wal_dir=$(realpath -m "${PG_WAL_DIR}")
+    wal_mount=(--mount "type=bind,src=${wal_dir},dst=/var/lib/postgresql/wal")
+  else
+    wal_mount=(--mount "type=volume,src=${project_name}_pgwal,dst=/var/lib/postgresql/wal")
+  fi
 
   echo "[upgrade] ensuring latest full backup before upgrade" >&2
   cmd_backup --type=full
@@ -150,7 +152,8 @@ USAGE
     --env POSTGRES_DB="${POSTGRES_DB:-postgres}" \
     --env PGAUTO_ONESHOT=yes \
     --env PGDATA=/var/lib/postgresql/data \
-    --mount type=bind,src="${data_dir}",dst=/var/lib/postgresql/data \
+    "${data_mount[@]}" \
+    "${wal_mount[@]}" \
     "${helper_image}" >&2
 
   echo "[upgrade] updating PG_VERSION in ${ENV_FILE}" >&2

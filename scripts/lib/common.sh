@@ -23,6 +23,29 @@ else
   echo "[core_data] WARNING: ${ENV_FILE} not found; using defaults where possible." >&2
 fi
 
+load_secret_from_file() {
+  local var_name=$1
+  local file_var_name="${var_name}_FILE"
+  local current_value="${!var_name-}"
+  local file_path="${!file_var_name-}"
+
+  if [[ -n "${current_value}" ]]; then
+    return
+  fi
+
+  if [[ -n "${file_path}" ]]; then
+    if [[ -r "${file_path}" ]]; then
+      local secret
+      secret=$(tr -d '\r\n' <"${file_path}")
+      export "${var_name}=${secret}"
+    else
+      echo "[core_data] WARNING: unable to read ${file_var_name}=${file_path}" >&2
+    fi
+  fi
+}
+
+load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+
 # compose runs docker compose with the arguments provided.
 compose() {
   ${COMPOSE_BIN} "$@"
