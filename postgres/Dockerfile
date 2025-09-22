@@ -40,6 +40,7 @@ RUN set -eux; \
       postgresql-${PG_MAJOR}-cron \
       postgresql-${PG_MAJOR}-repack \
       postgresql-${PG_MAJOR}-pgtap \
+      postgresql-contrib \
       pgbadger \
       pgbackrest; \
     rm -rf /var/lib/apt/lists/*

@@ -55,14 +55,34 @@ SQL
 cmd_backup() {
   ensure_env
   local backup_type="auto"
-  if [[ $# -ge 1 ]]; then
-    case $1 in
-      --type=full) backup_type="full" ;;
-      --type=diff) backup_type="diff" ;;
-      --type=incr) backup_type="incr" ;;
-      *) echo "Unknown backup type '$1'" >&2; exit 1 ;;
+  local verify=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --type)
+        backup_type=$2; shift 2 ;;
+      --type=*)
+        backup_type=${1#*=}; shift ;;
+      --verify)
+        verify=true; shift ;;
+      --help|-h)
+        cat <<USAGE >&2
+Usage: ${0##*/} backup [--type=full|diff|incr] [--verify]
+USAGE
+        exit 0 ;;
+      --)
+        shift; break ;;
+      *)
+        echo "Unknown option for backup: $1" >&2
+        exit 1 ;;
     esac
-  fi
+  done
+  case "${backup_type}" in
+    auto|full|diff|incr) ;;
+    *)
+      echo "Unknown backup type '${backup_type}'" >&2
+      exit 1
+      ;;
+  esac
   local cmd=(pgbackrest --config="${PGBACKREST_CONF}" --stanza=main --log-level-console=info)
   if [[ ${backup_type} != "auto" ]]; then
     cmd+=("--type=${backup_type}")
@@ -72,6 +92,45 @@ cmd_backup() {
     PGUSER="${POSTGRES_SUPERUSER:-postgres}" \
     PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     "${cmd[@]}"
+  if [[ ${verify} == true ]]; then
+    verify_latest_backup
+  fi
+}
+
+verify_latest_backup() {
+  ensure_env
+  local repo_dir
+  repo_dir=$(realpath -m "${CORE_DATA_PGBACKREST_REPO_DIR}")
+  if [[ ! -d ${repo_dir} ]]; then
+    echo "[backup] pgBackRest repository ${repo_dir} not found; skipping verification." >&2
+    return 1
+  fi
+  local restore_dir
+  restore_dir=$(mktemp -d)
+  local config_dir
+  config_dir=$(mktemp -d)
+  chmod 0777 "${restore_dir}" "${config_dir}"
+  local config_file="${config_dir}/pgbackrest.conf"
+  if ! compose_exec cat "${PGBACKREST_CONF}" >"${config_file}"; then
+    echo "[backup] Unable to fetch pgBackRest configuration from container." >&2
+    rm -rf "${restore_dir}" "${config_dir}"
+    return 1
+  fi
+  local image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}"
+  echo "[backup] Verifying latest backup via restore and checksum validation." >&2
+  if ! docker run --rm --user postgres \
+      -v "${repo_dir}:/var/lib/pgbackrest:ro" \
+      -v "${restore_dir}:/var/lib/postgresql/data" \
+      -v "${config_dir}:/etc/pgbackrest:ro" \
+      "${image}" \
+      bash -lc "set -euo pipefail; pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main --delta --target=name=latest restore; pg_verify_checksums -D /var/lib/postgresql/data >/dev/null"; then
+    echo "[backup] Backup verification failed." >&2
+    rm -rf "${restore_dir}" "${config_dir}"
+    return 1
+  fi
+  echo "[backup] Latest backup restored and checksums verified." >&2
+  rm -rf "${restore_dir}" "${config_dir}"
+  return 0
 }
 
 # cmd_stanza_create initializes the pgBackRest stanza inside the container.

@@ -16,6 +16,12 @@ source "${SCRIPT_DIR}/lib/backup.sh"
 source "${SCRIPT_DIR}/lib/maintenance.sh"
 # shellcheck source=scripts/lib/upgrade.sh
 source "${SCRIPT_DIR}/lib/upgrade.sh"
+# shellcheck source=scripts/lib/audit.sh
+source "${SCRIPT_DIR}/lib/audit.sh"
+# shellcheck source=scripts/lib/maintenance_actions.sh
+source "${SCRIPT_DIR}/lib/maintenance_actions.sh"
+# shellcheck source=scripts/lib/extensions.sh
+source "${SCRIPT_DIR}/lib/extensions.sh"
 
 CORE_DATA_EXTENSIONS=(
   postgis
@@ -29,6 +35,7 @@ CORE_DATA_EXTENSIONS=(
   pgtap
   pg_repack
   pg_squeeze
+  pgstattuple
 )
 
 bootstrap_database() {
@@ -107,9 +114,42 @@ Commands:
   restore-dump <file> <db>    Restore a logical backup (drops the db first).
   backup [--type=full|diff|incr]
                               Invoke pgBackRest backup.
+                              Add --verify to restore and validate the latest backup.
   stanza-create               Initialize pgBackRest stanza.
   restore-snapshot [args]     Run pgBackRest restore (pass-through args).
   provision-qa <db>           Provision QA database from latest backup.
+  config-check                Compare live configs to rendered templates.
+  audit-roles [--output PATH] Report on role posture (CSV if output path supplied).
+  audit-extensions [--output PATH]
+                              Report extension versions across databases.
+  audit-autovacuum [options]  List tables with high dead tuples.
+     --output PATH            Write CSV to container path.
+     --dead-threshold N       Dead tuple count threshold (default 100000).
+     --ratio FLOAT            Dead tuple ratio threshold (default 0.2).
+  audit-replication [--output PATH] [--lag-seconds N]
+                              Summarise follower lag (CSV if output path supplied).
+  audit-security [--output PATH]
+                              Run HBA/password/RLS checks (text report if output set).
+  audit-index-bloat [options] Report index density using pgstattuple.
+     --output PATH            Write CSV to container path.
+     --min-size-mb N          Minimum index size in MB (default 10).
+  audit-schema [--output PATH]
+                              Snapshot information_schema columns.
+  snapshot-pgstat [--output PATH] [--limit N]
+                              Capture pg_stat_statements baseline (CSV with output).
+  audit-cron [--output PATH]   List pg_cron jobs and next run.
+  audit-squeeze [--output PATH]
+                              Dump pg_squeeze activity table.
+  exercise-extensions [--db DB]
+                              Run smoke queries across PostGIS, pgvector, AGE.
+  pgtap-smoke [--db DB]       Execute a short pgTap plan validating key extensions.
+  diff-pgstat --base PATH --compare PATH [--limit N]
+                              Compare two pg_stat_statements snapshots.
+  compact --level N [...options]
+                              Level 1: autovacuum audit
+                              Level 2: refresh pg_squeeze
+                              Level 3: pg_repack (requires --tables)
+                              Level 4: VACUUM FULL (requires --yes, optional --scope)
   upgrade --new-version <ver> Automate pg_upgrade using helper container.
   logs                        Tail postgres logs.
   status                      Show container status & health.
@@ -273,6 +313,382 @@ case "${COMMAND}" in
     ;;
   provision-qa)
     cmd_provision_qa "$@"
+    ;;
+  config-check)
+    if config_drift_report; then
+      echo "Configuration matches expected templates." >&2
+    else
+      exit 1
+    fi
+    ;;
+  audit-roles)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-roles [--output PATH]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for audit-roles: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_roles "${output}"
+    ;;
+  audit-extensions)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-extensions [--output PATH]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for audit-extensions: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_extensions "${output}"
+    ;;
+  audit-autovacuum)
+    output=""
+    dead_threshold=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
+    ratio_threshold=${DAILY_DEAD_TUPLE_RATIO:-0.2}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --dead-threshold)
+          dead_threshold=$2; shift 2 ;;
+        --dead-threshold=*)
+          dead_threshold=${1#*=}; shift ;;
+        --ratio)
+          ratio_threshold=$2; shift 2 ;;
+        --ratio=*)
+          ratio_threshold=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-autovacuum [--output PATH] [--dead-threshold N] [--ratio FLOAT]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for audit-autovacuum: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_autovacuum "${output}" "${dead_threshold}" "${ratio_threshold}"
+    ;;
+  audit-replication)
+    output=""
+    lag_seconds=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --lag-seconds)
+          lag_seconds=$2; shift 2 ;;
+        --lag-seconds=*)
+          lag_seconds=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-replication [--output PATH] [--lag-seconds N]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for audit-replication: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_replication_lag "${output}" "${lag_seconds}"
+    ;;
+  audit-security)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-security [--output PATH]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for audit-security: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_security "${output}"
+    ;;
+  audit-index-bloat)
+    output=""
+    min_size=${DAILY_INDEX_MIN_SIZE_MB:-10}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --min-size-mb)
+          min_size=$2; shift 2 ;;
+        --min-size-mb=*)
+          min_size=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-index-bloat [--output PATH] [--min-size-mb N]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-index-bloat: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_index_bloat "${output}" "${min_size}"
+    ;;
+  audit-schema)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-schema [--output PATH]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-schema: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_schema_snapshot "${output}"
+    ;;
+  audit-cron)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-cron [--output PATH]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-cron: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_pg_cron "${output}"
+    ;;
+  audit-squeeze)
+    output=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-squeeze [--output PATH]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-squeeze: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_pg_squeeze "${output}"
+    ;;
+  snapshot-pgstat)
+    output=""
+    limit=${PG_STAT_STATEMENTS_LIMIT:-100}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --limit)
+          limit=$2; shift 2 ;;
+        --limit=*)
+          limit=${1#*=}; shift ;;
+        --)
+          shift; break ;;
+        -h|--help)
+          echo "Usage: ${0##*/} snapshot-pgstat [--output PATH] [--limit N]" >&2
+          exit 0 ;;
+        *)
+          echo "Unknown option for snapshot-pgstat: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    snapshot_pg_stat_statements "${output}" "${limit}"
+    ;;
+  diff-pgstat)
+    base=""
+    compare=""
+    limit=${PG_STAT_STATEMENTS_LIMIT:-100}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --base)
+          base=$2; shift 2 ;;
+        --base=*)
+          base=${1#*=}; shift ;;
+        --compare)
+          compare=$2; shift 2 ;;
+        --compare=*)
+          compare=${1#*=}; shift ;;
+        --limit)
+          limit=$2; shift 2 ;;
+        --limit=*)
+          limit=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} diff-pgstat --base PATH --compare PATH [--limit N]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for diff-pgstat: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    if [[ -z ${base} || -z ${compare} ]]; then
+      echo "--base and --compare are required" >&2
+      exit 1
+    fi
+    python3 '${SCRIPT_DIR}/perf_diff.py' --base "${base}" --compare "${compare}" --limit "${limit}"
+    ;;
+  compact)
+    ensure_env
+    level=""
+    tables=""
+    scope="all"
+    confirm=false
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --level)
+          level=$2; shift 2 ;;
+        --level=*)
+          level=${1#*=}; shift ;;
+        --tables)
+          tables=$2; shift 2 ;;
+        --tables=*)
+          tables=${1#*=}; shift ;;
+        --scope)
+          scope=$2; shift 2 ;;
+        --scope=*)
+          scope=${1#*=}; shift ;;
+        --yes|-y)
+          confirm=true; shift ;;
+        -h|--help)
+          cat <<USAGE >&2
+Usage: ${0##*/} compact --level <1|2|3|4> [--tables schema.table[,..]] [--scope schema.table[,..]|all] [--yes]
+
+Level 1: Run autovacuum audit report.
+Level 2: Refresh pg_squeeze targets and report status.
+Level 3: Execute pg_repack on provided tables (requires --tables).
+Level 4: Run VACUUM FULL (default all tables, or provide --scope) and requires --yes confirmation.
+USAGE
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for compact: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    if [[ -z ${level} ]]; then
+      echo "[compact] --level is required" >&2
+      exit 1
+    fi
+    case "${level}" in
+      1)
+        audit_autovacuum
+        ;;
+      2)
+        refresh_pg_squeeze
+        ;;
+      3)
+        if [[ -z ${tables} ]]; then
+          echo "[compact] Level 3 requires --tables schema.table[,schema.table...]" >&2
+          exit 1
+        fi
+        run_pg_repack "${tables}"
+        ;;
+      4)
+        if [[ ${confirm} != true ]]; then
+          echo "[compact] Level 4 (VACUUM FULL) requires --yes confirmation" >&2
+          exit 1
+        fi
+        run_vacuum_full "${scope}"
+        ;;
+      *)
+        echo "[compact] Unknown level '${level}'" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  exercise-extensions)
+    db=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --db)
+          db=$2; shift 2 ;;
+        --db=*)
+          db=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} exercise-extensions [--db NAME]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for exercise-extensions: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    exercise_extensions "${db}"
+    ;;
+  pgtap-smoke)
+    db=""
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --db)
+          db=$2; shift 2 ;;
+        --db=*)
+          db=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} pgtap-smoke [--db NAME]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for pgtap-smoke: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    run_pgtap_smoke "${db}"
     ;;
   upgrade)
     cmd_upgrade "$@"
