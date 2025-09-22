@@ -7,11 +7,20 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
     restart: "no"
     user: "0:0"
-    command: ["/bin/sh", "-c", "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} /var/lib/postgresql/data /var/lib/postgresql/wal /var/lib/pgbackrest"]
+    environment:
+      PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH}
+      PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH}
+      PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH}
+    command:
+      [
+        "/bin/sh",
+        "-c",
+        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} ${PGDATA_MOUNT} ${PGWAL_MOUNT} ${PGBACKREST_MOUNT}"
+      ]
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - pgwal:/var/lib/postgresql/wal
-      - pgbackrest:/var/lib/pgbackrest
+      - pgdata:${POSTGRES_DATA_MOUNT_PATH}
+      - pgwal:${POSTGRES_WAL_MOUNT_PATH}
+      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH}
     networks:
       - core_data
     logging:
@@ -63,9 +72,9 @@ services:
       POSTGRES_SSL_SELF_SIGNED_DAYS: ${POSTGRES_SSL_SELF_SIGNED_DAYS}
       POSTGRES_INITDB_WALDIR: /var/lib/postgresql/wal
     volumes:
-      - pgdata:/var/lib/postgresql/data
-      - pgwal:/var/lib/postgresql/wal
-      - pgbackrest:/var/lib/pgbackrest
+      - pgdata:${POSTGRES_DATA_MOUNT_PATH}
+      - pgwal:${POSTGRES_WAL_MOUNT_PATH}
+      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH}
       - ./backups:/backups
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
