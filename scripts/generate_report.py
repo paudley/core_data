@@ -22,6 +22,7 @@ SECTION_FILES: List[Tuple[str, str]] = [
     ("Extension Audit", "extension_audit.csv"),
     ("Security Audit", "security_audit.txt"),
     ("pg_stat_statements Snapshot", "pg_stat_statements.csv"),
+    ("Buffer Cache Snapshot", "pg_buffercache.csv"),
     ("Schema Snapshot", "schema_snapshot.csv"),
     ("pgAudit Summary", "pgaudit_summary.csv"),
 ]

@@ -31,6 +31,20 @@ SELECT create_graph('core_data_smoke_graph')
 SELECT * FROM cypher('core_data_smoke_graph', $$ CREATE (n:person {name: 'Alice'}) RETURN n.name $$) AS (name agtype);
 SELECT * FROM cypher('core_data_smoke_graph', $$ MATCH (n:person) RETURN n.name $$) AS (name agtype);
 SELECT drop_graph('core_data_smoke_graph', true);
+
+-- pgcrypto smoke
+SELECT encode(digest('core_data', 'sha256'), 'hex');
+
+-- uuid-ossp smoke
+SELECT uuid_generate_v4();
+
+-- citext/hstore/pg_trgm smoke
+SELECT 'CaseTest'::citext = 'casetest';
+SELECT ('key=>value')::hstore -> 'key';
+SELECT similarity('core data', 'core_data');
+
+-- pg_buffercache visibility
+SELECT count(*) FROM pg_buffercache;
 SQL
 }
 
@@ -42,10 +56,30 @@ run_pgtap_smoke() {
     psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(3);
+SELECT plan(23);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
-SELECT has_extension('pgvector', 'pgvector extension installed');
+SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
+SELECT has_extension('age', 'Apache AGE extension installed');
+SELECT has_extension('pgtap', 'pgTap extension installed');
+SELECT has_extension('pg_repack', 'pg_repack extension installed');
+SELECT has_extension('pg_squeeze', 'pg_squeeze extension installed');
+SELECT has_extension('pg_stat_statements', 'pg_stat_statements extension installed');
+SELECT ok(position('auto_explain' in current_setting('shared_preload_libraries')) > 0, 'auto_explain registered in shared_preload_libraries');
+SELECT has_extension('pg_buffercache', 'pg_buffercache extension installed');
+SELECT has_extension('pgcrypto', 'pgcrypto extension installed');
+SELECT has_extension('citext', 'citext extension installed');
+SELECT has_extension('hstore', 'hstore extension installed');
+SELECT has_extension('pg_trgm', 'pg_trgm extension installed');
+SELECT has_extension('btree_gin', 'btree_gin extension installed');
+SELECT has_extension('btree_gist', 'btree_gist extension installed');
+SELECT has_extension('postgres_fdw', 'postgres_fdw extension installed');
+SELECT has_extension('dblink', 'dblink extension installed');
+SELECT has_extension('uuid-ossp', 'uuid-ossp extension installed');
+SELECT has_extension('pgaudit', 'pgaudit extension installed');
+SELECT has_extension('postgis_raster', 'postgis_raster extension installed');
+SELECT has_extension('postgis_topology', 'postgis_topology extension installed');
+SELECT has_extension('pgstattuple', 'pgstattuple extension installed');
 SELECT * FROM finish();
 SQL
 }

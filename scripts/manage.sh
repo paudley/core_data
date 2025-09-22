@@ -24,18 +24,28 @@ source "${SCRIPT_DIR}/lib/maintenance_actions.sh"
 source "${SCRIPT_DIR}/lib/extensions.sh"
 
 CORE_DATA_EXTENSIONS=(
+  age
+  btree_gin
+  btree_gist
+  citext
+  dblink
+  hstore
+  pg_buffercache
+  pg_cron
+  pg_repack
+  pg_squeeze
+  pg_stat_statements
+  pg_trgm
+  pgcrypto
+  pgstattuple
+  pgtap
+  pgaudit
+  postgres_fdw
   postgis
   postgis_raster
   postgis_topology
+  "uuid-ossp"
   vector
-  age
-  pgaudit
-  pg_stat_statements
-  pg_cron
-  pgtap
-  pg_repack
-  pg_squeeze
-  pgstattuple
 )
 
 bootstrap_database() {
@@ -46,7 +56,7 @@ bootstrap_database() {
       continue
     fi
     compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS ${ext};" >/dev/null
+      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
   done
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
@@ -133,6 +143,8 @@ Commands:
   audit-index-bloat [options] Report index density using pgstattuple.
      --output PATH            Write CSV to container path.
      --min-size-mb N          Minimum index size in MB (default 10).
+  audit-buffercache [--output PATH] [--limit N]
+                             Snapshot shared buffer usage by relation.
   audit-schema [--output PATH]
                               Snapshot information_schema columns.
   snapshot-pgstat [--output PATH] [--limit N]
@@ -141,8 +153,8 @@ Commands:
   audit-squeeze [--output PATH]
                               Dump pg_squeeze activity table.
   exercise-extensions [--db DB]
-                              Run smoke queries across PostGIS, pgvector, AGE.
-  pgtap-smoke [--db DB]       Execute a short pgTap plan validating key extensions.
+                              Run smoke queries across the core extension bundle.
+  pgtap-smoke [--db DB]       Execute a pgTap plan validating the bundled extensions.
   diff-pgstat --base PATH --compare PATH [--limit N]
                               Compare two pg_stat_statements snapshots.
   compact --level N [...options]
@@ -460,6 +472,31 @@ case "${COMMAND}" in
       esac
     done
     audit_index_bloat "${output}" "${min_size}"
+    ;;
+  audit-buffercache)
+    output=""
+    limit=${PG_BUFFERCACHE_LIMIT:-50}
+    while [[ $# -gt 0 ]]; do
+      case "$1" in
+        --output)
+          output=$2; shift 2 ;;
+        --output=*)
+          output=${1#*=}; shift ;;
+        --limit)
+          limit=$2; shift 2 ;;
+        --limit=*)
+          limit=${1#*=}; shift ;;
+        -h|--help)
+          echo "Usage: ${0##*/} audit-buffercache [--output PATH] [--limit N]" >&2
+          exit 0 ;;
+        --)
+          shift; break ;;
+        *)
+          echo "Unknown option for audit-buffercache: $1" >&2
+          exit 1 ;;
+      esac
+    done
+    audit_pg_buffercache "${output}" "${limit}"
     ;;
   audit-schema)
     output=""

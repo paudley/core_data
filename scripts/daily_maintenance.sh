@@ -30,6 +30,7 @@ fi
 REMOVE_SOURCE=${DAILY_REMOVE_SOURCE_LOGS:-false}
 PG_BADGER_JOBS=${PG_BADGER_JOBS:-2}
 PG_STAT_LIMIT=${DAILY_PG_STAT_LIMIT:-100}
+BUFFERCACHE_LIMIT=${DAILY_BUFFERCACHE_LIMIT:-50}
 DEAD_TUPLE_THRESHOLD=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
 DEAD_TUPLE_RATIO=${DAILY_DEAD_TUPLE_RATIO:-0.2}
 REPLICATION_LAG_THRESHOLD=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
@@ -72,6 +73,9 @@ fi
 
 echo "[daily] capturing pg_stat_statements baseline"
 snapshot_pg_stat_statements "${CONTAINER_TARGET_DIR}/pg_stat_statements.csv" "${PG_STAT_LIMIT}" || true
+
+echo "[daily] snapshotting buffer cache allocation"
+audit_pg_buffercache "${CONTAINER_TARGET_DIR}/pg_buffercache.csv" "${BUFFERCACHE_LIMIT}" || true
 
 echo "[daily] auditing roles"
 audit_roles "${CONTAINER_TARGET_DIR}/role_audit.csv" || true

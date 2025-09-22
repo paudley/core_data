@@ -5,18 +5,28 @@
 set -euo pipefail
 
 EXTENSIONS=(
+  age
+  btree_gin
+  btree_gist
+  citext
+  dblink
+  hstore
+  pg_buffercache
+  pg_cron
+  pg_repack
+  pg_squeeze
+  pg_stat_statements
+  pg_trgm
+  pgcrypto
+  pgstattuple
+  pgtap
+  pgaudit
+  postgres_fdw
   postgis
   postgis_raster
   postgis_topology
+  "uuid-ossp"
   vector
-  age
-  pgaudit
-  pg_stat_statements
-  pg_cron
-  pgtap
-  pg_repack
-  pg_squeeze
-  pgstattuple
 )
 
 DOLLAR='$'
@@ -30,7 +40,7 @@ configure_database() {
     if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
       continue
     fi
-    if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS ${ext};"; then
+    if ! psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";"; then
       if [[ "${ext}" == "pgaudit" ]]; then
         echo "[core_data] WARNING: pgaudit extension requires shared_preload_libraries; run CREATE EXTENSION pgaudit; after restart." >&2
       else
