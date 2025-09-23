@@ -984,7 +984,7 @@ def test_pgbouncer_concurrency(manage_env):
             ) as conn:
                 with conn.cursor() as cur:
                     cur.execute(
-                        "INSERT INTO public.e2e_pool_test(worker_id) VALUES (%s) RETURNING id",
+                        "INSERT INTO public.e2e_pool_test(worker_id) VALUES (%s) RETURNING worker_id",
                         (idx,),
                     )
                     return cur.fetchone()[0]
@@ -1004,14 +1004,24 @@ def test_shell_scripts_lint():
     if shellcheck is None:
         pytest.skip("shellcheck not available")
     scripts = [
-        "scripts/manage.sh",
-        "scripts/daily_maintenance.sh",
-        "scripts/pghero_entrypoint.sh",
-        "pgbouncer/entrypoint.sh",
-        "valkey/entrypoint.sh",
+        ROOT / "scripts" / "manage.sh",
+        ROOT / "scripts" / "daily_maintenance.sh",
+        ROOT / "scripts" / "pghero_entrypoint.sh",
+        ROOT / "pgbouncer" / "entrypoint.sh",
+        ROOT / "valkey" / "entrypoint.sh",
     ]
-    result = subprocess.run([shellcheck, *scripts], capture_output=True, text=True)
-    assert result.returncode == 0, result.stdout + result.stderr
+    cmd = [
+        shellcheck,
+        "--external-sources",
+        *map(str, scripts),
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    filtered_output = [
+        line
+        for line in (result.stdout + result.stderr).splitlines()
+        if "SC1091" not in line or "Not following" not in line
+    ]
+    assert result.returncode == 0, "\n".join(filtered_output)
 
 
 @pytest.mark.config
