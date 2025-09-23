@@ -108,9 +108,9 @@ services:
       retries: 5
       start_period: 30s
     stop_grace_period: 1m
-    shm_size: ${POSTGRES_SHM_SIZE}
-    mem_limit: ${POSTGRES_MEMORY_LIMIT}
-    cpus: ${POSTGRES_CPU_LIMIT}
+    shm_size: ${POSTGRES_SHM_SIZE:-0}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
+    cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
 
   pghero:
