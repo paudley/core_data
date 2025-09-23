@@ -191,6 +191,7 @@ Commands:
   seccomp-generate <service> [--trace-dir DIR] [--output PATH]
                              Build a whitelist profile from strace output.
   seccomp-verify              Ensure docker-compose services define seccomp security_opts.
+  apparmor-load               Load AppArmor profiles under apparmor/ (requires sudo).
   version-status [--only-outdated] [--output PATH]
                              Compare installed versions against upstream releases.
   diff-pgstat --base PATH --compare PATH [--limit N]
@@ -986,6 +987,9 @@ USAGE
   seccomp-verify)
     cmd_seccomp_verify "$@"
     ;;
+  apparmor-load)
+    cmd_apparmor_load "$@"
+    ;;
   version-status)
     output=""
     only_outdated=false
@@ -1035,3 +1039,33 @@ USAGE
     exit 1
     ;;
 esac
+# Load AppArmor profiles using apparmor_parser. Requires root or sudo.
+cmd_apparmor_load() {
+  local parser=${APPARMOR_PARSER:-apparmor_parser}
+  if ! command -v "${parser}" >/dev/null 2>&1; then
+    echo "[apparmor] ${parser} not found. Install apparmor-utils (Debian/Ubuntu) or ensure apparmor_parser is on PATH." >&2
+    exit 1
+  fi
+  if [[ $EUID -ne 0 ]]; then
+    if ! command -v sudo >/dev/null 2>&1; then
+      echo "[apparmor] sudo required to load profiles or rerun as root." >&2
+      exit 1
+    fi
+  fi
+  local loaded=false
+  for profile in "${ROOT_DIR}/apparmor"/*.profile; do
+    [[ -e "${profile}" ]] || continue
+    if [[ $EUID -ne 0 ]]; then
+      sudo "${parser}" -r -W "${profile}" || exit 1
+    else
+      "${parser}" -r -W "${profile}" || exit 1
+    fi
+    loaded=true
+    echo "[apparmor] loaded ${profile##*/}" >&2
+  done
+  if [[ ${loaded} == false ]]; then
+    echo "[apparmor] no profiles found under ${ROOT_DIR}/apparmor" >&2
+    exit 1
+  fi
+  echo "[apparmor] profiles loaded. Set CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal (or your custom profile) before composing." >&2
+}
