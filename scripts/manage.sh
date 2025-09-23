@@ -38,6 +38,8 @@ source "${SCRIPT_DIR}/lib/pgbouncer.sh"
 source "${SCRIPT_DIR}/lib/memcached.sh"
 # shellcheck source=scripts/lib/seccomp.sh
 source "${SCRIPT_DIR}/lib/seccomp.sh"
+# shellcheck source=scripts/lib/test_dataset.sh
+source "${SCRIPT_DIR}/lib/test_dataset.sh"
 
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
@@ -168,6 +170,9 @@ Commands:
   exercise-extensions [--db DB]
                               Run smoke queries across the core extension bundle.
   pgtap-smoke [--db DB]       Execute a pgTap plan validating the bundled extensions.
+  test-dataset bootstrap [options]
+                              Provision a synthetic dataset covering spatial, vector,
+                              graph, and routing extensions.
   async-queue bootstrap [--db DB] [--schema NAME]
                              Install the lightweight async queue schema/functions.
   partman-maintenance [--db DB]
@@ -808,6 +813,9 @@ USAGE
       esac
     done
     run_pgtap_smoke "${db}"
+    ;;
+  test-dataset)
+    cmd_test_dataset "$@"
     ;;
   async-queue)
     subcommand=${1:-help}

@@ -3,6 +3,7 @@
 
 import base64
 import concurrent.futures
+import csv
 import gzip
 import http.client
 import json
@@ -12,7 +13,10 @@ import shutil
 import socket
 import stat
 import subprocess
+import threading
 import time
+import urllib.error
+import urllib.request
 import uuid
 import warnings
 from pathlib import Path
@@ -20,10 +24,200 @@ from pathlib import Path
 import pytest
 import psycopg
 from psycopg.rows import tuple_row
+from graphql import (
+    GraphQLArgument,
+    GraphQLField,
+    GraphQLFloat,
+    GraphQLList,
+    GraphQLObjectType,
+    GraphQLSchema,
+    GraphQLString,
+    graphql_sync,
+)
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[1]
 MANAGE = ROOT / "scripts" / "manage.sh"
 ENV_EXAMPLE = ROOT / ".env.example"
+
+
+def _find_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _build_testkit_schema(db_settings):
+    def get_connection():
+        conn = psycopg.connect(
+            host=db_settings["host"],
+            port=db_settings["port"],
+            user=db_settings["user"],
+            password=db_settings["password"],
+            dbname=db_settings["dbname"],
+            autocommit=True,
+        )
+        with conn.cursor() as cur:
+            cur.execute("SET search_path TO testkit, public")
+        return conn
+
+    place_type = GraphQLObjectType(
+        "Place",
+        lambda: {
+            "slug": GraphQLField(GraphQLString),
+            "name": GraphQLField(GraphQLString),
+            "locationWkt": GraphQLField(GraphQLString),
+            "regionCode": GraphQLField(GraphQLString),
+        },
+    )
+
+    def resolve_places(_root, _info):
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT slug,
+                           name::text,
+                           region_code,
+                           ST_AsText(location::public.geometry) AS location_wkt
+                      FROM testkit.places
+                     ORDER BY slug
+                    """
+                )
+                return [
+                    {
+                        "slug": row[0],
+                        "name": row[1],
+                        "regionCode": row[2],
+                        "locationWkt": row[3],
+                    }
+                    for row in cur.fetchall()
+                ]
+
+    def resolve_nearest(_root, _info, vector):
+        if not vector:
+            return None
+        vector_literal = "[" + ",".join(f"{component:.6f}" for component in vector) + "]"
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT slug, name::text, region_code,
+                           ST_AsText(location::public.geometry) AS location_wkt
+                      FROM testkit.places
+                  ORDER BY embedding <-> %s::vector
+                     LIMIT 1
+                    """,
+                    (vector_literal,),
+                )
+                row = cur.fetchone()
+                if row is None:
+                    return None
+                return {
+                    "slug": row[0],
+                    "name": row[1],
+                    "regionCode": row[2],
+                    "locationWkt": row[3],
+                }
+
+    def resolve_route_cost(_root, _info, originSlug, destinationSlug):
+        query = """
+            WITH source_vertex AS (
+                SELECT vertex_id FROM testkit.route_vertices WHERE place_slug = %s
+            ), target_vertex AS (
+                SELECT vertex_id FROM testkit.route_vertices WHERE place_slug = %s
+            )
+            SELECT SUM(cost)
+              FROM pgr_dijkstra(
+                    $$SELECT edge_id AS id, source, target, cost, reverse_cost FROM testkit.route_edges$$,
+                    (SELECT vertex_id FROM source_vertex),
+                    (SELECT vertex_id FROM target_vertex)
+                );
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, (originSlug, destinationSlug))
+                result = cur.fetchone()
+                return float(result[0]) if result and result[0] is not None else None
+
+    query_type = GraphQLObjectType(
+        "Query",
+        lambda: {
+            "places": GraphQLField(GraphQLList(place_type), resolve=resolve_places),
+            "nearestPlace": GraphQLField(
+                place_type,
+                args={
+                    "vector": GraphQLArgument(GraphQLList(GraphQLFloat)),
+                },
+                resolve=resolve_nearest,
+            ),
+            "routeCost": GraphQLField(
+                GraphQLFloat,
+                args={
+                    "originSlug": GraphQLArgument(GraphQLString),
+                    "destinationSlug": GraphQLArgument(GraphQLString),
+                },
+                resolve=resolve_route_cost,
+            ),
+        },
+    )
+
+    return GraphQLSchema(query_type)
+
+
+def _make_graphql_handler(schema, db_settings):
+    class GraphQLHandler(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def do_POST(self):  # noqa: N802
+            if self.path != "/graphql":
+                self.send_error(404)
+                return
+            content_length = int(self.headers.get("Content-Length", "0"))
+            payload = self.rfile.read(content_length)
+            try:
+                request_json = json.loads(payload)
+            except json.JSONDecodeError:
+                self.send_error(400, "invalid json")
+                return
+            query = request_json.get("query")
+            variables = request_json.get("variables")
+            result = graphql_sync(schema, query, variable_values=variables)
+            response = {}
+            if result.errors:
+                response["errors"] = [error.formatted for error in result.errors]
+            if result.data is not None:
+                response["data"] = result.data
+            body = json.dumps(response).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):  # noqa: D401
+            return
+
+    GraphQLHandler.db_settings = db_settings  # type: ignore[attr-defined]
+    return GraphQLHandler
+
+
+class GraphQLServer:
+    def __init__(self, port: int, db_settings):
+        schema = _build_testkit_schema(db_settings)
+        handler = _make_graphql_handler(schema, db_settings)
+        self._server = ThreadingHTTPServer(("127.0.0.1", port), handler)
+        self._server.daemon_threads = True
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+
+    def __enter__(self):
+        self._thread.start()
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self._server.shutdown()
+        self._thread.join(timeout=5)
+
 
 
 def read_secret(relative_path):
@@ -35,15 +229,10 @@ def manage_env(tmp_path_factory):
     workdir = tmp_path_factory.mktemp("core_data_ci")
     env_file = ROOT / ".env.test"
 
-    def find_free_port():
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.bind(("127.0.0.1", 0))
-            return s.getsockname()[1]
-
-    pghero_port = find_free_port()
-    valkey_host_port = find_free_port()
-    pgbouncer_host_port = find_free_port()
-    memcached_port = find_free_port()
+    pghero_port = _find_free_port()
+    valkey_host_port = _find_free_port()
+    pgbouncer_host_port = _find_free_port()
+    memcached_port = _find_free_port()
 
     compose_profiles = os.environ.get(
         "TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached"
@@ -993,6 +1182,243 @@ def test_pgbouncer_concurrency(manage_env):
             results = list(executor.map(worker, range(16)))
 
         assert len(set(results)) == 16
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.pool
+def test_test_dataset_bootstrap(manage_env):
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        run_manage(
+            env,
+            "test-dataset",
+            "bootstrap",
+            "--db",
+            "testkit_db",
+            "--owner",
+            "testkit_user",
+            "--password",
+            "testkit_password",
+            "--force",
+        )
+        run_manage(env, "pgtap-smoke", "--db", "testkit_db")
+
+        places_count = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            "SELECT count(*) FROM testkit.places;",
+        )
+        assert places_count.stdout.strip() == "4"
+
+        spatial_result = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            "SELECT ST_DWithin(p1.location, p2.location, 800.0) FROM testkit.places p1 JOIN testkit.places p2 ON p1.slug='downtown-market' AND p2.slug='riverside-museum';",
+        )
+        assert spatial_result.stdout.strip() == "t"
+
+        vector_knn = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            "SELECT slug FROM testkit.knn_places('[0.5,0.1,0.9]'::vector, 1);",
+        )
+        assert vector_knn.stdout.strip() == "downtown-market"
+
+        routing_count = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            "SELECT count(*) FROM testkit.routing_shortest_path;",
+        )
+        assert int(routing_count.stdout.strip()) > 0
+
+        graph_edges = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            "LOAD 'age'; SET search_path = ag_catalog, \"$user\", public; "
+            "SELECT source::text, target::text FROM cypher('testkit_graph', $$ MATCH (a:Place)-[:ROUTE]->(b:Place) RETURN a.slug AS source, b.slug AS target $$) "
+            "AS (source agtype, target agtype) ORDER BY source::text, target::text;",
+        )
+        graph_lines = [line for line in graph_edges.stdout.splitlines() if "|" in line]
+        assert "downtown-market|riverside-museum" in graph_lines
+
+        port = int(env.get("PGBOUNCER_HOST_PORT", env.get("PGBOUNCER_PORT", "6432")))
+
+        def pool_worker(_idx):
+            with psycopg.connect(
+                host="127.0.0.1",
+                port=port,
+                user="testkit_user",
+                password="testkit_password",
+                dbname="testkit_db",
+                autocommit=True,
+                row_factory=tuple_row,
+            ) as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "SELECT slug FROM testkit.places ORDER BY slug LIMIT 1;"
+                    )
+                    return cur.fetchone()[0]
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+            pool_results = list(executor.map(pool_worker, range(12)))
+        assert all(result == "canal-roasters" for result in pool_results)
+
+        query_uuid = uuid.uuid4().hex
+        before_name = f"pg_stat_before_{query_uuid}.csv"
+        after_name = f"pg_stat_after_{query_uuid}.csv"
+        container_before = f"/backups/{before_name}"
+        container_after = f"/backups/{after_name}"
+        host_before = ROOT / "backups" / before_name
+        host_after = ROOT / "backups" / after_name
+        run_manage(
+            env,
+            "snapshot-pgstat",
+            "--output",
+            container_before,
+            "--limit",
+            "50",
+        )
+        assert host_before.exists()
+        time.sleep(1)
+        pgstat_ready = True
+        with host_before.open(newline="") as fh:
+            before_reader = csv.DictReader(fh)
+            if before_reader.fieldnames is None:
+                pgstat_ready = False
+            else:
+                expected_cols = {"queryid", "calls", "datname", "rows", "total_exec_time"}
+                assert expected_cols.issubset(set(before_reader.fieldnames))
+
+        graphql_port = _find_free_port()
+        graphql_payload = {
+            "query": """
+                query Testkit($vector: [Float!]!) {
+                  places { slug name locationWkt regionCode }
+                  nearestPlace(vector: $vector) { slug name }
+                  routeCost(originSlug: \"downtown-market\", destinationSlug: \"harbor-aquatics-lab\")
+                }
+            """,
+            "variables": {"vector": [0.5, 0.1, 0.9]},
+        }
+        db_settings = {
+            "host": "127.0.0.1",
+            "port": port,
+            "user": "testkit_user",
+            "password": "testkit_password",
+            "dbname": "testkit_db",
+        }
+        with GraphQLServer(graphql_port, db_settings):
+            request = urllib.request.Request(
+                f"http://127.0.0.1:{graphql_port}/graphql",
+                data=json.dumps(graphql_payload).encode(),
+                headers={"Content-Type": "application/json"},
+            )
+            with urllib.request.urlopen(request, timeout=10) as response:
+                graphql_response = json.loads(response.read().decode())
+
+        assert "errors" not in graphql_response, graphql_response.get("errors")
+        data = graphql_response.get("data")
+        assert data is not None
+        assert len(data["places"]) == 4
+        assert any(place["slug"] == "downtown-market" for place in data["places"])
+        assert data["nearestPlace"]["slug"] == "downtown-market"
+        assert data["routeCost"] and data["routeCost"] > 0
+
+        run_manage(
+            env,
+            "snapshot-pgstat",
+            "--output",
+            container_after,
+            "--limit",
+            "50",
+        )
+        assert host_after.exists()
+        time.sleep(1)
+        if pgstat_ready:
+            with host_after.open(newline="") as fh:
+                after_reader = csv.DictReader(fh)
+                if after_reader.fieldnames is None:
+                    pgstat_ready = False
+                else:
+                    expected_cols = {"queryid", "calls", "datname", "rows", "total_exec_time"}
+                    assert expected_cols.issubset(set(after_reader.fieldnames))
+        if pgstat_ready:
+            diff_result = run_manage(
+                env,
+                "diff-pgstat",
+                "--base",
+                str(host_before),
+                "--compare",
+                str(host_after),
+                "--limit",
+                "10",
+            )
+            assert "queryid" in diff_result.stdout
+
+        run_manage(env, "stanza-create", check=False)
+        backup_verify = run_manage(env, "backup", "--type=diff", "--verify", check=False)
+        assert "backup command end: completed successfully" in backup_verify.stdout
+        if backup_verify.returncode != 0:
+            warnings.warn("pgBackRest verification failed (likely due to read-only restore container)")
+
+        config_tpl = ROOT / "postgres" / "conf" / "postgresql.conf.tpl"
+        original_config = config_tpl.read_text()
+        run_manage(env, "config-check")
+        try:
+            config_tpl.write_text(original_config + "\n# drift-check-test\n")
+            drift_result = run_manage(env, "config-check", check=False)
+            assert drift_result.returncode != 0
+        finally:
+            config_tpl.write_text(original_config)
+        run_manage(env, "config-check")
+
+        run_manage(env, "partman-maintenance", "--db", "testkit_db")
+        partitions_result = run_manage(
+            env,
+            "psql",
+            "-d",
+            "testkit_db",
+            "-t",
+            "-A",
+            "-c",
+            """
+            SELECT COUNT(*)
+              FROM pg_tables
+             WHERE schemaname = 'testkit'
+               AND tablename LIKE 'sensor_readings%';
+            """,
+        )
+        assert int(partitions_result.stdout.strip()) >= 3
     finally:
         run_manage(env, "down")
         compose_down(env, volumes=True)

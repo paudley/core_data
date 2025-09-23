@@ -207,7 +207,8 @@ services:
     logging: *logging_defaults
 
   pgbouncer:
-    <<: *security_defaults
+    cap_drop:
+      - ALL
     security_opt:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"

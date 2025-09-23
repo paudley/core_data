@@ -1,0 +1,409 @@
+\echo '[test-dataset] Dataset owner :'dataset_owner' database :'dataset_name
+
+SET client_min_messages = warning;
+
+\if :overwrite_schema
+DROP SCHEMA IF EXISTS testkit CASCADE;
+\endif
+
+CREATE SCHEMA IF NOT EXISTS testkit AUTHORIZATION :"dataset_owner";
+ALTER SCHEMA testkit OWNER TO :"dataset_owner";
+GRANT USAGE ON SCHEMA testkit TO :"dataset_owner";
+GRANT ALL PRIVILEGES ON SCHEMA testkit TO :"dataset_owner";
+
+ALTER ROLE :"dataset_owner" IN DATABASE :"dataset_name" SET search_path = 'testkit, public';
+ALTER DEFAULT PRIVILEGES IN SCHEMA testkit
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO :"dataset_owner";
+ALTER DEFAULT PRIVILEGES IN SCHEMA testkit
+  GRANT USAGE, SELECT ON SEQUENCES TO :"dataset_owner";
+
+SET search_path = testkit, public;
+
+-- Defensive extension creation (already handled during bootstrap, but harmless when repeated).
+CREATE EXTENSION IF NOT EXISTS postgis;
+CREATE EXTENSION IF NOT EXISTS postgis_raster;
+CREATE EXTENSION IF NOT EXISTS postgis_topology;
+CREATE EXTENSION IF NOT EXISTS postgis_tiger_geocoder;
+CREATE EXTENSION IF NOT EXISTS address_standardizer;
+CREATE EXTENSION IF NOT EXISTS address_standardizer_data_us;
+CREATE EXTENSION IF NOT EXISTS pgrouting;
+CREATE EXTENSION IF NOT EXISTS vector;
+CREATE EXTENSION IF NOT EXISTS citext;
+CREATE EXTENSION IF NOT EXISTS hstore;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE EXTENSION IF NOT EXISTS fuzzystrmatch;
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+CREATE EXTENSION IF NOT EXISTS age;
+CREATE EXTENSION IF NOT EXISTS pg_partman;
+
+COMMENT ON SCHEMA testkit IS 'Synthetic dataset that exercises spatial, vector, graph, routing, and text extensions.';
+
+CREATE TABLE IF NOT EXISTS spatial_regions (
+  region_code text PRIMARY KEY,
+  name text NOT NULL,
+  boundary geometry(MultiPolygon, 4326) NOT NULL,
+  label_point geometry(Point, 4326) GENERATED ALWAYS AS (ST_PointOnSurface(boundary)) STORED,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO spatial_regions (region_code, name, boundary)
+VALUES
+  (
+    'DT',
+    'Downtown Innovation District',
+    ST_Multi(ST_GeomFromText('POLYGON((-73.995 40.748, -73.982 40.748, -73.982 40.757, -73.995 40.757, -73.995 40.748))', 4326))
+  ),
+  (
+    'RS',
+    'Riverside Arts Quarter',
+    ST_Multi(ST_GeomFromText('POLYGON((-73.999 40.741, -73.984 40.741, -73.984 40.749, -73.999 40.749, -73.999 40.741))', 4326))
+  ),
+  (
+    'NH',
+    'North Harbor Commons',
+    ST_Multi(ST_GeomFromText('POLYGON((-74.005 40.753, -73.991 40.753, -73.991 40.762, -74.005 40.762, -74.005 40.753))', 4326))
+  )
+ON CONFLICT (region_code) DO UPDATE SET
+  name = EXCLUDED.name,
+  boundary = EXCLUDED.boundary;
+
+CREATE TABLE IF NOT EXISTS places (
+  place_id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  slug text UNIQUE NOT NULL,
+  name citext NOT NULL,
+  region_code text NOT NULL REFERENCES spatial_regions(region_code) ON DELETE RESTRICT,
+  category text NOT NULL,
+  opened daterange NOT NULL,
+  location geography(Point, 4326) NOT NULL,
+  footprint geometry(Polygon, 4326),
+  tags text[] NOT NULL DEFAULT ARRAY[]::text[],
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  embedding vector(3) NOT NULL,
+  search_terms tsvector GENERATED ALWAYS AS (to_tsvector('simple', coalesce(name::text, '') || ' ' || coalesce(category, ''))) STORED,
+  hashed_name bytea GENERATED ALWAYS AS (digest(name::text, 'sha256')) STORED,
+  rating numeric(3,2) NOT NULL DEFAULT 4.0,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+WITH data(slug, name, region_code, category, lon, lat, footprint_wkt, tags, metadata, embedding_txt, opened_start, opened_end, rating) AS (
+  VALUES
+    (
+      'downtown-market',
+      'Downtown Market Hall',
+      'DT',
+      'food_hall',
+      -73.9895,
+      40.7522,
+      'POLYGON((-73.9901 40.7520, -73.9890 40.7520, -73.9890 40.7526, -73.9901 40.7526, -73.9901 40.7520))',
+      ARRAY['local', 'organic', 'coffee'],
+      jsonb_build_object('hours', '08:00-22:00', 'wifi', true),
+      '[0.45,0.12,0.88]',
+      DATE '2015-03-15',
+      DATE '2100-01-01',
+      4.6
+    ),
+    (
+      'riverside-museum',
+      'Riverside Museum of Light',
+      'RS',
+      'museum',
+      -73.9924,
+      40.7459,
+      'POLYGON((-73.9930 40.7455, -73.9920 40.7455, -73.9920 40.7463, -73.9930 40.7463, -73.9930 40.7455))',
+      ARRAY['art', 'photography'],
+      jsonb_build_object('tickets', jsonb_build_object('adult', 22, 'student', 14), 'membership', true),
+      '[0.31,0.72,0.55]',
+      DATE '2012-10-01',
+      DATE '2100-01-01',
+      4.8
+    ),
+    (
+      'harbor-aquatics-lab',
+      'Harbor Aquatics Lab',
+      'NH',
+      'research_lab',
+      -74.0015,
+      40.7581,
+      'POLYGON((-74.0020 40.7577, -74.0010 40.7577, -74.0010 40.7585, -74.0020 40.7585, -74.0020 40.7577))',
+      ARRAY['marine', 'education'],
+      jsonb_build_object('access', 'appointment', 'lead_scientist', 'Dr. Li Chen'),
+      '[0.80,0.40,0.35]',
+      DATE '2018-07-09',
+      DATE '2100-01-01',
+      4.4
+    ),
+    (
+      'canal-roasters',
+      'Canal Street Roasters',
+      'RS',
+      'cafe',
+      -73.9881,
+      40.7437,
+      'POLYGON((-73.9886 40.7434, -73.9878 40.7434, -73.9878 40.7440, -73.9886 40.7440, -73.9886 40.7434))',
+      ARRAY['coffee', 'bakery', 'workspace'],
+      jsonb_build_object('outdoor_seating', true, 'power_outlets', 'plentiful'),
+      '[0.52,0.18,0.69]',
+      DATE '2016-05-21',
+      DATE '2100-01-01',
+      4.5
+    )
+)
+INSERT INTO places (place_id, slug, name, region_code, category, opened, location, footprint, tags, metadata, embedding, created_at, rating)
+SELECT
+  uuid_generate_v5(uuid_ns_url(), slug),
+  slug,
+  name,
+  region_code,
+  category,
+  daterange(opened_start, opened_end, '[]'),
+  ST_SetSRID(ST_MakePoint(lon, lat), 4326)::geography,
+  ST_GeomFromText(footprint_wkt, 4326),
+  tags,
+  metadata,
+  embedding_txt::vector,
+  now(),
+  rating
+FROM data
+ON CONFLICT (slug) DO UPDATE SET
+  name = EXCLUDED.name,
+  region_code = EXCLUDED.region_code,
+  category = EXCLUDED.category,
+  opened = EXCLUDED.opened,
+  location = EXCLUDED.location,
+  footprint = EXCLUDED.footprint,
+  tags = EXCLUDED.tags,
+  metadata = EXCLUDED.metadata,
+  embedding = EXCLUDED.embedding,
+  rating = EXCLUDED.rating;
+
+CREATE INDEX IF NOT EXISTS places_location_gix ON places USING gist (location);
+CREATE INDEX IF NOT EXISTS places_trgm_name_idx ON places USING gin (name gin_trgm_ops);
+CREATE INDEX IF NOT EXISTS places_search_terms_idx ON places USING gin (search_terms);
+
+CREATE TABLE IF NOT EXISTS place_properties (
+  place_id uuid PRIMARY KEY REFERENCES places(place_id) ON DELETE CASCADE,
+  properties hstore NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO place_properties (place_id, properties)
+SELECT place_id,
+       hstore(array[['wifi', CASE WHEN 'wifi' = ANY(tags) THEN 'true' ELSE 'false' END],
+                    ['power', metadata ->> 'power_outlets'],
+                    ['category', category]])
+FROM places
+ON CONFLICT (place_id) DO UPDATE SET properties = EXCLUDED.properties, updated_at = now();
+
+CREATE TABLE IF NOT EXISTS place_reviews (
+  review_id uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  place_id uuid NOT NULL REFERENCES places(place_id) ON DELETE CASCADE,
+  reviewer citext NOT NULL,
+  visited tstzrange NOT NULL,
+  rating integer NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  comments text,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO place_reviews (review_id, place_id, reviewer, visited, rating, comments)
+SELECT
+  uuid_generate_v5(uuid_ns_dns(), slug || ':reviewer101'),
+  place_id,
+  'tester101',
+  tstzrange(now() - interval '2 days', now() - interval '2 days' + interval '90 minutes', '[]'),
+  ROUND(rating)::integer,
+  format('%s exceeded expectations for synthetic checks.', name)
+FROM places
+ON CONFLICT (review_id) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS place_reviews_gist_idx ON place_reviews USING gist (place_id, visited);
+
+CREATE TABLE IF NOT EXISTS sensor_readings (
+  sensor_id integer NOT NULL,
+  recorded_at timestamptz NOT NULL,
+  location geography(Point, 4326) NOT NULL,
+  co2_ppm numeric(6,2),
+  humidity numeric(5,2),
+  PRIMARY KEY (sensor_id, recorded_at)
+) PARTITION BY RANGE (recorded_at);
+
+DO
+$$
+BEGIN
+  PERFORM partman.create_parent(
+    'testkit.sensor_readings',
+    'recorded_at',
+    '1 month',
+    'range',
+    p_premake := 3,
+    p_start_partition := '2024-01-01'
+  );
+EXCEPTION
+  WHEN duplicate_object THEN
+    NULL;
+END;
+$$;
+
+INSERT INTO sensor_readings (sensor_id, recorded_at, location, co2_ppm, humidity)
+VALUES
+  (101, timestamptz '2024-01-15 14:00:00+00', ST_SetSRID(ST_MakePoint(-73.9898, 40.7524), 4326)::geography, 425.11, 38.20),
+  (101, timestamptz '2024-04-15 14:00:00+00', ST_SetSRID(ST_MakePoint(-73.9898, 40.7524), 4326)::geography, 418.92, 40.05),
+  (205, timestamptz '2024-02-20 09:30:00+00', ST_SetSRID(ST_MakePoint(-73.9926, 40.7461), 4326)::geography, 410.52, 42.00),
+  (333, timestamptz '2024-05-12 17:45:00+00', ST_SetSRID(ST_MakePoint(-74.0018, 40.7582), 4326)::geography, 399.34, 36.10)
+ON CONFLICT (sensor_id, recorded_at) DO UPDATE SET
+  co2_ppm = EXCLUDED.co2_ppm,
+  humidity = EXCLUDED.humidity,
+  location = EXCLUDED.location;
+
+CREATE INDEX IF NOT EXISTS sensor_readings_loc_idx ON sensor_readings USING gist (location);
+
+CREATE TABLE IF NOT EXISTS route_vertices (
+  vertex_id integer PRIMARY KEY,
+  name text NOT NULL,
+  place_slug text,
+  geom geometry(Point, 4326) NOT NULL
+);
+
+INSERT INTO route_vertices (vertex_id, name, place_slug, geom)
+VALUES
+  (1, 'Downtown Transit Hub', 'downtown-market', ST_SetSRID(ST_MakePoint(-73.9890, 40.7524), 4326)),
+  (2, 'Museum Esplanade', 'riverside-museum', ST_SetSRID(ST_MakePoint(-73.9922, 40.7460), 4326)),
+  (3, 'Canal Commons', 'canal-roasters', ST_SetSRID(ST_MakePoint(-73.9880, 40.7439), 4326)),
+  (4, 'Harbor Research Pier', 'harbor-aquatics-lab', ST_SetSRID(ST_MakePoint(-74.0016, 40.7583), 4326))
+ON CONFLICT (vertex_id) DO UPDATE SET
+  name = EXCLUDED.name,
+  place_slug = EXCLUDED.place_slug,
+  geom = EXCLUDED.geom;
+
+CREATE TABLE IF NOT EXISTS route_edges (
+  edge_id integer PRIMARY KEY,
+  source integer NOT NULL REFERENCES route_vertices(vertex_id),
+  target integer NOT NULL REFERENCES route_vertices(vertex_id),
+  cost double precision NOT NULL,
+  reverse_cost double precision NOT NULL,
+  geom geometry(LineString, 4326) NOT NULL
+);
+
+INSERT INTO route_edges (edge_id, source, target, cost, reverse_cost, geom)
+VALUES
+  (1, 1, 2, 450.0, 450.0, ST_SetSRID(ST_MakeLine(ST_MakePoint(-73.9890, 40.7524), ST_MakePoint(-73.9922, 40.7460)), 4326)),
+  (2, 2, 3, 380.0, 380.0, ST_SetSRID(ST_MakeLine(ST_MakePoint(-73.9922, 40.7460), ST_MakePoint(-73.9880, 40.7439)), 4326)),
+  (3, 1, 4, 520.0, 520.0, ST_SetSRID(ST_MakeLine(ST_MakePoint(-73.9890, 40.7524), ST_MakePoint(-74.0016, 40.7583)), 4326)),
+  (4, 4, 2, 640.0, 640.0, ST_SetSRID(ST_MakeLine(ST_MakePoint(-74.0016, 40.7583), ST_MakePoint(-73.9922, 40.7460)), 4326))
+ON CONFLICT (edge_id) DO UPDATE SET
+  source = EXCLUDED.source,
+  target = EXCLUDED.target,
+  cost = EXCLUDED.cost,
+  reverse_cost = EXCLUDED.reverse_cost,
+  geom = EXCLUDED.geom;
+
+CREATE INDEX IF NOT EXISTS route_edges_geom_idx ON route_edges USING gist (geom);
+
+CREATE OR REPLACE VIEW routing_shortest_path AS
+SELECT seq, node, edge, cost
+  FROM pgr_dijkstra(
+        $$SELECT edge_id AS id, source, target, cost, reverse_cost FROM testkit.route_edges$$,
+        1,
+        3
+      );
+
+CREATE OR REPLACE VIEW nearby_places AS
+SELECT
+  origin.slug AS origin_slug,
+  neighbor.slug AS neighbor_slug,
+  ST_Distance(origin.location, neighbor.location) AS meters
+FROM places origin
+JOIN places neighbor ON origin.slug <> neighbor.slug
+WHERE ST_DWithin(origin.location, neighbor.location, 2000.0);
+
+CREATE OR REPLACE FUNCTION knn_places(query vector(3), k integer DEFAULT 3)
+RETURNS TABLE(slug text, name text, distance double precision)
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT slug, name::text, embedding <-> query AS distance
+    FROM testkit.places
+ORDER BY embedding <-> query
+LIMIT GREATEST(k, 1);
+$$;
+
+CREATE OR REPLACE VIEW name_similarity_samples AS
+SELECT
+  p.slug,
+  candidate.sample_query,
+  similarity(p.name::text, candidate.sample_query) AS trigram_similarity,
+  difference(p.name::text, candidate.sample_query) AS metaphone_difference
+FROM places p
+CROSS JOIN LATERAL (VALUES
+  ('Downtown Market Hall'),
+  ('Riverside Museum of Lights'),
+  ('Harbor Aquatic Lab'),
+  ('Canal Street Roasters')
+) AS candidate(sample_query);
+
+CREATE TABLE IF NOT EXISTS api_tokens (
+  token uuid PRIMARY KEY DEFAULT uuid_generate_v4(),
+  place_id uuid NOT NULL REFERENCES places(place_id) ON DELETE CASCADE,
+  secret bytea NOT NULL DEFAULT gen_random_bytes(16),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+INSERT INTO api_tokens (token, place_id)
+SELECT uuid_generate_v5(uuid_ns_url(), slug || ':api'), place_id
+FROM places
+ON CONFLICT (token) DO NOTHING;
+
+-- Build a lightweight Apache AGE graph that mirrors the connectivity from route_edges.
+LOAD 'age';
+SET search_path = ag_catalog, "$user", public;
+
+SELECT drop_graph('testkit_graph', true)
+WHERE EXISTS (SELECT 1 FROM ag_catalog.ag_graph WHERE name = 'testkit_graph');
+SELECT create_graph('testkit_graph');
+
+WITH nodes AS (
+  SELECT slug, name::text, region_code
+    FROM testkit.places
+)
+SELECT format(
+         'SELECT * FROM cypher(''testkit_graph'', $$ CREATE (:Place {slug: %L, name: %L, region: %L}) $$) AS (node agtype);',
+         slug, name, region_code
+       )
+FROM nodes
+\gexec
+
+WITH edges AS (
+  SELECT e.edge_id,
+         sv.place_slug AS source_slug,
+         tv.place_slug AS target_slug,
+         e.cost
+    FROM testkit.route_edges e
+    JOIN testkit.route_vertices sv ON sv.vertex_id = e.source
+    JOIN testkit.route_vertices tv ON tv.vertex_id = e.target
+   WHERE sv.place_slug IS NOT NULL
+     AND tv.place_slug IS NOT NULL
+)
+SELECT format(
+         'SELECT * FROM cypher(''testkit_graph'', $$
+             MATCH (a:Place {slug: %L}), (b:Place {slug: %L})
+             CREATE (a)-[:ROUTE {cost: %s}]->(b)
+             $$) AS (edge agtype);',
+         source_slug,
+         target_slug,
+         cost
+       )
+FROM edges
+\gexec
+
+RESET search_path;
+
+ANALYZE testkit.spatial_regions;
+ANALYZE testkit.places;
+ANALYZE testkit.place_reviews;
+ANALYZE testkit.place_properties;
+ANALYZE testkit.sensor_readings;
+ANALYZE testkit.route_edges;
+ANALYZE testkit.route_vertices;
+
+\echo '[test-dataset] Dataset ready.'

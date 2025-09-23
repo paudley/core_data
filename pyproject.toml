@@ -20,4 +20,11 @@ dependencies = [
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.4.2",
+    "graphql-core>=3.2.3",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/core_data"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/core_data"]

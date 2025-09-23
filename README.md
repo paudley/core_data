@@ -131,6 +131,7 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `compact --level N` | Layered bloat management: 1=autovacuum audit, 2=pg_squeeze refresh, 3=pg_repack (needs `--tables`), 4=VACUUM FULL (needs `--yes`). |
 | `exercise-extensions` | Smoke-test the core extension bundle (vector, PostGIS, AGE, citext, hstore, pgcrypto, hypopg, pg_partman, etc.). |
 | `pgtap-smoke` | Run a micro pgTap plan to confirm key extensions (including hypopg/pg_partman) are registered. |
+| `test-dataset bootstrap` | Stand up a synthetic schema with spatial, vector, routing, and graph fixtures to exercise PgBouncer/GraphQL clients. |
 | `async-queue bootstrap` | Install the lightweight async queue schema (`asyncq`) with enqueue/dequeue helpers. |
 | `partman-maintenance` | Invoke `run_maintenance_proc()` for the selected database (defaults to `POSTGRES_DB`). |
 | `partman-show-config` | Print rows from `part_config` (optionally filter by `--parent schema.table`). |
@@ -167,6 +168,7 @@ All runs write logs under `backups/` for auditing (`pg_repack-*.log`, `vacuum-fu
 - **Smoke Test:** `tests/test_manage.py` spins up a disposable environment, exercises key CLI commands (including `daily-maintenance`, pgBackRest, and `upgrade`), and tears everything down. Run locally with `python -m pytest -k full_workflow` (Docker required).
 - **Fast Tests:** `tests/test_lightweight.py` validates offline flows like help output and the vendored tooling without needing Docker.
 - **Extension Smoke:** `./scripts/manage.sh exercise-extensions --db <name>` plus `pgtap-smoke` provide quick feedback that the entire core extension bundle (vector/PostGIS/AGE/hstore/citext/pgcrypto/pg_partman/etc.) is ready for use.
+- **Synthetic Fixture:** `./scripts/manage.sh test-dataset bootstrap --db core_data_testkit --owner demo_user --print-password --force` creates repeatable spatial/vector/graph/routing sample data so PgBouncer, REST, and GraphQL clients can run end-to-end queries without touching production schemas.
 - **Documentation:** `AGENTS.md` offers contributor runbooks and on-call notes.
 
 ## Credits
