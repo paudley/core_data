@@ -142,6 +142,13 @@ Generating a custom profile is not a one-time action but a continuous lifecycle 
        security\_opt:  
          \- seccomp:/path/to/host/postgres-seccomp.json
 
+The `core_data` toolkit exposes helpers to keep this workflow reproducible:
+
+* `./scripts/manage.sh seccomp-status` reports which profile string each service resolves to and whether the JSON is present.
+* `./scripts/manage.sh seccomp-trace postgres` scaffolds `seccomp/traces/` and points you to the manual strace capture process described below.
+* `./scripts/manage.sh seccomp-generate postgres --trace-dir seccomp/traces/$(date +%Y%m%d)` parses `*.trace` files into a whitelist JSON.
+* `./scripts/manage.sh seccomp-verify` ensures every Compose service keeps a `seccomp:` entry before you ship changes.
+
 **Antipattern: Running with seccomp=unconfined**
 
 Disabling seccomp by setting it to unconfined should only be done for temporary debugging.8 In a production environment, this removes a critical security boundary and exposes the host kernel to unnecessary risk. Recent issues with newer base operating systems using syscalls unknown to older

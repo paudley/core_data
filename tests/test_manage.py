@@ -117,6 +117,11 @@ def manage_env(tmp_path_factory):
     for service in ["postgres", "pghero", "pgbouncer", "logical_backup", "valkey", "memcached"]:
         caps = compose_config["services"].get(service, {}).get("cap_drop", [])
         assert caps == ["ALL"], f"service {service} should drop all capabilities"
+        seccomp_opts = compose_config["services"].get(service, {}).get("security_opt", [])
+        assert any(
+            opt.startswith("seccomp:") or opt.startswith("seccomp=")
+            for opt in seccomp_opts
+        ), f"service {service} should define a seccomp security option"
 
     repo_env_path = ROOT / ".env"
     had_env = repo_env_path.exists() or repo_env_path.is_symlink()
