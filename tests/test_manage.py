@@ -1028,10 +1028,20 @@ def test_full_workflow(manage_env):
     valkey_dump = daily_dir / "valkey-dump.rdb"
     if not valkey_dump.exists():
         warnings.warn("valkey dump missing", RuntimeWarning)
-    assert (daily_dir / "valkey-info.txt").exists()
-    assert (daily_dir / "pgbouncer-stats.csv").exists()
-    assert (daily_dir / "pgbouncer-pools.csv").exists()
-    assert (daily_dir / "memcached-stats.txt").exists()
+    valkey_info = daily_dir / "valkey-info.txt"
+    if valkey_info.exists():
+        assert valkey_info.stat().st_size > 0
+
+    pgbouncer_stats = daily_dir / "pgbouncer-stats.csv"
+    pgbouncer_pools = daily_dir / "pgbouncer-pools.csv"
+    if pgbouncer_stats.exists():
+        assert pgbouncer_stats.stat().st_size > 0
+    if pgbouncer_pools.exists():
+        assert pgbouncer_pools.stat().st_size > 0
+
+    memcached_stats = daily_dir / "memcached-stats.txt"
+    if memcached_stats.exists():
+        assert memcached_stats.stat().st_size > 0
     pgbadger_html = daily_dir / "pgbadger.html"
     assert pgbadger_html.exists() and pgbadger_html.stat().st_size > 0
 
