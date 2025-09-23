@@ -27,6 +27,7 @@ logs/
 *.sql.gz
 /backups/*
 !/backups/.gitkeep
+seccomp/traces/
 
 # Docker volumes/data
 /data/

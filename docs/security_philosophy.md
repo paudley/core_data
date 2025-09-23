@@ -30,3 +30,16 @@ If a future service genuinely needs a capability, document the syscall failure, 
 - Manual smoke tests (`./scripts/manage.sh backup --type=full --verify`, `./scripts/manage.sh daily-maintenance`) remain part of the release checklist when altering security posture.
 
 Re-run these checks whenever the compose topology changes or when adding new operational automation.
+
+## Seccomp Policy
+
+Each long-lived container enables a seccomp profile via `security_opt`. By default we ship Docker's stock whitelist (`seccomp/docker-default.json`) to avoid regressions while teams are still building traces. Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
+
+- `seccomp-status` shows which profile string each service resolves to and whether the referenced JSON exists on disk.
+- `seccomp-trace <service>` scaffolds `seccomp/traces/` and points you to the capture workflow. Today it is a manual strace run so we can review syscall deltas before shrinking the whitelist.
+- `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` parses strace output (`*.trace`) into a minimal whitelist JSON so you can iterate quickly in development.
+- `seccomp-verify` gates CI or local builds by inspecting `docker compose config --format json` and ensuring every service keeps a `seccomp:` option.
+
+Override the profile for an individual service by exporting `CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json` (for example `CORE_DATA_SECCOMP_POSTGRES=seccomp:/opt/core_data/seccomp/postgres-tight.json`). To temporarily fall back to Docker's permissive mode during debugging, set the override to `seccomp=unconfined` and document why in your runbook.
+
+Whenever the Postgres image, bundled extensions, or OS kernel changes, regenerate traces and rerun `seccomp-generate` so the production profile keeps pace with new syscalls.

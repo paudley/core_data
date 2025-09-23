@@ -36,6 +36,8 @@ source "${SCRIPT_DIR}/lib/valkey.sh"
 source "${SCRIPT_DIR}/lib/pgbouncer.sh"
 # shellcheck source=scripts/lib/memcached.sh
 source "${SCRIPT_DIR}/lib/memcached.sh"
+# shellcheck source=scripts/lib/seccomp.sh
+source "${SCRIPT_DIR}/lib/seccomp.sh"
 
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
@@ -184,6 +186,11 @@ Commands:
   pgbouncer-stats             Execute SHOW STATS via PgBouncer admin console.
   pgbouncer-pools             Execute SHOW POOLS via PgBouncer admin console.
   memcached-stats             Dump Memcached stats using nc.
+  seccomp-status              Show which profile each service is using.
+  seccomp-trace <service>     Prepare trace directory and show tracing instructions.
+  seccomp-generate <service> [--trace-dir DIR] [--output PATH]
+                             Build a whitelist profile from strace output.
+  seccomp-verify              Ensure docker-compose services define seccomp security_opts.
   version-status [--only-outdated] [--output PATH]
                              Compare installed versions against upstream releases.
   diff-pgstat --base PATH --compare PATH [--limit N]
@@ -966,6 +973,18 @@ USAGE
     ;;
   memcached-stats)
     cmd_memcached_stats
+    ;;
+  seccomp-status)
+    cmd_seccomp_status "$@"
+    ;;
+  seccomp-trace)
+    cmd_seccomp_trace "$@"
+    ;;
+  seccomp-generate)
+    cmd_seccomp_generate "$@"
+    ;;
+  seccomp-verify)
+    cmd_seccomp_verify "$@"
     ;;
   version-status)
     output=""
