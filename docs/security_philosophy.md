@@ -54,3 +54,13 @@ Operators should iterate toward tighter profiles using the helper commands baked
 Override the profile for an individual service by exporting `CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json` (for example `CORE_DATA_SECCOMP_POSTGRES=seccomp:/opt/core_data/seccomp/postgres-tight.json`). To temporarily fall back to Docker's permissive mode during debugging, set the override to `seccomp=unconfined` and document why in your runbook.
 
 Whenever the Postgres image, bundled extensions, or OS kernel changes, regenerate traces and rerun `seccomp-generate` so the production profile keeps pace with new syscalls.
+
+## AppArmor Policy (Optional)
+
+For hosts with AppArmor enabled (Ubuntu/Debian kernels), we provide a single "minimal" profile in `apparmor/core_data_minimal.profile`. It keeps container workflows intact while blocking easy breakout paths such as `/root/**`, `/home/**`, `/etc/shadow`, `/var/lib/docker/**`, and `/var/run/docker.sock`.
+
+1. Load the profile (requires root): `./scripts/manage.sh apparmor-load`.
+2. Enable it per service by exporting `CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal` in `.env` (e.g., `CORE_DATA_APPARMOR_POSTGRES=apparmor:core_data_minimal`).
+3. Compose as usual—Docker applies the bounding set while the seccomp profile continues to enforce syscall filtering.
+
+The profile is intentionally permissive elsewhere (network traffic, in-container data paths) so upgrades rarely break. Operators who need tighter confinement can copy the template, lock down additional paths, and point the `CORE_DATA_APPARMOR_<SERVICE>` override at their custom profile.

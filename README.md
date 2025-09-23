@@ -81,6 +81,7 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 - **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
 - **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, `pghero.json`). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
+- **AppArmor (opt-in).** Minimal profiles live in `apparmor/core_data_minimal.profile`. Load them with `./scripts/manage.sh apparmor-load` (sudo), then set `CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal` in `.env` for each service you want to confine. The profile denies access to high-value host paths (`/root`, `/etc/shadow`, Docker socket) while leaving normal container paths alone.
 
 ### Service Add-ons
 - **ValKey** — Requires authentication by default (`valkey_password` secret), persists to the `valkey_data` volume (`appendonly yes`), exposes `valkey-cli`/`valkey-bgsave`, and is tuned via `.env` knobs such as `VALKEY_MAXMEMORY` and `VALKEY_MAXMEMORY_POLICY`.
