@@ -56,6 +56,7 @@ RUN set -eux; \
       postgresql-${PG_MAJOR}-pgtap \
       postgresql-contrib \
       pgbadger \
+      strace \
     pgbackrest; \
     rm -rf /var/lib/apt/lists/*;
 
