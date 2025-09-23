@@ -105,6 +105,11 @@ def manage_env(tmp_path_factory):
     )
     env["PG_BADGER_JOBS"] = "1"
 
+    repo_env_path = ROOT / ".env"
+    had_env = repo_env_path.exists() or repo_env_path.is_symlink()
+    backup_env_bytes = repo_env_path.read_bytes() if had_env else None
+    repo_env_path.write_text(env_file.read_text())
+
     config_result = subprocess.run(
         [
             "docker",
@@ -130,11 +135,6 @@ def manage_env(tmp_path_factory):
             opt.startswith("seccomp:") or opt.startswith("seccomp=")
             for opt in seccomp_opts
         ), f"service {service} should define a seccomp security option"
-
-    repo_env_path = ROOT / ".env"
-    had_env = repo_env_path.exists() or repo_env_path.is_symlink()
-    backup_env_bytes = repo_env_path.read_bytes() if had_env else None
-    repo_env_path.write_text(env_file.read_text())
 
     try:
         yield env, project_name
