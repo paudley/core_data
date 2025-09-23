@@ -43,6 +43,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_POSTGRES:-seccomp:./seccomp/postgres.json}"
+      - "${CORE_DATA_APPARMOR_POSTGRES:-apparmor:unconfined}"
     build:
       context: .
       dockerfile: postgres/Dockerfile
@@ -115,6 +116,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_PGHERO:-seccomp:./seccomp/pghero.json}"
+      - "${CORE_DATA_APPARMOR_PGHERO:-apparmor:unconfined}"
     image: ankane/pghero:latest
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
     restart: unless-stopped
@@ -143,6 +145,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_LOGICAL_BACKUP:-seccomp:./seccomp/logical_backup.json}"
+      - "${CORE_DATA_APPARMOR_LOGICAL_BACKUP:-apparmor:unconfined}"
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
@@ -170,6 +173,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
+      - "${CORE_DATA_APPARMOR_VALKEY:-apparmor:unconfined}"
     image: valkey/valkey:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
@@ -202,6 +206,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
+      - "${CORE_DATA_APPARMOR_PGBOUNCER:-apparmor:unconfined}"
     image: bitnami/pgbouncer:1.23.0
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
@@ -247,6 +252,7 @@ services:
     <<: *security_defaults
     security_opt:
       - "${CORE_DATA_SECCOMP_MEMCACHED:-seccomp:./seccomp/memcached.json}"
+      - "${CORE_DATA_APPARMOR_MEMCACHED:-apparmor:unconfined}"
     image: memcached:1.6-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped
