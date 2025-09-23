@@ -4,10 +4,42 @@
 
 set -euo pipefail
 
-SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached)
+SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached pghero)
 SEC_COMP_PROFILE_DIR=${SEC_COMP_PROFILE_DIR:-${ROOT_DIR}/seccomp}
 SEC_COMP_DEFAULT_PROFILE=${SEC_COMP_DEFAULT_PROFILE:-${SEC_COMP_PROFILE_DIR}/docker-default.json}
 SEC_COMP_TRACE_DIR=${SEC_COMP_TRACE_DIR:-${SEC_COMP_PROFILE_DIR}/traces}
+
+declare -A SEC_COMP_SERVICE_DEFAULT_SPEC=(
+  [postgres]='seccomp:./seccomp/postgres.json'
+  [logical_backup]='seccomp:./seccomp/logical_backup.json'
+  [pgbouncer]='seccomp:./seccomp/pgbouncer.json'
+  [valkey]='seccomp:./seccomp/valkey.json'
+  [memcached]='seccomp:./seccomp/memcached.json'
+  [pghero]='seccomp:./seccomp/pghero.json'
+)
+
+MANDATORY_SYSCALLS=(
+  "open"
+  "openat"
+  "close_range"
+  "openat2"
+  "pidfd_close"
+  "pidfd_getfd"
+  "pidfd_open"
+  "pidfd_send_signal"
+  "capget"
+  "capset"
+  "fstatat"
+  "newfstatat"
+  "statx"
+  "setuid"
+  "setgid"
+  "setresuid"
+  "setresgid"
+  "setgroups"
+  "setfsuid"
+  "setfsgid"
+)
 
 _seccomp_profile_var() {
   local service=$1
@@ -21,11 +53,16 @@ seccomp_resolve_profile() {
   local var
   var=$(_seccomp_profile_var "${service}")
   local value=${!var-}
-  if [[ -z ${value} ]]; then
-    printf 'seccomp:%s\n' "${SEC_COMP_DEFAULT_PROFILE}"
+  if [[ -n ${value} ]]; then
+    printf '%s\n' "${value}"
     return
   fi
-  printf '%s\n' "${value}"
+  local default_spec=${SEC_COMP_SERVICE_DEFAULT_SPEC[${service}]-}
+  if [[ -n ${default_spec} ]]; then
+    printf '%s\n' "${default_spec}"
+    return
+  fi
+  printf 'seccomp:%s\n' "${SEC_COMP_DEFAULT_PROFILE}"
 }
 
 seccomp_extract_path() {
@@ -74,7 +111,7 @@ cmd_seccomp_status() {
     seccomp_status_line "${service}"
   done
   echo
-  echo "Profiles default to ${SEC_COMP_DEFAULT_PROFILE}. Override with CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json."
+  echo "Profiles inherit from ${SEC_COMP_DEFAULT_PROFILE} (Docker's baseline) plus traced syscalls. Override with CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json when you need a custom override."
 }
 
 cmd_seccomp_trace() {
@@ -173,8 +210,11 @@ cmd_seccomp_generate() {
   fi
   mkdir -p "$(dirname "${output}")"
 
-  cat <<'PY' | python3 - "${trace_dir}" "${output}"
+  local mandatory_csv
+  mandatory_csv=$(printf '%s,' "${MANDATORY_SYSCALLS[@]}")
+  MANDATORY_SYSCALLS="${mandatory_csv%,}" DEFAULT_SECCOMP_PROFILE="${SEC_COMP_DEFAULT_PROFILE}" python3 - "${trace_dir}" "${output}" <<'PY'
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -182,7 +222,13 @@ trace_root = Path(sys.argv[1])
 output_path = Path(sys.argv[2])
 
 syscalls = set()
-for trace_file in trace_root.rglob("*.trace"):
+trace_files = list(trace_root.rglob("*.trace")) + list(trace_root.rglob("*.trace.*"))
+if not trace_files:
+    trace_files = list(trace_root.rglob("*.strace"))
+if not trace_files:
+    trace_files = list(trace_root.rglob("*.log"))
+
+for trace_file in trace_files:
     try:
         content = trace_file.read_text()
     except Exception:
@@ -190,13 +236,29 @@ for trace_file in trace_root.rglob("*.trace"):
     for line in content.splitlines():
         if '(' not in line:
             continue
-        name = line.split('(', 1)[0].strip()
+        prefix = line.split('(', 1)[0].strip()
+        if not prefix:
+            continue
+        name = prefix.split()[-1]
         if name:
             syscalls.add(name)
 
 if not syscalls:
-    print("[seccomp] No syscalls detected in trace files (.trace).", file=sys.stderr)
+    print("[seccomp] No syscalls detected in trace files.", file=sys.stderr)
     sys.exit(1)
+
+for required in filter(None, os.environ.get("MANDATORY_SYSCALLS", "").split(',')):
+    syscalls.add(required)
+
+default_profile_path = os.environ.get("DEFAULT_SECCOMP_PROFILE")
+if default_profile_path:
+    try:
+        default_profile = json.loads(Path(default_profile_path).read_text())
+        for entry in default_profile.get("syscalls", []):
+            if entry.get("action") == "SCMP_ACT_ALLOW":
+                syscalls.update(entry.get("names", []))
+    except Exception as ex:
+        print(f"[seccomp] WARNING: unable to read default profile {default_profile_path}: {ex}", file=sys.stderr)
 
 profile = {
     "defaultAction": "SCMP_ACT_ERRNO",

@@ -80,7 +80,7 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 - **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
-- **Seccomp baseline.** Every long-running service loads `seccomp:./seccomp/docker-default.json` by default. Run `./scripts/manage.sh seccomp-status` to inspect, `seccomp-verify` before shipping, and follow `docs/security_philosophy.md` when trimming profiles.
+- **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, `pghero.json`). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
 
 ### Service Add-ons
 - **ValKey** — Requires authentication by default (`valkey_password` secret), persists to the `valkey_data` volume (`appendonly yes`), exposes `valkey-cli`/`valkey-bgsave`, and is tuned via `.env` knobs such as `VALKEY_MAXMEMORY` and `VALKEY_MAXMEMORY_POLICY`.

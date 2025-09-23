@@ -42,7 +42,7 @@ services:
   postgres:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_POSTGRES:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_POSTGRES:-seccomp:./seccomp/postgres.json}"
     build:
       context: .
       dockerfile: postgres/Dockerfile
@@ -114,7 +114,7 @@ services:
   pghero:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_PGHERO:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_PGHERO:-seccomp:./seccomp/pghero.json}"
     image: ankane/pghero:latest
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
     restart: unless-stopped
@@ -142,7 +142,7 @@ services:
   logical_backup:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_LOGICAL_BACKUP:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_LOGICAL_BACKUP:-seccomp:./seccomp/logical_backup.json}"
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
@@ -169,7 +169,7 @@ services:
   valkey:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
     image: valkey/valkey:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
@@ -201,7 +201,7 @@ services:
   pgbouncer:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
     image: bitnami/pgbouncer:1.23.0
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
@@ -246,7 +246,7 @@ services:
   memcached:
     <<: *security_defaults
     security_opt:
-      - "${CORE_DATA_SECCOMP_MEMCACHED:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_SECCOMP_MEMCACHED:-seccomp:./seccomp/memcached.json}"
     image: memcached:1.6-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped
