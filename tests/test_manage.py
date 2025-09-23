@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+import json
 import os
 import secrets
 import socket
@@ -103,6 +104,19 @@ def manage_env(tmp_path_factory):
         "COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}"
     )
     env["PG_BADGER_JOBS"] = "1"
+
+    config_result = subprocess.run(
+        ["docker", "compose", "config", "--format", "json"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    compose_config = json.loads(config_result.stdout)
+    for service in ["postgres", "pghero", "pgbouncer", "logical_backup", "valkey", "memcached"]:
+        caps = compose_config["services"].get(service, {}).get("cap_drop", [])
+        assert caps == ["ALL"], f"service {service} should drop all capabilities"
 
     repo_env_path = ROOT / ".env"
     had_env = repo_env_path.exists() or repo_env_path.is_symlink()

@@ -83,6 +83,8 @@ services:
     \# cap\_add:  
     \#   \- CHOWN  \# Only add if absolutely necessary for the entrypoint script
 
+A living matrix of the capabilities we keep or drop for each service is published alongside the code in `docs/security_philosophy.md`.
+
 **Antipattern: Running with \--privileged**
 
 The \--privileged flag is a dangerous setting that should never be used in production for a database container. It effectively disables all isolation mechanisms, including capabilities, AppArmor, and seccomp, giving the container nearly full access to the host's devices and kernel features.3
