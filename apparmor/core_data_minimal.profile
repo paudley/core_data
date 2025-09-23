@@ -34,7 +34,14 @@ profile core_data_minimal flags=(attach_disconnected,mediate_deleted) {
   /etc/hostname        r,
   /etc/resolv.conf     r,
 
-  /proc/**             r,
+  /proc/self/status    r,
+  /proc/self/cmdline   r,
+  /proc/self/mounts    r,
+  /proc/self/net/**    r,
+  /proc/cpuinfo        r,
+  /proc/meminfo        r,
+  /proc/uptime         r,
+  /proc/version        r,
   deny /proc/*/fd/[0-9]*    rw,
 
   /sys/**              r,
