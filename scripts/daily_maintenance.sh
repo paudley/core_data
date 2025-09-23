@@ -28,7 +28,7 @@ if [[ -z "${POSTGRES_SUPERUSER_PASSWORD:-}" ]]; then
   fi
 fi
 
-pg_exec() {
+postgres_exec_with_auth() {
   compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" "$@"
 }
 
@@ -132,11 +132,11 @@ while IFS= read -r db; do
   [[ -z "$db" ]] && continue
   outfile="${CONTAINER_TARGET_DIR}/${db}-$(date +%Y%m%d%H%M%S).dump.gz"
   echo "[daily]  -> ${db}"
-  pg_exec bash -lc "pg_dump --format=custom --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' | gzip > '${outfile}'"
+  postgres_exec_with_auth bash -lc "pg_dump --format=custom --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' | gzip > '${outfile}'"
 done <<<"${databases}"
 
 echo "[daily] creating plain SQL dump for postgres"
-pg_exec bash -lc "pg_dump --format=plain --create --clean --if-exists --no-owner --no-acl --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' > '${CONTAINER_TARGET_DIR}/postgres.sql'"
+postgres_exec_with_auth bash -lc "pg_dump --format=plain --create --clean --if-exists --no-owner --no-acl --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' > '${CONTAINER_TARGET_DIR}/postgres.sql'"
 
 echo "[daily] copying logs"
 compose_exec bash -lc "cp /var/lib/postgresql/data/log/postgresql-*.log '${CONTAINER_TARGET_DIR}' 2>/dev/null || true"
@@ -165,7 +165,7 @@ audit_pg_buffercache "${CONTAINER_TARGET_DIR}/pg_buffercache.csv" "${BUFFERCACHE
 echo "[daily] running pg_partman maintenance"
 while IFS= read -r db; do
   [[ -z "${db}" ]] && continue
-  pg_exec psql --host "${POSTGRES_HOST}" --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
+  postgres_exec_with_auth psql --host "${POSTGRES_HOST}" --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL' >/dev/null || true
 SELECT n.nspname AS partman_schema
   FROM pg_extension e
   JOIN pg_namespace n ON n.oid = e.extnamespace
