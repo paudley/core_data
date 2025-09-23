@@ -40,11 +40,7 @@ seed_test_dataset() {
   local overwrite_schema=$3
 
   local overwrite_flag
-  if [[ "${overwrite_schema}" == true ]]; then
-    overwrite_flag=1
-  else
-    overwrite_flag=0
-  fi
+  overwrite_flag=$((overwrite_schema == true))
 
   compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
     psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" \
