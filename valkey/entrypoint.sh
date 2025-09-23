@@ -48,7 +48,7 @@ save 60 10000
 maxmemory ${VALKEY_MAXMEMORY}
 maxmemory-policy ${VALKEY_MAXMEMORY_POLICY}
 dir ${data_dir}
-appendfilename ${data_dir}/appendonly.aof
+appendfilename appendonly.aof
 databases ${VALKEY_DATABASES}
 logfile ""
 rename-command CONFIG ""
