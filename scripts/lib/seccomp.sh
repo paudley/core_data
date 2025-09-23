@@ -97,14 +97,23 @@ cmd_seccomp_trace() {
   fi
   mkdir -p "${SEC_COMP_TRACE_DIR}" >&2
   cat <<MSG
-[seccomp] Trace helper is not fully automated yet.
+[seccomp] Trace helper prepared directory ${SEC_COMP_TRACE_DIR}/${service}.
 
-To generate syscall traces for '${service}':
-  1. Copy ${SEC_COMP_DEFAULT_PROFILE} as a starting point (if you have not already).
-  2. Follow the playbook in docs/security_philosophy.md ("Seccomp Policy" section) to run the service under strace and capture calls into ${SEC_COMP_TRACE_DIR}.
-  3. Run '${0##*/} seccomp-generate ${service} --trace-dir <dir>' once traces are collected.
+Recommended workflow:
+  1. Stop any running stack (\`./scripts/manage.sh down\`).
+  2. Launch the target container under strace using the bundled wrapper. Example for Postgres:
+       TRACE_DIR=${SEC_COMP_TRACE_DIR} SERVICE=postgres \\
+         docker compose run --rm \\
+           --entrypoint /opt/core_data/scripts/trace_entrypoint.sh \\
+           postgres docker-entrypoint.sh postgres
+     (Replace the final command with the appropriate entrypoint/args for other services, e.g.
+      \`docker-entrypoint.sh /opt/core_data/scripts/logical_backup_runner.sh\`.)
+     Keep the container running while you exercise workloads (pytest, manage.sh commands, etc.).
+  3. When finished, stop the strace session. Trace output (.trace files) will live under
+       ${SEC_COMP_TRACE_DIR}/${service}/<timestamp>/
+  4. Run '${0##*/} seccomp-generate ${service} --trace-dir ${SEC_COMP_TRACE_DIR}/${service}' to emit a tailored profile.
 
-This placeholder command ensures the trace directory exists so you can drop results there.
+See docs/security_philosophy.md for additional guidance.
 MSG
 }
 

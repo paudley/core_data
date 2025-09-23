@@ -36,7 +36,7 @@ Re-run these checks whenever the compose topology changes or when adding new ope
 Each long-lived container enables a seccomp profile via `security_opt`. By default we ship Docker's stock whitelist (`seccomp/docker-default.json`) to avoid regressions while teams are still building traces. Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
 
 - `seccomp-status` shows which profile string each service resolves to and whether the referenced JSON exists on disk.
-- `seccomp-trace <service>` scaffolds `seccomp/traces/` and points you to the capture workflow. Today it is a manual strace run so we can review syscall deltas before shrinking the whitelist.
+- `seccomp-trace <service>` scaffolds `seccomp/traces/` and prints a ready-to-run `docker compose run` example that wraps the service entrypoint with `/opt/core_data/scripts/trace_entrypoint.sh` (which in turn launches `strace -ff`).
 - `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` parses strace output (`*.trace`) into a minimal whitelist JSON so you can iterate quickly in development.
 - `seccomp-verify` gates CI or local builds by inspecting `docker compose config --format json` and ensuring every service keeps a `seccomp:` option.
 
