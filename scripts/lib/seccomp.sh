@@ -287,16 +287,16 @@ PY
 
 cmd_seccomp_verify() {
   ensure_env
-  local json
-  if ! json=$(compose config --format json); then
+  if ! compose config --format json >"${TMPDIR:-/tmp}/core_data_seccomp.json"; then
     echo "[seccomp] Unable to render compose configuration." >&2
     exit 1
   fi
-  echo "${json}" | python3 - <<'PY'
+  python3 - "${TMPDIR:-/tmp}/core_data_seccomp.json" <<'PY'
 import json
 import sys
 
-config = json.load(sys.stdin)
+with open(sys.argv[1]) as fh:
+    config = json.load(fh)
 services = {
     "postgres": "CORE_DATA_SECCOMP_POSTGRES",
     "logical_backup": "CORE_DATA_SECCOMP_LOGICAL_BACKUP",
