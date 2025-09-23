@@ -61,6 +61,16 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
  ```
 4. Explore the CLI: `./scripts/manage.sh help`
 
+## Project Ethos
+We optimize for **data infrastructure as code ➜ automated admin ➜ human-friendly ➜ best-practices by default (including security and performance)**. In practice that means:
+
+1. **Data infrastructure as code.** Declarative, reproducible Postgres once, versioned forever.
+2. **Automated admin.** Every recurring task should be scriptable and CI-friendly before we worry about shell ergonomics.
+3. **Human-friendly.** CLI helpers, sensible prompts, and clear docs matter—but only after the first two goals are met.
+4. **Best-practices by default.** Security and performance guardrails (cap drops, TLS, tuned memory, backups) are enabled out of the box, with deliberate escape hatches when absolutely required.
+
+See `docs/security_philosophy.md` for how capability hardening and related controls fit into that priority order.
+
 ## Operational Defaults
 - **Resource guardrails.** Container memory, CPU, and shared memory limits come from `.env`, keeping pgtune advice and runtime constraints aligned. Adjust `POSTGRES_MEMORY_LIMIT`, `POSTGRES_CPU_LIMIT`, and `POSTGRES_SHM_SIZE` to match the host.
 - **TLS everywhere.** PostgreSQL refuses non-SSL connections from the bridge network. Provide your own certificate/key via Docker secrets or rely on the init hook to mint a self-signed pair under `${PGDATA}/tls`.

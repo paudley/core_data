@@ -10,11 +10,16 @@ x-logging-default: &logging_defaults
     max-buffer-size: ${POSTGRES_LOG_BUFFER}
     compress: "true"
 
+x-security-defaults: &security_defaults
+  cap_drop:
+    - ALL
+
 services:
   volume_prep:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
     restart: "no"
+    # Runs as root briefly to fix ownership; uses Docker's default capabilities.
     user: "0:0"
     environment:
       PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH}
@@ -35,6 +40,7 @@ services:
     logging: *logging_defaults
 
   postgres:
+    <<: *security_defaults
     build:
       context: .
       dockerfile: postgres/Dockerfile
@@ -104,6 +110,7 @@ services:
     logging: *logging_defaults
 
   pghero:
+    <<: *security_defaults
     image: ankane/pghero:latest
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
     restart: unless-stopped
@@ -129,6 +136,7 @@ services:
     logging: *logging_defaults
 
   logical_backup:
+    <<: *security_defaults
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
@@ -153,6 +161,7 @@ services:
     logging: *logging_defaults
 
   valkey:
+    <<: *security_defaults
     image: valkey/valkey:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
@@ -182,6 +191,7 @@ services:
     logging: *logging_defaults
 
   pgbouncer:
+    <<: *security_defaults
     image: bitnami/pgbouncer:1.23.0
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
@@ -224,6 +234,7 @@ services:
     logging: *logging_defaults
 
   memcached:
+    <<: *security_defaults
     image: memcached:1.6-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped

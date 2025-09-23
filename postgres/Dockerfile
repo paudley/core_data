@@ -95,5 +95,7 @@ RUN chmod +x /docker-entrypoint-initdb.d/*.sh
 # Provide default volume locations in the image
 VOLUME ["/var/lib/postgresql/data", "/var/lib/pgbackrest", "/home/postgres"]
 
+USER ${CORE_USERNAME}
+
 HEALTHCHECK --start-period=30s --interval=10s --timeout=5s --retries=5 \
     CMD pg_isready -U "$${POSTGRES_USER:-postgres}" || exit 1
