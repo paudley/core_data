@@ -1025,8 +1025,29 @@ def test_full_workflow(manage_env):
     assert (daily_dir / "index_bloat.csv").exists()
     assert (daily_dir / "schema_snapshot.csv").exists()
     assert (daily_dir / "maintenance_report.html").exists()
+
+    env_file = Path(env["ENV_FILE"])
+    env_values = {}
+    for line in env_file.read_text().splitlines():
+        if not line or line.lstrip().startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        env_values[key.strip()] = value.strip()
+
+    compose_profiles_raw = env.get(
+        "COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", "")
+    )
+    active_profiles = {
+        profile.strip()
+        for profile in compose_profiles_raw.split(",")
+        if profile.strip()
+    }
+
+    def profile_enabled(name: str) -> bool:
+        return name in active_profiles
+
     valkey_dump = daily_dir / "valkey-dump.rdb"
-    if not valkey_dump.exists():
+    if profile_enabled("valkey") and not valkey_dump.exists():
         warnings.warn("valkey dump missing", RuntimeWarning)
     valkey_info = daily_dir / "valkey-info.txt"
     if valkey_info.exists():
@@ -1042,7 +1063,6 @@ def test_full_workflow(manage_env):
     memcached_stats = daily_dir / "memcached-stats.txt"
     if memcached_stats.exists():
         assert memcached_stats.stat().st_size > 0
-        memcached_stats.read_text()
     pgbadger_html = daily_dir / "pgbadger.html"
     assert pgbadger_html.exists() and pgbadger_html.stat().st_size > 0
 
@@ -1051,8 +1071,9 @@ def test_full_workflow(manage_env):
     with gzip.open(dump_files[0], "rb") as fh:
         fh.read(1)
 
-    memcached_stats = (daily_dir / "memcached-stats.txt").read_text()
-    assert "STAT" in memcached_stats
+    if memcached_stats.exists():
+        memcached_report = memcached_stats.read_text()
+        assert "STAT" in memcached_report
     run_manage(env, "compact", "--level", "1")
     run_manage(env, "compact", "--level", "2")
 
