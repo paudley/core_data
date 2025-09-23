@@ -33,11 +33,22 @@ Re-run these checks whenever the compose topology changes or when adding new ope
 
 ## Seccomp Policy
 
-Each long-lived container enables a seccomp profile via `security_opt`. By default we ship Docker's stock whitelist (`seccomp/docker-default.json`) to avoid regressions while teams are still building traces. Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
+Each long-lived container enables a seccomp profile via `security_opt`. The repository ships per-service whitelists in `seccomp/*.json`, all generated from workload traces so operators start from a pragmatic baseline.
+
+| Service | Default profile |
+| --- | --- |
+| postgres | `seccomp/postgres.json` |
+| logical_backup | `seccomp/logical_backup.json` |
+| pgbouncer | `seccomp/pgbouncer.json` |
+| valkey | `seccomp/valkey.json` |
+| memcached | `seccomp/memcached.json` |
+| pghero | `seccomp/pghero.json` |
+
+Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
 
 - `seccomp-status` shows which profile string each service resolves to and whether the referenced JSON exists on disk.
 - `seccomp-trace <service>` scaffolds `seccomp/traces/` and prints a ready-to-run `docker compose run` example that wraps the service entrypoint with `/opt/core_data/scripts/trace_entrypoint.sh` (which in turn launches `strace -ff`).
-- `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` parses strace output (`*.trace`) into a minimal whitelist JSON so you can iterate quickly in development.
+- `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` merges Docker's stock profile (`seccomp/docker-default.json`) with any syscalls observed in your traces (`*.trace`) so you keep runtime compatibility while still capturing service-specific behaviour.
 - `seccomp-verify` gates CI or local builds by inspecting `docker compose config --format json` and ensuring every service keeps a `seccomp:` option.
 
 Override the profile for an individual service by exporting `CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json` (for example `CORE_DATA_SECCOMP_POSTGRES=seccomp:/opt/core_data/seccomp/postgres-tight.json`). To temporarily fall back to Docker's permissive mode during debugging, set the override to `seccomp=unconfined` and document why in your runbook.
