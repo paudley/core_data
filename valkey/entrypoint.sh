@@ -27,7 +27,10 @@ if ! touch "${config_path}" 2>/dev/null; then
   echo "[valkey] WARNING: unable to write to ${config_path}, falling back to /tmp/valkey.conf" >&2
   config_path="/tmp/valkey.conf"
   data_dir="/tmp"
-  touch "${config_path}"
+  if ! touch "${config_path}" 2>/dev/null; then
+    echo "[valkey] ERROR: unable to write to fallback config path ${config_path}. Exiting." >&2
+    exit 1
+  fi
 fi
 
 umask 077
@@ -45,7 +48,7 @@ save 60 10000
 maxmemory ${VALKEY_MAXMEMORY}
 maxmemory-policy ${VALKEY_MAXMEMORY_POLICY}
 dir ${data_dir}
-appendfilename appendonly.aof
+appendfilename ${data_dir}/appendonly.aof
 databases ${VALKEY_DATABASES}
 logfile ""
 rename-command CONFIG ""

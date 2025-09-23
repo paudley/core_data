@@ -684,7 +684,7 @@ def pick_endpoint(primary, secondary=None, *, primary_retries=15, secondary_retr
         if callable(secondary):
             try:
                 secondary = secondary()
-            except Exception as resolver_error:  # noqa: PERF203
+            except (RuntimeError, OSError, ValueError) as resolver_error:  # noqa: PERF203
                 raise RuntimeError(
                     f"failed to resolve secondary endpoint: {resolver_error}"
                 ) from resolver_error
