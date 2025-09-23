@@ -247,7 +247,7 @@ if not syscalls:
     print("[seccomp] No syscalls detected in trace files.", file=sys.stderr)
     sys.exit(1)
 
-for required in filter(None, os.environ.get("MANDATORY_SYSCALLS", "").split(',')):
+for required in filter(None, (name.strip() for name in os.environ.get("MANDATORY_SYSCALLS", "").split(','))):
     syscalls.add(required)
 
 default_profile_path = os.environ.get("DEFAULT_SECCOMP_PROFILE")
