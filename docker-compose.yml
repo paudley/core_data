@@ -4,10 +4,10 @@
 x-logging-default: &logging_defaults
   driver: local
   options:
-    max-size: ${POSTGRES_LOG_MAX_SIZE}
-    max-file: "${POSTGRES_LOG_MAX_FILE}"
-    mode: ${POSTGRES_LOG_MODE}
-    max-buffer-size: ${POSTGRES_LOG_BUFFER}
+    max-size: ${POSTGRES_LOG_MAX_SIZE:-10m}
+    max-file: "${POSTGRES_LOG_MAX_FILE:-5}"
+    mode: ${POSTGRES_LOG_MODE:-non-blocking}
+    max-buffer-size: ${POSTGRES_LOG_BUFFER:-25m}
     compress: "true"
 
 x-security-defaults: &security_defaults
@@ -22,9 +22,9 @@ services:
     # Runs as root briefly to fix ownership; uses Docker's default capabilities.
     user: "0:0"
     environment:
-      PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH}
-      PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH}
-      PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH}
+      PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
+      PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
+      PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
     command:
       [
         "/bin/sh",
@@ -32,9 +32,9 @@ services:
         "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}"
       ]
     volumes:
-      - pgdata:${POSTGRES_DATA_MOUNT_PATH}
-      - pgwal:${POSTGRES_WAL_MOUNT_PATH}
-      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH}
+      - pgdata:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
+      - pgwal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
+      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
     networks:
       - core_data
     logging: *logging_defaults
@@ -86,9 +86,9 @@ services:
       POSTGRES_SSL_SELF_SIGNED_DAYS: ${POSTGRES_SSL_SELF_SIGNED_DAYS}
       POSTGRES_INITDB_WALDIR: /var/lib/postgresql/wal
     volumes:
-      - pgdata:${POSTGRES_DATA_MOUNT_PATH}
-      - pgwal:${POSTGRES_WAL_MOUNT_PATH}
-      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH}
+      - pgdata:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
+      - pgwal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
+      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./backups:/backups
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
