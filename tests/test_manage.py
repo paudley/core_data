@@ -106,7 +106,15 @@ def manage_env(tmp_path_factory):
     env["PG_BADGER_JOBS"] = "1"
 
     config_result = subprocess.run(
-        ["docker", "compose", "config", "--format", "json"],
+        [
+            "docker",
+            "compose",
+            "--env-file",
+            str(env_file),
+            "config",
+            "--format",
+            "json",
+        ],
         cwd=ROOT,
         env=env,
         capture_output=True,
