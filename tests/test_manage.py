@@ -804,11 +804,33 @@ def exercise_network_clients(env, app_db, app_user, app_password):
         env_values[key.strip()] = value.strip()
 
     project_name = env.get("COMPOSE_PROJECT_NAME")
+    compose_profiles_raw = env.get(
+        "COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", "")
+    )
+    active_profiles = {
+        profile.strip()
+        for profile in compose_profiles_raw.split(",")
+        if profile.strip()
+    }
+
+    def profile_enabled(sidecar: str) -> bool:
+        profile_map = {
+            "valkey": "valkey",
+            "memcached": "memcached",
+            "pgbouncer": "pgbouncer",
+        }
+        mapped = profile_map.get(sidecar)
+        if mapped is None:
+            return True
+        return mapped in active_profiles
+
     unavailable = {}
     if project_name:
         ip_addr = container_ip(project_name, "postgres")
         assert ip_addr.count(".") == 3
         for sidecar in ("pgbouncer", "valkey", "memcached", "pghero"):
+            if not profile_enabled(sidecar):
+                continue
             try:
                 wait_for_container(project_name, sidecar)
             except RuntimeError as err:
@@ -827,35 +849,39 @@ def exercise_network_clients(env, app_db, app_user, app_password):
     )
     pghero_host_port = int(env["PGHERO_PORT"])
 
-    valkey_issue = unavailable.pop("valkey", None)
-    if valkey_issue:
-        pytest.fail(f"Valkey sidecar unavailable: {valkey_issue}")
-    valkey_primary = ("127.0.0.1", valkey_host_port)
-    valkey_secondary = container_endpoint_factory(project_name, "valkey", 6379)
-    valkey_host, valkey_port = pick_endpoint(
-        valkey_primary,
-        valkey_secondary,
-        primary_retries=30,
-        secondary_retries=30,
-    )
-
-    memcached_issue = unavailable.pop("memcached", None)
-    if memcached_issue:
-        warnings.warn(
-            f"Memcached health check reported an issue; continuing with direct probe: {memcached_issue}",
-            RuntimeWarning,
-        )
-    memcached_primary = ("127.0.0.1", memcached_host_port)
-    memcached_secondary = container_endpoint_factory(project_name, "memcached", 11211)
-    try:
-        memcached_host, memcached_port = pick_endpoint(
-            memcached_primary,
-            memcached_secondary,
+    if profile_enabled("valkey"):
+        valkey_issue = unavailable.pop("valkey", None)
+        if valkey_issue:
+            pytest.fail(f"Valkey sidecar unavailable: {valkey_issue}")
+        valkey_primary = ("127.0.0.1", valkey_host_port)
+        valkey_secondary = container_endpoint_factory(project_name, "valkey", 6379)
+        valkey_host, valkey_port = pick_endpoint(
+            valkey_primary,
+            valkey_secondary,
             primary_retries=30,
             secondary_retries=30,
         )
-    except RuntimeError as exc:
-        pytest.fail(f"Memcached unreachable: {exc}")
+        check_valkey(valkey_host, valkey_port, read_secret("secrets/valkey_password"))
+
+    if profile_enabled("memcached"):
+        memcached_issue = unavailable.pop("memcached", None)
+        if memcached_issue:
+            warnings.warn(
+                f"Memcached health check reported an issue; continuing with direct probe: {memcached_issue}",
+                RuntimeWarning,
+            )
+        memcached_primary = ("127.0.0.1", memcached_host_port)
+        memcached_secondary = container_endpoint_factory(project_name, "memcached", 11211)
+        try:
+            memcached_host, memcached_port = pick_endpoint(
+                memcached_primary,
+                memcached_secondary,
+                primary_retries=30,
+                secondary_retries=30,
+            )
+        except RuntimeError as exc:
+            pytest.fail(f"Memcached unreachable: {exc}")
+        check_memcached(memcached_host, memcached_port)
 
     pghero_issue = unavailable.pop("pghero", None)
     if pghero_issue:
@@ -868,13 +894,16 @@ def exercise_network_clients(env, app_db, app_user, app_password):
         primary_retries=30,
         secondary_retries=30,
     )
+    pghero_user = env_values.get("PGHERO_USER", "admin")
+    pghero_password = env_values.get("PGHERO_PASSWORD", "change_me")
+    check_pghero(pghero_host, pghero_port, pghero_user, pghero_password)
 
-    pgbouncer_available = "pgbouncer" not in unavailable
-    if not pgbouncer_available:
+    pgbouncer_available = profile_enabled("pgbouncer") and "pgbouncer" not in unavailable
+    if not pgbouncer_available and profile_enabled("pgbouncer"):
         warnings.warn(
             f"Skipping PgBouncer checks: {unavailable['pgbouncer']}", RuntimeWarning
         )
-    else:
+    if pgbouncer_available:
         pgbouncer_primary = ("127.0.0.1", pgbouncer_host_port)
         pgbouncer_secondary = container_endpoint_factory(project_name, "pgbouncer", 6432)
         pgbouncer_host, pgbouncer_port = pick_endpoint(
@@ -884,7 +913,6 @@ def exercise_network_clients(env, app_db, app_user, app_password):
             secondary_retries=30,
         )
 
-    if pgbouncer_available:
         with psycopg.connect(
             host=pgbouncer_host,
             port=pgbouncer_port,
@@ -929,34 +957,6 @@ def exercise_network_clients(env, app_db, app_user, app_password):
                 cur.execute("SHOW STATS;")
                 stats_rows = cur.fetchall()
         assert any(row[0] == app_db for row in stats_rows)
-
-    valkey_password = read_secret("secrets/valkey_password")
-    check_valkey(valkey_host, valkey_port, valkey_password)
-    check_memcached(memcached_host, memcached_port)
-
-    pghero_user = env_values.get("PGHERO_USER", "admin")
-    pghero_password = env_values.get("PGHERO_PASSWORD", "change_me")
-    try:
-        check_pghero(pghero_host, pghero_port, pghero_user, pghero_password)
-    except RuntimeError as exc:
-        if project_name:
-            container = container_name(project_name, "pghero")
-            logs = subprocess.run(
-                ["docker", "logs", container], capture_output=True, text=True
-            )
-            if logs.stdout:
-                print("[pghero logs]\n", logs.stdout)
-            if logs.stderr:
-                print("[pghero stderr]\n", logs.stderr)
-        raise
-
-    valkey_password = read_secret("secrets/valkey_password")
-    check_valkey(valkey_host, valkey_port, valkey_password)
-    check_memcached(memcached_host, memcached_port)
-
-    pghero_user = env_values.get("PGHERO_USER", "admin")
-    pghero_password = env_values.get("PGHERO_PASSWORD", "change_me")
-    check_pghero(pghero_host, pghero_port, pghero_user, pghero_password)
 
 
 def test_full_workflow(manage_env):
