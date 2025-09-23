@@ -1042,6 +1042,7 @@ def test_full_workflow(manage_env):
     memcached_stats = daily_dir / "memcached-stats.txt"
     if memcached_stats.exists():
         assert memcached_stats.stat().st_size > 0
+        memcached_stats.read_text()
     pgbadger_html = daily_dir / "pgbadger.html"
     assert pgbadger_html.exists() and pgbadger_html.stat().st_size > 0
 
