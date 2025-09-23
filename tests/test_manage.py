@@ -219,7 +219,6 @@ class GraphQLServer:
         self._thread.join(timeout=5)
 
 
-
 def read_secret(relative_path):
     return (ROOT / relative_path).read_text().strip()
 
