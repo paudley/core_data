@@ -70,7 +70,7 @@ echo "[daily] capturing optional cache / pool services"
 if compose_has_service valkey; then
   echo "[daily]  -> valkey snapshot"
   if compose exec -T valkey sh -c "test -r /run/secrets/valkey_password"; then
-    if compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb && valkey-cli --passfile /run/secrets/valkey_password --rdb /tmp/core_data_valkey.rdb"; then
+    if compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb && VALKEY_PASS=\$(cat /run/secrets/valkey_password) valkey-cli -a \"\${VALKEY_PASS}\" --rdb /tmp/core_data_valkey.rdb"; then
       if compose exec -T valkey sh -c "test -f /tmp/core_data_valkey.rdb"; then
         compose exec -T valkey sh -c "cat /tmp/core_data_valkey.rdb" > "${HOST_TARGET_DIR}/valkey-dump.rdb" || true
         compose exec -T valkey sh -c "rm -f /tmp/core_data_valkey.rdb" || true
@@ -81,7 +81,7 @@ if compose_has_service valkey; then
     else
       echo "[daily] WARNING: valkey-cli --rdb failed" >&2
     fi
-    compose exec -T valkey sh -c "valkey-cli --passfile /run/secrets/valkey_password info" > "${HOST_TARGET_DIR}/valkey-info.txt" || true
+    compose exec -T valkey sh -c "VALKEY_PASS=\$(cat /run/secrets/valkey_password) valkey-cli -a \"\${VALKEY_PASS}\" info" > "${HOST_TARGET_DIR}/valkey-info.txt" || true
     if [[ -f "${HOST_TARGET_DIR}/valkey-info.txt" ]]; then
       chmod 0600 "${HOST_TARGET_DIR}/valkey-info.txt" || true
     fi
@@ -127,7 +127,7 @@ if compose_has_service memcached; then
 fi
 
 echo "[daily] dumping databases into ${CONTAINER_TARGET_DIR}"
-databases=$(pg_exec bash -lc "psql --tuples-only --no-align --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' -c \"SELECT datname FROM pg_database WHERE datistemplate = false;\"")
+databases=$(postgres_exec_with_auth bash -lc "psql --tuples-only --no-align --dbname='${POSTGRES_DB:-postgres}' --username='${POSTGRES_SUPERUSER:-postgres}' -c \"SELECT datname FROM pg_database WHERE datistemplate = false;\"")
 while IFS= read -r db; do
   [[ -z "$db" ]] && continue
   outfile="${CONTAINER_TARGET_DIR}/${db}-$(date +%Y%m%d%H%M%S).dump.gz"

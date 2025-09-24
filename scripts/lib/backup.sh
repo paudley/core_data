@@ -132,7 +132,7 @@ verify_latest_backup() {
       -v "${restore_dir}:/var/lib/postgresql/data" \
       -v "${config_dir}:/etc/pgbackrest:ro" \
       "${image}" \
-      bash -lc "set -euo pipefail; pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main --delta --target=name=latest restore; pg_verify_checksums -D /var/lib/postgresql/data >/dev/null"; then
+      bash -lc "set -euo pipefail; pgbackrest --config=/etc/pgbackrest/pgbackrest.conf --stanza=main --delta --type=name --target=name=latest restore; pg_verify_checksums -D /var/lib/postgresql/data >/dev/null"; then
     echo "[backup] Backup verification failed." >&2
     rm -rf "${restore_dir}" "${config_dir}"
     return 1

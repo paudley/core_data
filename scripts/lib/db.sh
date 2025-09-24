@@ -47,6 +47,21 @@ END
 SQL
 }
 
+# grant_db_owner_privileges ensures the owner can manage objects in the public schema.
+grant_db_owner_privileges() {
+  local db=$1
+  local owner=$2
+  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<SQL
+GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${owner}";
+GRANT USAGE, CREATE ON SCHEMA public TO "${owner}";
+GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${owner}";
+GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${owner}";
+ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "${owner}";
+ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "${owner}";
+SQL
+}
+
 # cmd_create_db ensures the owner exists, creates the database, and bootstraps extensions.
 cmd_create_db() {
   ensure_env
@@ -75,6 +90,7 @@ SQL
       --command "CREATE DATABASE \"${db}\" OWNER \"${owner}\";"
   fi
   bootstrap_database "${db}"
+  grant_db_owner_privileges "${db}" "${owner}"
   schedule_pg_squeeze_job "${db}"
 }
 

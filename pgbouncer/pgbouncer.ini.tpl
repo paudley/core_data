@@ -22,5 +22,5 @@ tls_mode = disable
 unix_socket_dir = /tmp
 client_tls_sslmode = disable
 server_tls_sslmode = disable
-logfile = /var/log/pgbouncer/pgbouncer.log
-pidfile = /var/run/pgbouncer/pgbouncer.pid
+logfile = ${PGBOUNCER_LOG_DIR}/pgbouncer.log
+pidfile = ${PGBOUNCER_RUN_DIR}/pgbouncer.pid
