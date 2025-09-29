@@ -175,6 +175,7 @@ Commands:
                               graph, and routing extensions.
   async-queue bootstrap [--db DB] [--schema NAME]
                              Install the lightweight async queue schema/functions.
+  service-urls               Print connection URLs for local services using external host IP.
   partman-maintenance [--db DB]
                              Run partman.run_maintenance_proc() in the target database.
   partman-show-config [--db DB] [--parent schema.table]
@@ -226,6 +227,90 @@ Commands:
      --container-root <path>  Container path mapped to root (default /backups/daily)
   help                        Show this help.
 USAGE
+}
+
+detect_external_ip() {
+  if [[ -n "${CORE_DATA_EXTERNAL_IP:-}" ]]; then
+    printf '%s\n' "${CORE_DATA_EXTERNAL_IP}"
+    return
+  fi
+
+  local candidate
+
+  if command -v hostname >/dev/null 2>&1; then
+    candidate=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1 || true)
+    if [[ -n "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  fi
+
+  if command -v ip >/dev/null 2>&1; then
+    candidate=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
+    if [[ -n "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  fi
+
+  printf '%s\n' "127.0.0.1"
+}
+
+cmd_service_urls() {
+  ensure_env
+
+  local host_ip
+  host_ip=$(detect_external_ip)
+
+  load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+  load_secret_from_file VALKEY_PASSWORD
+  load_secret_from_file PGBOUNCER_STATS_PASSWORD
+  load_secret_from_file PGHERO_PASSWORD
+
+  local db_name=${POSTGRES_DB:-postgres}
+  local db_user=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
+  local db_port=${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}
+  local db_password=${POSTGRES_SUPERUSER_PASSWORD:-}
+
+  local valkey_port=${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}
+  local valkey_password=${VALKEY_PASSWORD:-}
+
+  local memcached_port=${MEMCACHED_PORT:-11211}
+
+  local pgbouncer_stats_user=${PGBOUNCER_STATS_USER:-pgbouncer_stats}
+  local pgbouncer_stats_password=${PGBOUNCER_STATS_PASSWORD:-}
+  local pgbouncer_admin_db=pgbouncer
+
+  local pghero_port=${PGHERO_PORT:-8080}
+  local pghero_user=${PGHERO_USER:-admin}
+  local pghero_password=${PGHERO_PASSWORD:-}
+
+  printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+    "${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
+
+  printf 'PGBOUNCER_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+    "${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
+
+  if [[ -n "${pgbouncer_stats_password}" ]]; then
+    printf 'PGBOUNCER_ADMIN_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+      "${pgbouncer_stats_user}" "${pgbouncer_stats_password}" "${host_ip}" "${db_port}" "${pgbouncer_admin_db}"
+  fi
+
+  if [[ -n "${valkey_password}" ]]; then
+    printf 'VALKEY_URL=redis://:%s@%s:%s/0\n' \
+      "${valkey_password}" "${host_ip}" "${valkey_port}"
+  else
+    printf 'VALKEY_URL=redis://%s:%s/0\n' "${host_ip}" "${valkey_port}"
+  fi
+
+  printf 'MEMCACHED_URL=memcached://%s:%s\n' "${host_ip}" "${memcached_port}"
+
+  if [[ -n "${pghero_password}" ]]; then
+    printf 'PGHERO_URL=http://%s:%s@%s:%s/\n' \
+      "${pghero_user}" "${pghero_password}" "${host_ip}" "${pghero_port}"
+  else
+    printf 'PGHERO_URL=http://%s:%s/\n' "${host_ip}" "${pghero_port}"
+  fi
 }
 
 cmd_apparmor_load() {
@@ -1010,6 +1095,9 @@ USAGE
     ;;
   memcached-stats)
     cmd_memcached_stats
+    ;;
+  service-urls)
+    cmd_service_urls
     ;;
   seccomp-status)
     cmd_seccomp_status "$@"
