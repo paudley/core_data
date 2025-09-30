@@ -12,6 +12,7 @@ CORE_EXTENSION_LIST=(
   dblink
   hstore
   fuzzystrmatch
+  bloom
   pg_buffercache
   pg_cron
   pg_partman

@@ -32,9 +32,9 @@ services:
         "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}"
       ]
     volumes:
-      - pgdata:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
-      - pgwal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
-      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
+      - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
+      - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
+      - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
     networks:
       - core_data
     logging: *logging_defaults
@@ -86,9 +86,9 @@ services:
       POSTGRES_SSL_SELF_SIGNED_DAYS: ${POSTGRES_SSL_SELF_SIGNED_DAYS}
       POSTGRES_INITDB_WALDIR: /var/lib/postgresql/wal
     volumes:
-      - pgdata:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
-      - pgwal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
-      - pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
+      - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
+      - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
+      - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./backups:/backups
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
@@ -192,7 +192,7 @@ services:
       VALKEY_PASSWORD_FILE: /run/secrets/valkey_password
     command: ["/opt/core_data/valkey-entrypoint.sh"]
     volumes:
-      - valkey_data:/data
+      - ./data/valkey_data:/data
       - ./valkey/entrypoint.sh:/opt/core_data/valkey-entrypoint.sh:ro
       - ./secrets/valkey_password:/run/secrets/valkey_password:ro
     networks:
@@ -213,7 +213,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
       - "${CORE_DATA_APPARMOR_PGBOUNCER:-apparmor:unconfined}"
-    image: bitnami/pgbouncer:1.23.0
+    image: bitnamilegacy/pgbouncer:1.23.0
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
     profiles:
@@ -293,9 +293,3 @@ networks:
     ipam:
       config:
         - subnet: ${DOCKER_NETWORK_SUBNET}
-
-volumes:
-  pgdata:
-  pgwal:
-  pgbackrest:
-  valkey_data:
