@@ -213,7 +213,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
       - "${CORE_DATA_APPARMOR_PGBOUNCER:-apparmor:unconfined}"
-    image: bitnami/pgbouncer:1.23.0
+    image: bitnamilegacy/pgbouncer:1.23.0
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
     profiles:
