@@ -178,7 +178,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
       - "${CORE_DATA_APPARMOR_VALKEY:-apparmor:unconfined}"
-    image: valkey/valkey:7-alpine
+    image: valkey/valkey:8-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
     profiles:
