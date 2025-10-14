@@ -176,6 +176,23 @@ printf '%s\n' "${pgbouncer_stats_password}" > "${pgbouncer_stats_secret}"
 chmod 0600 "${pgbouncer_stats_secret}" || true
 set_env_value PGBOUNCER_STATS_PASSWORD_FILE "./secrets/pgbouncer_stats_password"
 
+rabbitmq_pass_secret="${secret_dir}/rabbitmq_default_pass"
+rabbitmq_pass_default="$(generate_password)"
+rabbitmq_password="$(prompt_secret "RabbitMQ default user password (written to secrets/rabbitmq_default_pass)" "${rabbitmq_pass_default}")"
+printf '%s\n' "${rabbitmq_password}" > "${rabbitmq_pass_secret}"
+chmod 0600 "${rabbitmq_pass_secret}" || true
+set_env_value RABBITMQ_DEFAULT_PASS_FILE "./secrets/rabbitmq_default_pass"
+
+rabbitmq_cookie_secret="${secret_dir}/rabbitmq_erlang_cookie"
+rabbitmq_cookie_default="$(generate_password | tr -dc 'A-Za-z0-9' | head -c 32)"
+if [[ -z ${rabbitmq_cookie_default} ]]; then
+  rabbitmq_cookie_default="CORE${RANDOM}DATA${RANDOM}"
+fi
+rabbitmq_cookie="$(prompt_secret "RabbitMQ Erlang cookie (written to secrets/rabbitmq_erlang_cookie)" "${rabbitmq_cookie_default}")"
+printf '%s\n' "${rabbitmq_cookie}" > "${rabbitmq_cookie_secret}"
+chmod 0600 "${rabbitmq_cookie_secret}" || true
+set_env_value RABBITMQ_ERLANG_COOKIE_FILE "./secrets/rabbitmq_erlang_cookie"
+
 # UID/GID alignment (default to current host user)
 user_uid=$(id -u)
 user_gid=$(id -g)

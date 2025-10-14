@@ -79,14 +79,15 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 - **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
-- **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
-- **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, `pghero.json`). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
+- **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached,rabbitmq` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
+- **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, `pghero.json`, plus `docker-default.json` reused for RabbitMQ). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
 - **AppArmor (opt-in).** Minimal profiles live in `apparmor/core_data_minimal.profile`. Load them with `./scripts/manage.sh apparmor-load` (sudo), then set `CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal` in `.env` for each service you want to confine. The profile denies access to high-value host paths (`/root`, `/etc/shadow`, Docker socket) while leaving normal container paths alone.
 
 ### Service Add-ons
 - **ValKey** — Requires authentication by default (`valkey_password` secret), persists to the `valkey_data` volume (`appendonly yes`), exposes `valkey-cli`/`valkey-bgsave`, and is tuned via `.env` knobs such as `VALKEY_MAXMEMORY` and `VALKEY_MAXMEMORY_POLICY`.
 - **PgBouncer** — Uses SCRAM auth backed by a dedicated superuser, renders config/userlist from templates, and offers `pgbouncer-stats` / `pgbouncer-pools` helpers. Pool sizing and admin/stat users are driven by the `PGBOUNCER_*` variables.
 - **Memcached** — Lightweight hot cache with configurable memory, connection, and thread limits (`MEMCACHED_*`). The `memcached-stats` helper pipes `stats` output for quick validation. All services stay on the internal bridge network by default.
+- **RabbitMQ** — Delivers AMQP 0.9.1 alongside the management API. Credentials and cluster identity come from `secrets/rabbitmq_default_pass` and `secrets/rabbitmq_erlang_cookie`; daily maintenance captures definitions/status snapshots, and on-demand helpers (`rabbitmq-ctl`, `rabbitmq-diagnostics`, `rabbitmq-export`, `rabbitmq-overview`) streamline broker admin.
 
 ## Project Layout
 ```
@@ -138,6 +139,10 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `partman-create-parent` | Wrap `create_parent` to bootstrap managed partitions without manual SQL. |
 | `valkey-cli` | Run `valkey-cli` inside the ValKey container with secrets wired in. |
 | `valkey-bgsave` | Trigger `BGSAVE` so the ValKey RDB is flushed to the `valkey_data` volume. |
+| `rabbitmq-ctl` | Execute `rabbitmqctl` inside the RabbitMQ container (requires the rabbitmq profile). |
+| `rabbitmq-diagnostics` | Run `rabbitmq-diagnostics` commands such as `status` or `check_running`. |
+| `rabbitmq-export` | Export broker definitions to JSON (defaults to `./backups/rabbitmq-definitions.json`). |
+| `rabbitmq-overview` | Print the summary from `rabbitmq-diagnostics status`. |
 | `pgbouncer-stats` / `pgbouncer-pools` | Emit PgBouncer `SHOW STATS` / `SHOW POOLS` via the admin console. |
 | `memcached-stats` | Fetch `stats` output from the Memcached service. |
 | `version-status` | Compare installed Postgres/extension versions with upstream releases (CSV via `--output`). |

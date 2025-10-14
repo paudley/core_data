@@ -36,6 +36,8 @@ source "${SCRIPT_DIR}/lib/valkey.sh"
 source "${SCRIPT_DIR}/lib/pgbouncer.sh"
 # shellcheck source=scripts/lib/memcached.sh
 source "${SCRIPT_DIR}/lib/memcached.sh"
+# shellcheck source=scripts/lib/rabbitmq.sh
+source "${SCRIPT_DIR}/lib/rabbitmq.sh"
 # shellcheck source=scripts/lib/seccomp.sh
 source "${SCRIPT_DIR}/lib/seccomp.sh"
 # shellcheck source=scripts/lib/test_dataset.sh
@@ -189,6 +191,11 @@ Commands:
                              schema.table control_column interval).
   valkey-cli [args]           Run valkey-cli within the ValKey service (auth handled automatically).
   valkey-bgsave               Trigger a ValKey background save (RDB written under valkey_data volume).
+  rabbitmq-ctl [args]         Run rabbitmqctl inside the RabbitMQ container.
+  rabbitmq-diagnostics [args] Run rabbitmq-diagnostics inside the RabbitMQ container.
+  rabbitmq-export [--output PATH]
+                             Export RabbitMQ definitions to host (JSON).
+  rabbitmq-overview           Show rabbitmq-diagnostics status summary.
   pgbouncer-stats             Execute SHOW STATS via PgBouncer admin console.
   pgbouncer-pools             Execute SHOW POOLS via PgBouncer admin console.
   memcached-stats             Dump Memcached stats using nc.
@@ -266,6 +273,7 @@ cmd_service_urls() {
   load_secret_from_file VALKEY_PASSWORD
   load_secret_from_file PGBOUNCER_STATS_PASSWORD
   load_secret_from_file PGHERO_PASSWORD
+  load_secret_from_file RABBITMQ_DEFAULT_PASS
 
   local db_name=${POSTGRES_DB:-postgres}
   local db_user=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
@@ -276,6 +284,11 @@ cmd_service_urls() {
   local valkey_password=${VALKEY_PASSWORD:-}
 
   local memcached_port=${MEMCACHED_PORT:-11211}
+
+  local rabbitmq_user=${RABBITMQ_DEFAULT_USER:-coredata}
+  local rabbitmq_password=${RABBITMQ_DEFAULT_PASS:-}
+  local rabbitmq_port=${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}
+  local rabbitmq_mgmt_port=${RABBITMQ_MANAGEMENT_HOST_PORT:-${RABBITMQ_MANAGEMENT_PORT:-15672}}
 
   local pgbouncer_stats_user=${PGBOUNCER_STATS_USER:-pgbouncer_stats}
   local pgbouncer_stats_password=${PGBOUNCER_STATS_PASSWORD:-}
@@ -304,6 +317,16 @@ cmd_service_urls() {
   fi
 
   printf 'MEMCACHED_URL=memcached://%s:%s\n' "${host_ip}" "${memcached_port}"
+
+  if [[ -n "${rabbitmq_password}" ]]; then
+    printf 'RABBITMQ_URL=amqp://%s:%s@%s:%s/\n' \
+      "${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_port}"
+    printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s@%s:%s/\n' \
+      "${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_mgmt_port}"
+  else
+    printf 'RABBITMQ_URL=amqp://%s:%s/\n' "${host_ip}" "${rabbitmq_port}"
+    printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s/\n' "${host_ip}" "${rabbitmq_mgmt_port}"
+  fi
 
   if [[ -n "${pghero_password}" ]]; then
     printf 'PGHERO_URL=http://%s:%s@%s:%s/\n' \
@@ -1086,6 +1109,18 @@ USAGE
     ;;
   valkey-bgsave)
     cmd_valkey_bgsave
+    ;;
+  rabbitmq-ctl)
+    cmd_rabbitmq_ctl "$@"
+    ;;
+  rabbitmq-diagnostics)
+    cmd_rabbitmq_diagnostics "$@"
+    ;;
+  rabbitmq-export)
+    cmd_rabbitmq_export "$@"
+    ;;
+  rabbitmq-overview)
+    cmd_rabbitmq_overview "$@"
     ;;
   pgbouncer-stats)
     cmd_pgbouncer_stats

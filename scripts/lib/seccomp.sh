@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached pghero)
+SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached pghero rabbitmq)
 SEC_COMP_PROFILE_DIR=${SEC_COMP_PROFILE_DIR:-${ROOT_DIR}/seccomp}
 SEC_COMP_DEFAULT_PROFILE=${SEC_COMP_DEFAULT_PROFILE:-${SEC_COMP_PROFILE_DIR}/docker-default.json}
 SEC_COMP_TRACE_DIR=${SEC_COMP_TRACE_DIR:-${SEC_COMP_PROFILE_DIR}/traces}
@@ -16,6 +16,7 @@ declare -A SEC_COMP_SERVICE_DEFAULT_SPEC=(
   [valkey]='seccomp:./seccomp/valkey.json'
   [memcached]='seccomp:./seccomp/memcached.json'
   [pghero]='seccomp:./seccomp/pghero.json'
+  [rabbitmq]='seccomp:./seccomp/docker-default.json'
 )
 
 MANDATORY_SYSCALLS=(

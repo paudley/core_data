@@ -67,6 +67,43 @@ chmod 0777 "${HOST_TARGET_DIR}"
 
 echo "[daily] capturing optional cache / pool services"
 
+if compose_has_service rabbitmq; then
+  echo "[daily]  -> rabbitmq snapshot"
+  # shellcheck disable=SC2016
+  if compose exec -T rabbitmq sh -c '
+    PASS=$(tr -d " \r\n" </run/secrets/rabbitmq_default_pass 2>/dev/null || echo "")
+    USER=${RABBITMQ_DEFAULT_USER:-coredata}
+    PORT=${RABBITMQ_MANAGEMENT_PORT:-15672}
+    if [ -z "$PASS" ]; then
+      echo "[daily] missing RabbitMQ secret" >&2
+      exit 1
+    fi
+    AUTH=$(printf "%s:%s" "$USER" "$PASS" | base64)
+    wget --quiet --header "Authorization: Basic $AUTH" -O - "http://127.0.0.1:${PORT}/api/definitions"
+  ' > "${HOST_TARGET_DIR}/rabbitmq-definitions.json"; then
+    chmod 0600 "${HOST_TARGET_DIR}/rabbitmq-definitions.json" 2>/dev/null || true
+  else
+    echo "[daily] WARNING: RabbitMQ definitions export failed." >&2
+    rm -f "${HOST_TARGET_DIR}/rabbitmq-definitions.json" 2>/dev/null || true
+  fi
+  # shellcheck disable=SC2016
+  if compose exec -T rabbitmq sh -c '
+    PASS=$(tr -d " \r\n" </run/secrets/rabbitmq_default_pass 2>/dev/null || echo "")
+    USER=${RABBITMQ_DEFAULT_USER:-coredata}
+    PORT=${RABBITMQ_MANAGEMENT_PORT:-15672}
+    if [ -z "$PASS" ]; then
+      exit 1
+    fi
+    AUTH=$(printf "%s:%s" "$USER" "$PASS" | base64)
+    wget --quiet --header "Authorization: Basic $AUTH" -O - "http://127.0.0.1:${PORT}/api/health/checks/node"
+  ' > "${HOST_TARGET_DIR}/rabbitmq-status.txt"; then
+    chmod 0600 "${HOST_TARGET_DIR}/rabbitmq-status.txt" 2>/dev/null || true
+  else
+    echo "[daily] WARNING: RabbitMQ status snapshot failed." >&2
+    rm -f "${HOST_TARGET_DIR}/rabbitmq-status.txt" 2>/dev/null || true
+  fi
+fi
+
 if compose_has_service valkey; then
   echo "[daily]  -> valkey snapshot"
   if compose exec -T valkey sh -c "test -r /run/secrets/valkey_password"; then

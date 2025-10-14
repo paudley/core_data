@@ -75,7 +75,7 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `DOCKER_NETWORK_NAME` | Name for the dedicated bridge network. | `core_data_network` |
 | `DOCKER_NETWORK_SUBNET` | Subnet allocated to the bridge network; also rendered into `pg_hba.conf`. | `172.25.0.0/16` |
 | `TZ` | Time zone shared by containers and rendered into `postgresql.conf`. | `UTC` |
-| `COMPOSE_PROFILES` | Comma-separated Docker Compose profiles to start (`valkey`, `pgbouncer`, `memcached`). | `valkey,pgbouncer,memcached` |
+| `COMPOSE_PROFILES` | Comma-separated Docker Compose profiles to start (`valkey`, `pgbouncer`, `memcached`, `rabbitmq`). | `valkey,pgbouncer,memcached,rabbitmq` |
 | `LOGICAL_BACKUP_INTERVAL_SECONDS` | Frequency of logical backup sidecar runs. | `86400` |
 | `LOGICAL_BACKUP_RETENTION_DAYS` | Days to retain logical backups before pruning. | `7` |
 | `LOGICAL_BACKUP_EXCLUDE` | Comma-separated database names the sidecar should skip. | `postgres` |
@@ -91,6 +91,11 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `PGBOUNCER_MAX_CLIENT_CONN` / `PGBOUNCER_DEFAULT_POOL_SIZE` | Client cap and per-database pool size. | `200` / `20` |
 | `MEMCACHED_PORT` | Host port exposing Memcached. | `11211` |
 | `MEMCACHED_MEMORY_MB` / `MEMCACHED_THREADS` | Memcached memory budget (MB) and worker threads. | `128` / `4` |
+| `RABBITMQ_PORT` / `RABBITMQ_HOST_PORT` | Internal/host AMQP port bindings. | `5672` |
+| `RABBITMQ_MANAGEMENT_PORT` / `RABBITMQ_MANAGEMENT_HOST_PORT` | Internal/host HTTP management bindings. | `15672` |
+| `RABBITMQ_DEFAULT_USER` | Default RabbitMQ login created at startup. | `coredata` |
+| `RABBITMQ_DEFAULT_PASS_FILE` | Secret file containing the default user password. | `./secrets/rabbitmq_default_pass` |
+| `RABBITMQ_ERLANG_COOKIE_FILE` | Secret file containing the Erlang cookie for clustering/CLI auth. | `./secrets/rabbitmq_erlang_cookie` |
 
 > **Note:** Named volumes (`pgdata`, `pgwal`, `pgbackrest`) back PGDATA, WAL, and the archive by default. Set `PG_DATA_DIR` / `PG_WAL_DIR` if you intentionally revert to bind mounts for those paths.
 
@@ -99,6 +104,7 @@ Compose profiles expose supporting services on demand:
 - `valkey` profile turns on ValKey with append-only persistence, password enforcement, and CLI helpers.
 - `pgbouncer` profile launches PgBouncer with SCRAM auth, config templating, and the admin/stats helpers wired through `manage.sh`.
 - `memcached` profile adds a Memcached cache sized via the `MEMCACHED_*` knobs.
+- `rabbitmq` profile enables RabbitMQ with the management plugin, credentials sourced from secrets, daily definition exports, and CLI helpers.
 
 Adjust `COMPOSE_PROFILES` in `.env` to remove profiles you don't need without editing `docker-compose.yml`.
 

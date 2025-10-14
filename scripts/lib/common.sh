@@ -57,6 +57,8 @@ load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
 load_secret_from_file VALKEY_PASSWORD
 load_secret_from_file PGBOUNCER_AUTH_PASSWORD
 load_secret_from_file PGBOUNCER_STATS_PASSWORD
+load_secret_from_file RABBITMQ_DEFAULT_PASS
+load_secret_from_file RABBITMQ_ERLANG_COOKIE
 
 compose_exec_service() {
   local service=$1
