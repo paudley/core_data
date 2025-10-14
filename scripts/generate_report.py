@@ -29,7 +29,11 @@ SECTION_FILES: List[Tuple[str, str]] = [
     ("PgBouncer Stats", "pgbouncer-stats.csv"),
     ("PgBouncer Pools", "pgbouncer-pools.csv"),
     ("Memcached Stats", "memcached-stats.txt"),
+    ("RabbitMQ Status", "rabbitmq-status.txt"),
+    ("RabbitMQ Definitions", "rabbitmq-definitions.json"),
 ]
+
+TEXT_SUFFIXES = {".txt", ".json"}
 
 
 def load_csv(
@@ -96,7 +100,7 @@ def main() -> int:
         path = args.input / filename
         if not path.exists():
             continue
-        if path.suffix == ".txt":
+        if path.suffix in TEXT_SUFFIXES:
             content = render_text(path)
             sections.append(
                 f"<section><h2>{html.escape(title)}</h2>{content}</section>"

@@ -19,6 +19,7 @@ Dropping Linux capabilities is our default posture for long-running services. We
 | `pgbouncer` | `cap_drop: [ALL]` | Bitnami image drops root privileges internally; connection pooling works without additional capabilities. |
 | `valkey` | `cap_drop: [ALL]` | Alpine ValKey container operates entirely in user space; health checks succeed under the drop. |
 | `memcached` | `cap_drop: [ALL]` | Uses standard TCP sockets and in-memory storage; no capabilities needed. |
+| `rabbitmq` | `cap_drop: [ALL]` | Official RabbitMQ image runs as the `rabbitmq` user; management/AMQP traffic works without elevated privileges. |
 | `volume_prep` | uses Docker defaults | Runs as `root` solely to chown initial volumes before other services start. We leave it outside the anchor because it needs short-lived filesystem ownership privileges and exits immediately after preparation. |
 
 If a future service genuinely needs a capability, document the syscall failure, add the minimum `cap_add` entry with justification, and update this matrix plus the automated test coverage.
@@ -43,6 +44,7 @@ Each long-lived container enables a seccomp profile via `security_opt`. The repo
 | valkey | `seccomp/valkey.json` |
 | memcached | `seccomp/memcached.json` |
 | pghero | `seccomp/pghero.json` |
+| rabbitmq | `seccomp/docker-default.json` |
 
 Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
 

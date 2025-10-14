@@ -16,6 +16,7 @@ import subprocess
 import threading
 import time
 import urllib.error
+from urllib.parse import quote
 import urllib.request
 import uuid
 import warnings
@@ -232,9 +233,11 @@ def manage_env(tmp_path_factory):
     valkey_host_port = _find_free_port()
     pgbouncer_host_port = _find_free_port()
     memcached_port = _find_free_port()
+    rabbitmq_port = _find_free_port()
+    rabbitmq_mgmt_port = _find_free_port()
 
     compose_profiles = os.environ.get(
-        "TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached"
+        "TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached,rabbitmq"
     )
 
     subnet_a = int(uuid.uuid4().hex[:2], 16)
@@ -248,6 +251,8 @@ def manage_env(tmp_path_factory):
         "VALKEY_HOST_PORT": str(valkey_host_port),
         "PGBOUNCER_HOST_PORT": str(pgbouncer_host_port),
         "MEMCACHED_PORT": str(memcached_port),
+        "RABBITMQ_HOST_PORT": str(rabbitmq_port),
+        "RABBITMQ_MANAGEMENT_HOST_PORT": str(rabbitmq_mgmt_port),
         "POSTGRES_UID": str(os.getuid()),
         "POSTGRES_GID": str(os.getgid()),
         "POSTGRES_RUNTIME_HOME": "/home/postgres",
@@ -275,6 +280,55 @@ def manage_env(tmp_path_factory):
 
     managed_secrets = []
 
+    data_root = ROOT / "data"
+    data_paths = [
+        data_root / "postgres_data",
+        data_root / "postgres_wal",
+        data_root / "pgbackrest",
+        data_root / "pgbackrest_repo",
+        data_root / "rabbitmq_data",
+    ]
+    data_backup_root = data_root / ".pytest_backups"
+    data_backup_root.mkdir(parents=True, exist_ok=True)
+    managed_data_dirs = []
+
+    def busybox_volume_command(command: str) -> None:
+        subprocess.run(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{data_root.resolve()}:/data",
+                "busybox",
+                "sh",
+                "-c",
+                command,
+            ],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    def backup_data_dir(path: Path):
+        rel = path.relative_to(data_root)
+        backup_name = f"{rel.name}_{uuid.uuid4().hex}"
+        command = (
+            f"if [ -e /data/{rel} ]; then "
+            "mkdir -p /data/.pytest_backups && "
+            f"mv /data/{rel} /data/.pytest_backups/{backup_name}; "
+            "fi"
+        )
+        busybox_volume_command(command)
+        return data_backup_root / backup_name
+
+    for data_path in data_paths:
+        backup_entry = None
+        if data_path.exists():
+            backup_entry = backup_data_dir(data_path)
+        data_path.mkdir(parents=True, exist_ok=True)
+        managed_data_dirs.append((data_path, backup_entry))
+
     def seed_secret(relative_path):
         path = ROOT / relative_path
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -289,6 +343,8 @@ def manage_env(tmp_path_factory):
     seed_secret("secrets/valkey_password")
     seed_secret("secrets/pgbouncer_auth_password")
     seed_secret("secrets/pgbouncer_stats_password")
+    seed_secret("secrets/rabbitmq_default_pass")
+    seed_secret("secrets/rabbitmq_erlang_cookie")
 
     backups_link = ROOT / "backups"
     had_existing_backups = backups_link.exists() or backups_link.is_symlink()
@@ -335,7 +391,7 @@ def manage_env(tmp_path_factory):
         check=True,
     )
     compose_config = json.loads(config_result.stdout)
-    for service in ["postgres", "pghero", "pgbouncer", "logical_backup", "valkey", "memcached"]:
+    for service in ["postgres", "pghero", "pgbouncer", "logical_backup", "valkey", "memcached", "rabbitmq"]:
         service_config = compose_config["services"].get(service)
         if not service_config:
             continue
@@ -390,6 +446,16 @@ def manage_env(tmp_path_factory):
             repo_env_path.write_bytes(backup_env_bytes)
         else:
             repo_env_path.unlink(missing_ok=True)
+
+    for data_path, backup_entry in managed_data_dirs:
+        rel = data_path.relative_to(data_root)
+        if data_path.exists():
+            busybox_volume_command(f"rm -rf /data/{rel}")
+        if backup_entry is not None:
+            backup_rel = backup_entry.relative_to(data_root)
+            busybox_volume_command(
+                f"mv /data/{backup_rel} /data/{rel}"
+            )
 
 
 def run_manage(env, *args, check=True):
@@ -668,7 +734,7 @@ def assert_service_security(project_name, service):
 
 
 def assert_stack_security(project_name):
-    for service in ("postgres", "pghero", "pgbouncer", "valkey", "memcached"):
+    for service in ("postgres", "pghero", "pgbouncer", "valkey", "memcached", "rabbitmq"):
         if service_running(project_name, service):
             assert_service_security(project_name, service)
 
@@ -741,6 +807,107 @@ def check_memcached(host, port):
         data = sock.recv(256)
         assert b"VALUE e2e_network_check" in data
         assert b"online" in data
+
+
+def rabbitmq_api_request(host, port, username, password, method, path, payload=None, timeout=5):
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    headers = {
+        "Authorization": f"Basic {credentials}",
+        "Content-Type": "application/json",
+    }
+    body = None
+    if payload is not None:
+        body = json.dumps(payload).encode()
+    connection = http.client.HTTPConnection(host, port, timeout=timeout)
+    try:
+        connection.request(method, path, body=body, headers=headers)
+        response = connection.getresponse()
+        data = response.read()
+        return response.status, data
+    finally:
+        connection.close()
+
+
+def check_rabbitmq(amqp_host, amqp_port, http_host, http_port, username, password, retries=30, delay=3):
+    wait_for_port(amqp_host, amqp_port, retries=retries, delay=delay)
+    wait_for_port(http_host, http_port, retries=retries, delay=delay)
+    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    for _ in range(retries):
+        conn = http.client.HTTPConnection(http_host, http_port, timeout=5)
+        try:
+            conn.request(
+                "GET",
+                "/api/overview",
+                headers={"Authorization": f"Basic {credentials}"},
+            )
+            response = conn.getresponse()
+            payload = response.read()
+            if response.status == 200 and b"queue_totals" in payload:
+                return
+        except OSError:
+            pass
+        finally:
+            conn.close()
+        time.sleep(delay)
+    raise RuntimeError("RabbitMQ management API not reachable")
+
+
+def exercise_rabbitmq_messages(http_host, http_port, username, password):
+    queue_name = f"core_data_e2e_{uuid.uuid4().hex[:8]}"
+    queue_encoded = quote(queue_name, safe="")
+    try:
+        status, _ = rabbitmq_api_request(
+            http_host,
+            http_port,
+            username,
+            password,
+            "PUT",
+            f"/api/queues/%2f/{queue_encoded}",
+            {"durable": False, "auto_delete": True},
+        )
+        assert status in {201, 204}, f"queue declare failed (status={status})"
+
+        payload = {
+            "properties": {},
+            "routing_key": queue_name,
+            "payload": "core_data_test_message",
+            "payload_encoding": "string",
+        }
+        status, publish_body = rabbitmq_api_request(
+            http_host,
+            http_port,
+            username,
+            password,
+            "POST",
+            "/api/exchanges/%2f/amq.default/publish",
+            payload,
+        )
+        assert status == 200, f"publish failed (status={status}, body={publish_body!r})"
+        publish_result = json.loads(publish_body.decode())
+        assert publish_result.get("routed") is True, f"publish not routed: {publish_result}"
+
+        status, message_body = rabbitmq_api_request(
+            http_host,
+            http_port,
+            username,
+            password,
+            "POST",
+            f"/api/queues/%2f/{queue_encoded}/get",
+            {"count": 1, "ackmode": "ack_requeue_false", "encoding": "auto"},
+        )
+        assert status == 200, f"get failed (status={status}, body={message_body!r})"
+        messages = json.loads(message_body.decode())
+        assert messages, "expected at least one message from RabbitMQ queue"
+        assert messages[0].get("payload") == "core_data_test_message", messages[0]
+    finally:
+        rabbitmq_api_request(
+            http_host,
+            http_port,
+            username,
+            password,
+            "DELETE",
+            f"/api/queues/%2f/{queue_encoded}",
+        )
 
 
 def check_pghero(host, port, username, password, retries=30, delay=3):
@@ -817,6 +984,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
             "valkey": "valkey",
             "memcached": "memcached",
             "pgbouncer": "pgbouncer",
+            "rabbitmq": "rabbitmq",
         }
         mapped = profile_map.get(sidecar)
         if mapped is None:
@@ -827,7 +995,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
     if project_name:
         ip_addr = container_ip(project_name, "postgres")
         assert ip_addr.count(".") == 3
-        for sidecar in ("pgbouncer", "valkey", "memcached", "pghero"):
+        for sidecar in ("pgbouncer", "valkey", "memcached", "rabbitmq", "pghero"):
             if not profile_enabled(sidecar):
                 continue
             try:
@@ -843,6 +1011,10 @@ def exercise_network_clients(env, app_db, app_user, app_password):
 
     valkey_host_port = resolve_port("VALKEY_HOST_PORT", env_values.get("VALKEY_PORT", "6379"))
     memcached_host_port = resolve_port("MEMCACHED_PORT", "11211")
+    rabbitmq_host_port = resolve_port("RABBITMQ_HOST_PORT", env_values.get("RABBITMQ_PORT", "5672"))
+    rabbitmq_mgmt_host_port = resolve_port(
+        "RABBITMQ_MANAGEMENT_HOST_PORT", env_values.get("RABBITMQ_MANAGEMENT_PORT", "15672")
+    )
     pgbouncer_host_port = resolve_port(
         "PGBOUNCER_HOST_PORT", env_values.get("PGBOUNCER_PORT", "6432")
     )
@@ -881,6 +1053,45 @@ def exercise_network_clients(env, app_db, app_user, app_password):
         except RuntimeError as exc:
             pytest.fail(f"Memcached unreachable: {exc}")
         check_memcached(memcached_host, memcached_port)
+
+    if profile_enabled("rabbitmq"):
+        rabbitmq_issue = unavailable.pop("rabbitmq", None)
+        if rabbitmq_issue:
+            pytest.fail(f"RabbitMQ sidecar unavailable: {rabbitmq_issue}")
+        rabbitmq_primary = ("127.0.0.1", rabbitmq_host_port)
+        rabbitmq_secondary = container_endpoint_factory(project_name, "rabbitmq", 5672)
+        rabbitmq_host, rabbitmq_port = pick_endpoint(
+            rabbitmq_primary,
+            rabbitmq_secondary,
+            primary_retries=30,
+            secondary_retries=30,
+        )
+        rabbitmq_mgmt_primary = ("127.0.0.1", rabbitmq_mgmt_host_port)
+        rabbitmq_mgmt_secondary = container_endpoint_factory(
+            project_name, "rabbitmq", 15672
+        )
+        rabbitmq_mgmt_host, rabbitmq_mgmt_port = pick_endpoint(
+            rabbitmq_mgmt_primary,
+            rabbitmq_mgmt_secondary,
+            primary_retries=30,
+            secondary_retries=30,
+        )
+        rabbitmq_user = env_values.get("RABBITMQ_DEFAULT_USER", "coredata")
+        rabbitmq_password = read_secret("secrets/rabbitmq_default_pass")
+        check_rabbitmq(
+            rabbitmq_host,
+            rabbitmq_port,
+            rabbitmq_mgmt_host,
+            rabbitmq_mgmt_port,
+            rabbitmq_user,
+            rabbitmq_password,
+        )
+        exercise_rabbitmq_messages(
+            rabbitmq_mgmt_host,
+            rabbitmq_mgmt_port,
+            rabbitmq_user,
+            rabbitmq_password,
+        )
 
     pghero_issue = unavailable.pop("pghero", None)
     if pghero_issue:
@@ -1062,6 +1273,13 @@ def test_full_workflow(manage_env):
     memcached_stats = daily_dir / "memcached-stats.txt"
     if memcached_stats.exists():
         assert memcached_stats.stat().st_size > 0
+    rabbitmq_defs = daily_dir / "rabbitmq-definitions.json"
+    if profile_enabled("rabbitmq"):
+        assert rabbitmq_defs.exists()
+        assert rabbitmq_defs.stat().st_size > 0
+    rabbitmq_status = daily_dir / "rabbitmq-status.txt"
+    if rabbitmq_status.exists():
+        assert rabbitmq_status.stat().st_size > 0
     pgbadger_html = daily_dir / "pgbadger.html"
     assert pgbadger_html.exists() and pgbadger_html.stat().st_size > 0
 

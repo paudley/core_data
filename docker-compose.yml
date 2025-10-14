@@ -25,16 +25,20 @@ services:
       PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
+      RABBITMQ_DATA_MOUNT: ${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      RABBITMQ_UID: ${RABBITMQ_UID:-999}
+      RABBITMQ_GID: ${RABBITMQ_GID:-999}
     command:
       [
         "/bin/sh",
         "-c",
-        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}"
+        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT} && chown -R ${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999} $${RABBITMQ_DATA_MOUNT}"
       ]
     volumes:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
+      - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
     networks:
       - core_data
     logging: *logging_defaults
@@ -170,6 +174,12 @@ services:
       - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
     networks:
       - core_data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h $${POSTGRES_HOST:-postgres} -U $${POSTGRES_SUPERUSER:-postgres}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     logging: *logging_defaults
 
   valkey:
@@ -201,6 +211,47 @@ services:
       - "${VALKEY_HOST_PORT}:${VALKEY_PORT}"
     healthcheck:
       test: ["CMD-SHELL", "REDISCLI_AUTH=$(cat /run/secrets/valkey_password) valkey-cli -h 127.0.0.1 -p ${VALKEY_PORT} ping | grep -q PONG"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  rabbitmq:
+    <<: *security_defaults
+    security_opt:
+      - "no-new-privileges:true"
+      - "${CORE_DATA_SECCOMP_RABBITMQ:-seccomp:./seccomp/docker-default.json}"
+      - "${CORE_DATA_APPARMOR_RABBITMQ:-apparmor:unconfined}"
+    image: rabbitmq:3.13-management-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
+    restart: unless-stopped
+    profiles:
+      - rabbitmq
+    user: "${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999}"
+    depends_on:
+      volume_prep:
+        condition: service_completed_successfully
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_default_pass
+      RABBITMQ_ERLANG_COOKIE_FILE: /run/secrets/rabbitmq_erlang_cookie
+      RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS:-}
+      TZ: ${TZ}
+    entrypoint: ["/opt/core_data/rabbitmq-entrypoint.sh"]
+    command: ["rabbitmq-server"]
+    volumes:
+      - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./rabbitmq/entrypoint.sh:/opt/core_data/rabbitmq-entrypoint.sh:ro
+      - ./rabbitmq/healthcheck.sh:/opt/core_data/rabbitmq-healthcheck.sh:ro
+      - ./secrets/rabbitmq_default_pass:/run/secrets/rabbitmq_default_pass:ro
+      - ./secrets/rabbitmq_erlang_cookie:/run/secrets/rabbitmq_erlang_cookie:ro
+    networks:
+      - core_data
+    ports:
+      - "${RABBITMQ_HOST_PORT}:${RABBITMQ_PORT}"
+      - "${RABBITMQ_MANAGEMENT_HOST_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/core_data/rabbitmq-healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 5
