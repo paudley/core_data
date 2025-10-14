@@ -16,7 +16,7 @@ import subprocess
 import threading
 import time
 import urllib.error
-import urllib.parse
+from urllib.parse import quote
 import urllib.request
 import uuid
 import warnings
