@@ -854,7 +854,7 @@ def check_rabbitmq(amqp_host, amqp_port, http_host, http_port, username, passwor
 
 def exercise_rabbitmq_messages(http_host, http_port, username, password):
     queue_name = f"core_data_e2e_{uuid.uuid4().hex[:8]}"
-    queue_encoded = urllib.parse.quote(queue_name, safe="")
+    queue_encoded = quote(queue_name, safe="")
     try:
         status, _ = rabbitmq_api_request(
             http_host,
