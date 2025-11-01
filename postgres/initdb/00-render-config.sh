@@ -27,7 +27,7 @@ apply_network_allow_entries() {
       echo "# --- BEGIN networks.allow entries ---"
     } >> "${hba_path}"
     while IFS= read -r cidr; do
-      trimmed=$(echo "${cidr}" | sed 's/^\s*//;s/\s*$//')
+      trimmed=$(echo "${cidr}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
       [[ -z "${trimmed}" ]] && continue
       [[ "${trimmed}" == \#* ]] && continue
       echo "host all all ${trimmed} scram-sha-256" >> "${hba_path}"
