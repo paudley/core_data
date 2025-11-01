@@ -231,7 +231,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
       - "${CORE_DATA_APPARMOR_VALKEY:-apparmor:unconfined}"
-    image: valkey/valkey:8-alpine
+    image: valkey/valkey:9-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
     profiles:
@@ -265,7 +265,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_RABBITMQ:-seccomp:./seccomp/docker-default.json}"
       - "${CORE_DATA_APPARMOR_RABBITMQ:-apparmor:unconfined}"
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:4.1-management-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
     profiles:
