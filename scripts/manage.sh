@@ -408,6 +408,7 @@ shift || true
     fi
     if compose_has_service "pgbouncer"; then
       if [[ -n $(compose ps -q pgbouncer 2>/dev/null) ]]; then
+        # shellcheck disable=SC2016  # Single quotes intentional - variables expand inside container
         compose_exec_service pgbouncer sh -c 'pid=$(pgrep pgbouncer || true); if [ -n "$pid" ]; then kill -HUP "$pid"; fi'
       fi
     fi
