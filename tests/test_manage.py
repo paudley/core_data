@@ -1288,8 +1288,8 @@ def test_full_workflow(manage_env):
     size_after_vacuum = relation_size(env, "public.space_test")
     assert size_after_vacuum <= size_after_repack
 
-    repack_logs = list((ROOT / "backups").glob("pg_repack-*.log"))
-    vacuum_logs = list((ROOT / "backups").glob("vacuum-full-*.log"))
+    repack_logs = list(backups_path.glob("pg_repack-*.log"))
+    vacuum_logs = list(backups_path.glob("vacuum-full-*.log"))
     assert repack_logs
     assert vacuum_logs
 
