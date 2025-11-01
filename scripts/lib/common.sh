@@ -81,6 +81,11 @@ compose_exec() {
   compose exec -T --user "${POSTGRES_EXEC_USER}" "${PG_CONTAINER}" "$@"
 }
 
+# compose_exec_interactive attaches a TTY for interactive sessions (e.g. psql shell).
+compose_exec_interactive() {
+  compose exec --user "${POSTGRES_EXEC_USER}" "${PG_CONTAINER}" "$@"
+}
+
 # compose_run runs docker compose run for ephemeral helper containers.
 compose_run() {
   compose run --rm "$@"

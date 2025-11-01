@@ -16,12 +16,95 @@ A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hard
 - Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
 - Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
 
+## Published Docker Images
+
+Pre-built images are available from GitHub Container Registry with full SLSA attestations and SBOM for supply chain security.
+
+### Quick Start with Published Image
+
+```bash
+# Pull the latest stable release
+docker pull ghcr.io/paudley/core-data-postgres:latest
+
+# Or specify a version
+docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
+```
+
+### Available Tags
+
+Images follow a hybrid versioning strategy combining PostgreSQL version with semantic versioning:
+
+| Tag Pattern | Example | Description |
+|-------------|---------|-------------|
+| `latest` | `latest` | Latest stable release |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}.{PATCH}` | `17.2-v1.0.0` | Exact version (recommended for production) |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}` | `17.2-v1.0` | Latest patch for minor version |
+| `{PG_VERSION}-v{MAJOR}` | `17.2-v1` | Latest minor for major version |
+| `{PG_VERSION}` | `17.2` | Latest semantic version for PostgreSQL version |
+| `{PG_MAJOR}` | `17` | Latest for PostgreSQL major version |
+
+**Version Format**: `{PostgreSQL_Version}-v{Semantic_Version}`
+- Example: `17.2-v1.0.0` means PostgreSQL 17.2 with semantic version 1.0.0
+- See [docs/RELEASING.md](docs/RELEASING.md) for complete versioning details
+
+### Security & Verification
+
+All published images include cryptographic attestations that prove build provenance and supply chain integrity:
+
+```bash
+# Verify image attestation (requires GitHub CLI)
+gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
+  --owner paudley
+
+# Pull and verify in one step
+docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
+gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
+  --owner paudley
+```
+
+Expected verification output:
+```
+✓ Verification succeeded!
+
+sha256:abc123... was attested by:
+REPO              PREDICATE_TYPE                  WORKFLOW
+paudley/core_data https://slsa.dev/provenance/v1  .github/workflows/publish-docker.yml@refs/tags/17.2-v1.0.0
+```
+
+**What's Verified:**
+- **SLSA Provenance**: Confirms the image was built by GitHub Actions from this repository
+- **SBOM**: Software Bill of Materials listing all components and dependencies
+- **Build Reproducibility**: Links image digest to specific source code commit
+
+**Learn More:**
+- [Artifact Attestations Guide](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+- [Release Process Documentation](docs/RELEASING.md)
+
+### Using Published Images in Docker Compose
+
+Update your `docker-compose.yml` to use the published image instead of building locally:
+
+```yaml
+services:
+  postgres:
+    image: ghcr.io/paudley/core-data-postgres:17.2-v1.0.0  # Use published image
+    # Remove or comment out the 'build:' section
+    # build:
+    #   context: .
+    #   dockerfile: postgres/Dockerfile
+```
+
+Or override via `.env`:
+```bash
+POSTGRES_IMAGE_NAME=ghcr.io/paudley/core-data-postgres
+POSTGRES_IMAGE_TAG=17.2-v1.0.0
+```
 
 ## Highlights
 - Custom Docker image with PostGIS, pgvector, Apache AGE, pg_cron, pg_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 - Init scripts render configuration from templates, create application databases, and enable extensions automatically.
 - `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
-- PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `./backups` remains a bind mount for easy artifact exports.
+- PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
 - Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
 - TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
 - Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
@@ -76,7 +159,7 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 - **TLS everywhere.** PostgreSQL refuses non-SSL connections from the bridge network. Provide your own certificate/key via Docker secrets or rely on the init hook to mint a self-signed pair under `${PGDATA}/tls`.
 - **Named volumes for PGDATA/WAL.** `pgdata`, `pgwal`, and `pgbackrest` volumes provide near-native I/O on Linux. Override the volume definitions if you pin WAL/data to specific devices.
 - **Non-root from the start.** A one-shot `volume_prep` helper chowns the volumes before Postgres launches so the main service and sidecars run as your host user by default (UID/GID `${POSTGRES_UID}`), keeping file ownership consistent across deployments. Supply alternative IDs only when required.
-- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `./backups/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
+- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `${BACKUPS_HOST_PATH}/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 - **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached,rabbitmq` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
@@ -141,7 +224,7 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `valkey-bgsave` | Trigger `BGSAVE` so the ValKey RDB is flushed to the `valkey_data` volume. |
 | `rabbitmq-ctl` | Execute `rabbitmqctl` inside the RabbitMQ container (requires the rabbitmq profile). |
 | `rabbitmq-diagnostics` | Run `rabbitmq-diagnostics` commands such as `status` or `check_running`. |
-| `rabbitmq-export` | Export broker definitions to JSON (defaults to `./backups/rabbitmq-definitions.json`). |
+| `rabbitmq-export` | Export broker definitions to JSON (defaults to `${BACKUPS_HOST_PATH}/rabbitmq-definitions.json`). |
 | `rabbitmq-overview` | Print the summary from `rabbitmq-diagnostics status`. |
 | `pgbouncer-stats` / `pgbouncer-pools` | Emit PgBouncer `SHOW STATS` / `SHOW POOLS` via the admin console. |
 | `memcached-stats` | Fetch `stats` output from the Memcached service. |

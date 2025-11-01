@@ -433,11 +433,37 @@ shift || true
     if [[ "${host_flag_provided}" != "true" && -n "${host_env}" ]]; then
       psql_env+=("PGHOST=${host_env}")
     fi
+    wants_tty=false
+    if [[ -t 0 && -t 1 ]]; then
+      wants_tty=true
+      for arg in "$@"; do
+        case "${arg}" in
+          -c|--command|--command=*|-f|--file|--file=*)
+            wants_tty=false
+            break
+            ;;
+          -[^-]*)
+            if [[ "${arg}" == -*c* ]]; then
+              wants_tty=false
+              break
+            fi
+            ;;
+        esac
+      done
+    fi
     psql_cmd+=("$@")
     if [[ ${#psql_env[@]} -gt 0 ]]; then
-      compose_exec env "${psql_env[@]}" "${psql_cmd[@]}"
+      if [[ "${wants_tty}" == "true" ]]; then
+        compose_exec_interactive env "${psql_env[@]}" "${psql_cmd[@]}"
+      else
+        compose_exec env "${psql_env[@]}" "${psql_cmd[@]}"
+      fi
     else
-      compose_exec "${psql_cmd[@]}"
+      if [[ "${wants_tty}" == "true" ]]; then
+        compose_exec_interactive "${psql_cmd[@]}"
+      else
+        compose_exec "${psql_cmd[@]}"
+      fi
     fi
     ;;
   create-user)
