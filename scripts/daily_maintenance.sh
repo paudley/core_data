@@ -63,9 +63,15 @@ HOST_TARGET_DIR="${HOST_BACKUP_ROOT}/${TIMESTAMP}"
 CONTAINER_TARGET_DIR="${CONTAINER_BACKUP_ROOT}/${TIMESTAMP}"
 
 # Create backup directory, handling existing directories and symlinks
-mkdir -p "${HOST_TARGET_DIR}" 2>/dev/null || true
+mkdir_error=""
+if ! mkdir -p "${HOST_TARGET_DIR}" 2>&1 >/dev/null; then
+  mkdir_error=$(mkdir -p "${HOST_TARGET_DIR}" 2>&1 >/dev/null)
+fi
 if [[ ! -d "${HOST_TARGET_DIR}" ]]; then
   echo "[daily] ERROR: Failed to create or access ${HOST_TARGET_DIR}" >&2
+  if [[ -n "${mkdir_error}" ]]; then
+    echo "[daily] mkdir error: ${mkdir_error}" >&2
+  fi
   exit 1
 fi
 chmod 0777 "${HOST_TARGET_DIR}" 2>/dev/null || true
