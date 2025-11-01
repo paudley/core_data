@@ -59,7 +59,7 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `POSTGRES_SUPERUSER` | Bootstrap superuser role injected into the container. | `postgres` |
 | `POSTGRES_SUPERUSER_PASSWORD` | Password for the superuser; required before running the stack. | `change_me` |
 | `POSTGRES_DB` | Name of the primary database created by the official entrypoint. | `postgres` |
-| `POSTGRES_PORT` | Exposed container port (no host mapping by default). | `5432` |
+| `POSTGRES_PORT` | Host port mapped to PostgreSQL `5432`. | `5432` |
 | `PG_VERSION` | Major PostgreSQL version that drives the Dockerfile build ARG. | `17` |
 | `DATABASES_TO_CREATE` | Comma-delimited list of `db:owner:password` tuples consumed by `01-init-db-user-creation.sh`. | `app_main:app_user:secret` |
 | `POSTGRES_IMAGE_NAME` / `POSTGRES_IMAGE_TAG` | Optional overrides for tagging the custom image. | `core_data/postgres` / `17.2-bookworm-core` |

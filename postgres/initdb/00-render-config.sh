@@ -82,6 +82,27 @@ else
   exit 1
 fi
 
+if [[ -d "${TEMPLATE_DIR}/pg_hba.d" ]]; then
+  shopt -s nullglob
+  extra_files=("${TEMPLATE_DIR}/pg_hba.d"/*)
+  shopt -u nullglob
+  if [[ ${#extra_files[@]} -gt 0 ]]; then
+    {
+      echo ""
+      echo "# --- BEGIN pg_hba.d drop-ins ---"
+    } >> "${PGDATA}/pg_hba.conf"
+    for extra_file in "${extra_files[@]}"; do
+      echo "[core_data] Appending pg_hba drop-in ${extra_file}" >&2
+      if command -v envsubst >/dev/null 2>&1; then
+        envsubst < "${extra_file}" >> "${PGDATA}/pg_hba.conf"
+      else
+        cat "${extra_file}" >> "${PGDATA}/pg_hba.conf"
+      fi
+    done
+    echo "# --- END pg_hba.d drop-ins ---" >> "${PGDATA}/pg_hba.conf"
+  fi
+fi
+
 cat > "${PGBACKREST_CONF_PATH}" <<CONF
 [global]
 repo1-path=/var/lib/pgbackrest

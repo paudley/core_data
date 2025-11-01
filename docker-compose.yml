@@ -116,6 +116,8 @@ services:
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
     cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
 
   pghero:
     <<: *security_defaults

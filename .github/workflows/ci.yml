@@ -110,3 +110,30 @@ jobs:
         run: |
           docker ps -a
           docker compose logs || true
+
+  docker-build:
+    name: Validate Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./postgres/Dockerfile
+          platforms: linux/amd64
+          push: false
+          tags: core-data-postgres:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Validate Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: postgres/Dockerfile
+          config: .hadolint.yaml
