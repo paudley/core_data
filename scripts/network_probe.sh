@@ -105,7 +105,7 @@ read_user_entries() {
     return
   fi
   while IFS= read -r line; do
-    trimmed=$(echo "${line}" | sed 's/^\s*//;s/\s*$//')
+    trimmed=$(echo "${line}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     [[ -z "${trimmed}" ]] && continue
     [[ "${trimmed}" == \#* ]] && continue
     printf '%s\n' "${trimmed}"
