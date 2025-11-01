@@ -224,7 +224,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_RABBITMQ:-seccomp:./seccomp/docker-default.json}"
       - "${CORE_DATA_APPARMOR_RABBITMQ:-apparmor:unconfined}"
-    image: rabbitmq:3.13-management-alpine
+    image: rabbitmq:4.1-management-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
     profiles:
