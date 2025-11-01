@@ -1202,17 +1202,18 @@ def test_full_workflow(manage_env):
         "--output",
         "/backups/ci-report.html",
     )
+    backups_path = Path(env["BACKUPS_HOST_PATH"])
     run_manage(
         env,
         "daily-maintenance",
         "--root",
-        "./backups/ci",
+        str(backups_path / "ci"),
         "--container-root",
         "/backups/ci",
     )
     run_manage(env, "audit-cron")
     run_manage(env, "audit-squeeze")
-    daily_dirs = sorted((ROOT / "backups" / "ci").glob("*/"))
+    daily_dirs = sorted((backups_path / "ci").glob("*/"))
     assert daily_dirs
     daily_dir = daily_dirs[-1]
     print("daily_dir entries:", sorted(p.name for p in daily_dir.iterdir()))
