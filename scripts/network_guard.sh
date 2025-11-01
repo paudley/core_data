@@ -87,7 +87,7 @@ read_allow_file() {
     echo "[network_guard] Waiting for ${file}..." >&2
     return 1
   fi
-  mapfile -t raw < <(grep -v '^\s*#' "${file}" | sed '/^\s*$/d')
+  mapfile -t raw < <(grep -v '^[[:space:]]*#' "${file}" | sed '/^[[:space:]]*$/d')
   ipv4=()
   ipv6=()
   for entry in "${raw[@]}"; do
