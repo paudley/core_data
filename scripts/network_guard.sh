@@ -31,6 +31,7 @@ ensure_command() {
 # iptables is required; ip6tables optional (best-effort, skipped if unsupported)
 ensure_command iptables iptables
 has_ip6tables=false
+if command -v ip6tables >/dev/null 2>&1; then has_ip6tables=true; fi
 ensure_command sha256sum coreutils
 
 create_chain() {
