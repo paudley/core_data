@@ -240,6 +240,9 @@ def manage_env(tmp_path_factory):
         "TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached,rabbitmq"
     )
 
+    backups_target = workdir / "backups"
+    backups_target.mkdir(parents=True, exist_ok=True)
+
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
@@ -272,8 +275,6 @@ def manage_env(tmp_path_factory):
             lines.append(line)
     env_file.write_text("\n".join(lines) + "\n")
 
-    backups_target = workdir / "backups"
-    backups_target.mkdir(parents=True, exist_ok=True)
     try:
         backups_target.chmod(0o777)
     except PermissionError:
