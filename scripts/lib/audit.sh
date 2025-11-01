@@ -482,7 +482,7 @@ config_drift_report() {
       shopt -s nullglob
       extras=(/opt/core_data/conf/pg_hba.d/*)
       shopt -u nullglob
-      if [ ${#extras[@]} -gt 0 ]; then
+      if [[ ${#extras[@]} -gt 0 ]]; then
         {
           echo ""
           echo "# --- BEGIN pg_hba.d drop-ins ---"
