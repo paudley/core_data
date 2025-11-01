@@ -493,7 +493,7 @@ config_drift_report() {
         echo "# --- END pg_hba.d drop-ins ---" >> /tmp/core_data_expected_pg_hba.conf
       fi
     fi
-    if [ -r /opt/core_data/network_access/allow.list ]; then
+    if [[ -r /opt/core_data/network_access/allow.list ]]; then
       {
         echo ""
         echo "# --- BEGIN networks.allow entries ---"
