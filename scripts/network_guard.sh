@@ -91,7 +91,7 @@ read_allow_file() {
   ipv4=()
   ipv6=()
   for entry in "${raw[@]}"; do
-    trimmed=$(echo "${entry}" | sed 's/^\s*//;s/\s*$//')
+    trimmed=$(echo "${entry}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
     [[ -z "${trimmed}" ]] && continue
     if [[ "${trimmed}" == *:* ]]; then
       ipv6+=("${trimmed}")
