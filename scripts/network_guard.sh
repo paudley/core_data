@@ -132,7 +132,9 @@ while true; do
         fi
         if [[ "${has_ip6tables}" == true ]]; then
           if create_chain ip6tables "${CHAIN_V6}" 2>/dev/null; then
-            add_network_rules ip6tables "${CHAIN_V6}" "${ipv6[@]}"
+            if [[ ${#ipv6[@]} -gt 0 ]]; then
+              add_network_rules ip6tables "${CHAIN_V6}" "${ipv6[@]}"
+            fi
             if [[ ${#ports[@]} -gt 0 ]]; then
               remove_existing_rules ip6tables "${CHAIN_V6}" "${ports[@]}" || true
               insert_rules ip6tables "${CHAIN_V6}" "${ports[@]}"
