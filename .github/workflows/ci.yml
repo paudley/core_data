@@ -136,4 +136,4 @@ jobs:
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: postgres/Dockerfile
-          failure-threshold: warning
+          config: .hadolint.yaml

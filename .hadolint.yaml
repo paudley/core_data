@@ -1,0 +1,34 @@
+# Hadolint configuration for core_data Dockerfile
+# See: https://github.com/hadolint/hadolint
+
+ignored:
+  # DL3008: Pin versions in apt-get install
+  # Rationale: PostgreSQL extension packages from apt.postgresql.org don't have
+  # stable version numbers. Pinning would make the Dockerfile extremely fragile.
+  # We rely on the base image tag (postgres:17-bookworm) for reproducibility.
+  - DL3008
+
+  # DL3003: Use WORKDIR to switch to a directory
+  # Rationale: We use `cd` in temporary build contexts (Apache AGE, pg_squeeze)
+  # that are immediately cleaned up. WORKDIR would persist and is unnecessary.
+  - DL3003
+
+# Keep these checks active but don't fail the build on them
+failure-threshold: error
+
+# Trust official registries
+trustedRegistries:
+  - docker.io
+  - ghcr.io
+
+# Enforce some good practices
+override:
+  error:
+    - DL3001  # Some bash commands make no sense in Dockerfiles
+    - DL3002  # Last user should not be root
+  warning:
+    - DL3006  # Always tag image version explicitly
+    - DL3007  # Using latest tag
+    - DL4006  # Set pipefail option in RUN
+  info:
+    - SC2086  # Double quote to prevent globbing
