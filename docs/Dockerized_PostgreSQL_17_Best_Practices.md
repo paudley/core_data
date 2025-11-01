@@ -275,13 +275,14 @@ All network traffic between database clients and the PostgreSQL server must be e
      ssl\_cert\_file \= '/var/lib/postgresql/server.crt'  
      ssl\_key\_file \= '/var/lib/postgresql/server.key'
 
-   * In pg\_hba.conf, change connection types from host to hostssl to reject any connection that is not encrypted with TLS.5  
+   * In pg\_hba.conf, pair a blanket `hostnossl` reject rule with specific `host` records that match the CIDRs in your allow list (this project renders them from `network_access/allow.list`). Non-SSL attempts are blocked first, so any successful connection still negotiates TLS while the firewall governs which networks are permitted.5  
      \# pg\_hba.conf  
      \# TYPE  DATABASE        USER            ADDRESS                 METHOD  
      \# Reject non-SSL connections from remote hosts  
      hostnossl all           all             0.0.0.0/0               reject  
-     \# Require SSL for all remote connections  
-     hostssl   all           all             0.0.0.0/0               scram-sha-256
+     \# Allow only the networks approved by the allow list / firewall  
+     host      all           all             192.168.0.250/32        scram-sha-256  
+     host      all           all             10.129.70.0/24          scram-sha-256
 
 ### **Network Security and Isolation**
 

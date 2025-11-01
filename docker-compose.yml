@@ -15,12 +15,28 @@ x-security-defaults: &security_defaults
     - ALL
 
 services:
+  network_probe:
+    image: debian:bookworm-slim
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_probe
+    restart: "no"
+    network_mode: host
+    environment:
+      DOCKER_NETWORK_SUBNET: ${DOCKER_NETWORK_SUBNET}
+      NETWORK_DIR: /opt/core_data/network_access
+    entrypoint: ["/opt/core_data/scripts/network_probe.sh"]
+    volumes:
+      - ./network_access:/opt/core_data/network_access
+      - ./scripts/network_probe.sh:/opt/core_data/scripts/network_probe.sh:ro
+
   volume_prep:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
     restart: "no"
     # Runs as root briefly to fix ownership; uses Docker's default capabilities.
     user: "0:0"
+    depends_on:
+      network_probe:
+        condition: service_completed_successfully
     environment:
       PGDATA_MOUNT: ${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
@@ -39,9 +55,29 @@ services:
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./network_access:/opt/core_data/network_access
     networks:
       - core_data
     logging: *logging_defaults
+
+  network_guard:
+    image: debian:bookworm-slim
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_guard
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    depends_on:
+      network_probe:
+        condition: service_completed_successfully
+    environment:
+      NETWORK_DIR: /opt/core_data/network_access
+      CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
+      SERVICES: "${POSTGRES_PORT:-5432} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
+    entrypoint: ["/opt/core_data/scripts/network_guard.sh"]
+    volumes:
+      - ./network_access:/opt/core_data/network_access:ro
+      - ./scripts/network_guard.sh:/opt/core_data/scripts/network_guard.sh:ro
 
   postgres:
     <<: *security_defaults
@@ -93,16 +129,21 @@ services:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
-      - ./backups:/backups
+      - ${BACKUPS_HOST_PATH:-./backups}:/backups
       - ./postgres/conf:/opt/core_data/conf:ro
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
       - ./scripts:/opt/core_data/scripts:ro
+      - ./network_access:/opt/core_data/network_access:ro
       - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
       - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
     networks:
       - core_data
     depends_on:
+      network_probe:
+        condition: service_completed_successfully
+      network_guard:
+        condition: service_started
       volume_prep:
         condition: service_completed_successfully
     healthcheck:
@@ -171,7 +212,7 @@ services:
       LOGICAL_BACKUP_OUTPUT: ${LOGICAL_BACKUP_OUTPUT}
       TZ: ${TZ}
     volumes:
-      - ./backups:/backups
+      - ${BACKUPS_HOST_PATH:-./backups}:/backups
       - ./scripts/logical_backup_runner.sh:/opt/core_data/scripts/logical_backup_runner.sh:ro
       - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
     networks:
@@ -272,6 +313,10 @@ services:
     profiles:
       - pgbouncer
     depends_on:
+      network_probe:
+        condition: service_completed_successfully
+      network_guard:
+        condition: service_started
       postgres:
         condition: service_healthy
     environment:
@@ -296,6 +341,7 @@ services:
       - ./pgbouncer/userlist.txt.tpl:/opt/core_data/userlist.txt.tpl:ro
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
       - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
+      - ./network_access:/opt/core_data/network_access:ro
     networks:
       - core_data
     ports:

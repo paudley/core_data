@@ -22,6 +22,10 @@ core_data/
 │   ├── conf/
 │   │   ├── postgresql.conf.tpl
 │   │   └── pg_hba.conf.tpl   # Rendered during init with envsubst
+│   └── network_access/
+│       ├── networks.allow.sample
+│       ├── allow.list        # Generated at runtime (gitignored)
+│       └── networks.auto     # Auto-discovered host addresses (gitignored)
 │   ├── initdb/
 │   │   ├── 00-render-config.sh
 │   │   ├── 01-init-db-user-creation.sh
@@ -73,7 +77,9 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `PGHERO_USER` / `PGHERO_PASSWORD` | Basic auth credentials for the PgHero UI. | `admin` / `change_me` |
 | `PGHERO_PORT` | Host port forwarded to PgHero (`8080` internally). | `8080` |
 | `DOCKER_NETWORK_NAME` | Name for the dedicated bridge network. | `core_data_network` |
-| `DOCKER_NETWORK_SUBNET` | Subnet allocated to the bridge network; also rendered into `pg_hba.conf`. | `172.25.0.0/16` |
+| `DOCKER_NETWORK_SUBNET` | Subnet allocated to the bridge network; also rendered into the network allow list. | `172.25.0.0/16` |
+| `NETWORK_GUARD_CHECK_INTERVAL` | Seconds between firewall allow-list refreshes. | `30` |
+| `BACKUPS_HOST_PATH` | Host path bind-mounted to `/backups` for logical dumps and reports. | `./backups` |
 | `TZ` | Time zone shared by containers and rendered into `postgresql.conf`. | `UTC` |
 | `COMPOSE_PROFILES` | Comma-separated Docker Compose profiles to start (`valkey`, `pgbouncer`, `memcached`, `rabbitmq`). | `valkey,pgbouncer,memcached,rabbitmq` |
 | `LOGICAL_BACKUP_INTERVAL_SECONDS` | Frequency of logical backup sidecar runs. | `86400` |
@@ -102,7 +108,7 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 Compose profiles expose supporting services on demand:
 
 - `valkey` profile turns on ValKey with append-only persistence, password enforcement, and CLI helpers.
-- `pgbouncer` profile launches PgBouncer with SCRAM auth, config templating, and the admin/stats helpers wired through `manage.sh`.
+- `pgbouncer` profile launches PgBouncer with SCRAM auth, config templating, and the admin/stats helpers wired through `manage.sh`. Its entrypoint consumes the same `network_access/allow.list` when rendering `auth_hba_file`, so client filtering aligns with PostgreSQL and the host firewall.
 - `memcached` profile adds a Memcached cache sized via the `MEMCACHED_*` knobs.
 - `rabbitmq` profile enables RabbitMQ with the management plugin, credentials sourced from secrets, daily definition exports, and CLI helpers.
 
@@ -114,6 +120,9 @@ Adjust `COMPOSE_PROFILES` in `.env` to remove profiles you don't need without ed
 ## Cluster Initialization
 The official PostgreSQL entrypoint executes the init scripts the first time the volume is empty:
 - `00-render-config.sh` renders `postgresql.conf` and `pg_hba.conf` using environment variables, writes a pgBackRest stanza config, and touches a sentinel to keep the step idempotent.
+- Any files placed under `postgres/conf/pg_hba.d/` are appended to `pg_hba.conf` after the base template renders, so you can add site-specific CIDR ranges or auth methods without forking the main template. Drop-in files are processed with `envsubst`, so the usual `${VAR}` placeholders continue to work.
+- The `network_probe` service collects loopback, Docker, and host interface addresses on startup, merges them with `network_access/networks.allow`, and writes a canonical `allow.list`. During init the PostgreSQL config consumes that list to append `host` entries (while `hostnossl ... reject` continues to enforce TLS), and the `network_guard` sidecar applies the same policy at the host firewall for every exported service (PostgreSQL, PgHero, PgBouncer, ValKey, RabbitMQ, and Memcached).
+- After editing `network_access/networks.allow`, run `./scripts/manage.sh networks-refresh` to regenerate the combined allow list, reapply `pg_hba.conf`, and reload PgBouncer's `auth_hba_file` in-place. The firewall sidecar notices the file change automatically.
 - `01-init-db-user-creation.sh` parses `DATABASES_TO_CREATE` to create roles and databases if they do not yet exist.
 - `02-enable-extensions.sh` loops through every non-template database (plus `template1`) to enable the bundled extensions, creates a `core_data_admin` schema, and registers a nightly `pg_cron` job that runs `core_data_admin.refresh_pg_squeeze_targets()`.
 

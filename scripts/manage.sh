@@ -128,6 +128,8 @@ Commands:
   build-image                 Build the custom PostgreSQL image.
   up                          Start the stack in detached mode.
   down                        Stop the stack (preserving volumes).
+  networks-refresh            Rebuild networks.allow auto list (runs network_probe service).
+  networks-show               Print the currently rendered allow list.
   psql [args]                 Open psql inside the postgres container.
   create-user <user> <pass>   Create a role with LOGIN privilege.
   drop-user <user>            Drop a role.
@@ -395,6 +397,29 @@ shift || true
     ;;
   down)
     compose down
+    ;;
+  networks-refresh)
+    ensure_env
+    compose run --rm network_probe
+    if compose_has_service "postgres"; then
+      if [[ -n $(compose ps -q "${POSTGRES_SERVICE_NAME:-postgres}" 2>/dev/null) ]]; then
+        compose_exec bash -lc "/docker-entrypoint-initdb.d/00-render-config.sh"
+      fi
+    fi
+    if compose_has_service "pgbouncer"; then
+      if [[ -n $(compose ps -q pgbouncer 2>/dev/null) ]]; then
+        compose_exec_service pgbouncer sh -c 'pid=$(pgrep pgbouncer || true); if [ -n "$pid" ]; then kill -HUP "$pid"; fi'
+      fi
+    fi
+    ;;
+  networks-show)
+    allow_path="${ROOT_DIR}/network_access/allow.list"
+    if [[ -f "${allow_path}" ]]; then
+      cat "${allow_path}"
+    else
+      echo "[core_data] allow.list not generated yet. Run '${0##*/} networks-refresh' first." >&2
+      exit 1
+    fi
     ;;
   psql)
     ensure_env

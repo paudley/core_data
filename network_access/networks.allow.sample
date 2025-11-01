@@ -1,0 +1,9 @@
+# Allow specific client networks (one CIDR per line).
+# Lines beginning with # are treated as comments.
+#
+# Example entries:
+# 10.0.0.0/24
+# 203.0.113.55/32
+# 2001:db8::/64
+#
+# Copy to networks.allow and adjust as needed.

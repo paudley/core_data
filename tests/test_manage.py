@@ -257,6 +257,7 @@ def manage_env(tmp_path_factory):
         "POSTGRES_GID": str(os.getgid()),
         "POSTGRES_RUNTIME_HOME": "/home/postgres",
         "POSTGRES_RUNTIME_GECOS": "CI_PostgreSQL_Administrator",
+        "BACKUPS_HOST_PATH": str(backups_target),
     }
 
     lines = []
@@ -346,20 +347,6 @@ def manage_env(tmp_path_factory):
     seed_secret("secrets/rabbitmq_default_pass")
     seed_secret("secrets/rabbitmq_erlang_cookie")
 
-    backups_link = ROOT / "backups"
-    had_existing_backups = backups_link.exists() or backups_link.is_symlink()
-    original_backups = ROOT / ".backups_original"
-    if had_existing_backups:
-        if original_backups.exists() or original_backups.is_symlink():
-            if original_backups.is_dir():
-                subprocess.run(["rm", "-rf", str(original_backups)], check=False)
-            else:
-                original_backups.unlink(missing_ok=True)
-        backups_link.rename(original_backups)
-    if backups_link.exists() or backups_link.is_symlink():
-        backups_link.unlink()
-    backups_link.symlink_to(backups_target)
-
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_file)
     project_name = env.setdefault(
@@ -437,10 +424,6 @@ def manage_env(tmp_path_factory):
                 path.write_bytes(backup)
             else:
                 path.unlink(missing_ok=True)
-        if backups_link.is_symlink():
-            backups_link.unlink()
-        if had_existing_backups and original_backups.exists():
-            original_backups.rename(backups_link)
         env_file.unlink(missing_ok=True)
         if had_env and backup_env_bytes is not None:
             repo_env_path.write_bytes(backup_env_bytes)
