@@ -1534,8 +1534,9 @@ def test_test_dataset_bootstrap(manage_env):
         after_name = f"pg_stat_after_{query_uuid}.csv"
         container_before = f"/backups/{before_name}"
         container_after = f"/backups/{after_name}"
-        host_before = ROOT / "backups" / before_name
-        host_after = ROOT / "backups" / after_name
+        backups_path = Path(env["BACKUPS_HOST_PATH"])
+        host_before = backups_path / before_name
+        host_after = backups_path / after_name
         run_manage(
             env,
             "snapshot-pgstat",
