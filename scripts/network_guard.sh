@@ -117,7 +117,9 @@ while true; do
           ip6tables -A DOCKER-USER -j RETURN
         fi
         create_chain iptables "${CHAIN_V4}"
-        add_network_rules iptables "${CHAIN_V4}" "${ipv4[@]}"
+        if [[ ${#ipv4[@]} -gt 0 ]]; then
+          add_network_rules iptables "${CHAIN_V4}" "${ipv4[@]}"
+        fi
         read -ra port_array <<< "${SERVICES}"
         ports=()
         for port in "${port_array[@]}"; do
