@@ -500,7 +500,7 @@ config_drift_report() {
       } >> /tmp/core_data_expected_pg_hba.conf
       while IFS= read -r line; do
         trimmed=$(echo "${line}" | sed 's/^\s*//;s/\s*$//')
-        [ -z "${trimmed}" ] && continue
+        [[ -z "${trimmed}" ]] && continue
         case "${trimmed}" in
           \#*) continue ;;
         esac
