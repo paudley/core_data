@@ -64,8 +64,8 @@ CONTAINER_TARGET_DIR="${CONTAINER_BACKUP_ROOT}/${TIMESTAMP}"
 
 # Create backup directory, handling existing directories and symlinks
 mkdir_error=""
-if ! mkdir -p "${HOST_TARGET_DIR}" 2>&1 >/dev/null; then
-  mkdir_error=$(mkdir -p "${HOST_TARGET_DIR}" 2>&1 >/dev/null)
+if ! mkdir -p "${HOST_TARGET_DIR}" >/dev/null 2>&1; then
+  mkdir_error=$(mkdir -p "${HOST_TARGET_DIR}" 2>&1)
 fi
 if [[ ! -d "${HOST_TARGET_DIR}" ]]; then
   echo "[daily] ERROR: Failed to create or access ${HOST_TARGET_DIR}" >&2
