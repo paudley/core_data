@@ -38,6 +38,7 @@ seccomp/traces/
 .vscode/
 *.swp
 .DS_Store
+.claude
 
 # Node (if used for tooling)
 node_modules/

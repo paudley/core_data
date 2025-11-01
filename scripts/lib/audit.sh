@@ -477,6 +477,39 @@ config_drift_report() {
   local drift=0
   compose_exec bash -lc "envsubst < /opt/core_data/conf/postgresql.conf.tpl > /tmp/core_data_expected_postgresql.conf"
   compose_exec bash -lc "envsubst < /opt/core_data/conf/pg_hba.conf.tpl > /tmp/core_data_expected_pg_hba.conf"
+  compose_exec bash -lc '
+    if [ -d /opt/core_data/conf/pg_hba.d ]; then
+      shopt -s nullglob
+      extras=(/opt/core_data/conf/pg_hba.d/*)
+      shopt -u nullglob
+      if [ ${#extras[@]} -gt 0 ]; then
+        {
+          echo ""
+          echo "# --- BEGIN pg_hba.d drop-ins ---"
+        } >> /tmp/core_data_expected_pg_hba.conf
+        for extra in "${extras[@]}"; do
+          envsubst < "${extra}" >> /tmp/core_data_expected_pg_hba.conf
+        done
+        echo "# --- END pg_hba.d drop-ins ---" >> /tmp/core_data_expected_pg_hba.conf
+      fi
+    fi
+    if [ -r /opt/core_data/network_access/allow.list ]; then
+      {
+        echo ""
+        echo "# --- BEGIN networks.allow entries ---"
+      } >> /tmp/core_data_expected_pg_hba.conf
+      while IFS= read -r line; do
+        trimmed=$(echo "${line}" | sed 's/^\s*//;s/\s*$//')
+        [ -z "${trimmed}" ] && continue
+        case "${trimmed}" in
+          \#*) continue ;;
+        esac
+        echo "host all all ${trimmed} scram-sha-256" >> /tmp/core_data_expected_pg_hba.conf
+        echo "host replication all ${trimmed} scram-sha-256" >> /tmp/core_data_expected_pg_hba.conf
+      done < /opt/core_data/network_access/allow.list
+      echo "# --- END networks.allow entries ---" >> /tmp/core_data_expected_pg_hba.conf
+    fi
+  '
   local conf_diff
   conf_diff=$(compose_exec bash -lc "diff -u /tmp/core_data_expected_postgresql.conf /var/lib/postgresql/data/postgresql.conf || true")
   if [[ -n ${conf_diff} ]]; then

@@ -7,6 +7,37 @@ set -euo pipefail
 TEMPLATE_DIR="/opt/core_data/conf"
 SENTINEL="${PGDATA}/.core_data_config_rendered"
 PGBACKREST_CONF_PATH="${PGDATA}/pgbackrest.conf"
+NETWORK_ACCESS_DIR=${NETWORK_ACCESS_DIR:-/opt/core_data/network_access}
+NETWORK_ALLOW_FILE=${NETWORK_ALLOW_FILE:-${NETWORK_ACCESS_DIR}/allow.list}
+
+apply_network_allow_entries() {
+  local hba_path="${PGDATA}/pg_hba.conf"
+  if [[ ! -f "${hba_path}" ]]; then
+    return
+  fi
+  # Remove previously rendered block (if present)
+  if grep -q "# --- BEGIN networks.allow entries ---" "${hba_path}"; then
+    tmp_file=$(mktemp)
+    sed '/# --- BEGIN networks.allow entries ---/,/# --- END networks.allow entries ---/d' "${hba_path}" > "${tmp_file}"
+    mv "${tmp_file}" "${hba_path}"
+  fi
+  if [[ -r "${NETWORK_ALLOW_FILE}" ]]; then
+    {
+      echo ""
+      echo "# --- BEGIN networks.allow entries ---"
+    } >> "${hba_path}"
+    while IFS= read -r cidr; do
+      trimmed=$(echo "${cidr}" | sed 's/^\s*//;s/\s*$//')
+      [[ -z "${trimmed}" ]] && continue
+      [[ "${trimmed}" == \#* ]] && continue
+      echo "host all all ${trimmed} scram-sha-256" >> "${hba_path}"
+      echo "host replication all ${trimmed} scram-sha-256" >> "${hba_path}"
+    done < "${NETWORK_ALLOW_FILE}"
+    echo "# --- END networks.allow entries ---" >> "${hba_path}"
+  else
+    echo "[core_data] WARNING: ${NETWORK_ALLOW_FILE} not found; using template defaults only." >&2
+  fi
+}
 
 : "${POSTGRES_LISTEN_ADDRESSES:=0.0.0.0}"
 : "${POSTGRES_MAX_CONNECTIONS:=200}"
@@ -50,7 +81,11 @@ export \
 mkdir -p "${PGDATA}"
 
 if [[ -f "${SENTINEL}" ]]; then
-  echo "[core_data] Configuration already rendered; skipping." >&2
+  echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
+  apply_network_allow_entries
+  if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
+    echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
+  fi
   exit 0
 fi
 
@@ -102,6 +137,8 @@ if [[ -d "${TEMPLATE_DIR}/pg_hba.d" ]]; then
     echo "# --- END pg_hba.d drop-ins ---" >> "${PGDATA}/pg_hba.conf"
   fi
 fi
+
+apply_network_allow_entries
 
 cat > "${PGBACKREST_CONF_PATH}" <<CONF
 [global]
