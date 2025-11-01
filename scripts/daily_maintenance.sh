@@ -62,8 +62,16 @@ TIMESTAMP=$(date +%Y%m%d)
 HOST_TARGET_DIR="${HOST_BACKUP_ROOT}/${TIMESTAMP}"
 CONTAINER_TARGET_DIR="${CONTAINER_BACKUP_ROOT}/${TIMESTAMP}"
 
-mkdir -p "${HOST_TARGET_DIR}"
-chmod 0777 "${HOST_TARGET_DIR}"
+# Create backup directory, handling existing directories and symlinks
+mkdir -p "${HOST_TARGET_DIR}" 2>/dev/null || true
+if [[ ! -d "${HOST_TARGET_DIR}" ]]; then
+  echo "[daily] ERROR: Failed to create or access ${HOST_TARGET_DIR}" >&2
+  exit 1
+fi
+chmod 0777 "${HOST_TARGET_DIR}" 2>/dev/null || true
+
+# Create backup directory inside container as well
+compose_exec bash -lc "mkdir -p '${CONTAINER_TARGET_DIR}' && chmod 0777 '${CONTAINER_TARGET_DIR}'"
 
 echo "[daily] capturing optional cache / pool services"
 
