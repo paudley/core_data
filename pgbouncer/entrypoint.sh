@@ -60,7 +60,7 @@ if [[ -r "${NETWORK_ALLOW_FILE}" ]]; then
     echo "# Format mirrors PostgreSQL pg_hba.conf"
   } > "${hba_path}"
   while IFS= read -r cidr; do
-    trimmed=$(echo "${cidr}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    trimmed=$(echo "${cidr}" | sed 's/^\s*//;s/\s*$//')
     [[ -z "${trimmed}" ]] && continue
     [[ "${trimmed}" == \#* ]] && continue
     echo "host all all ${trimmed} scram-sha-256" >> "${hba_path}"
