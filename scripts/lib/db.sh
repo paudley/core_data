@@ -47,7 +47,7 @@ END
 SQL
 }
 
-# grant_db_owner_privileges ensures the owner can manage objects in the public schema.
+# grant_db_owner_privileges ensures the owner can manage objects in public and ag_catalog schemas.
 grant_db_owner_privileges() {
   local db=$1
   local owner=$2
@@ -59,6 +59,9 @@ GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${owner}";
 GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${owner}";
 ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "${owner}";
 ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "${owner}";
+GRANT USAGE ON SCHEMA ag_catalog TO "${owner}";
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ag_catalog TO "${owner}";
+ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA ag_catalog GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${owner}";
 SQL
 }
 
