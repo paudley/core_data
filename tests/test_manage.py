@@ -1501,7 +1501,7 @@ def test_test_dataset_bootstrap(manage_env):
             "-t",
             "-A",
             "-c",
-            "LOAD 'age'; SET search_path = ag_catalog, \"$user\", public; "
+            "SET search_path = ag_catalog, \"$user\", public; "
             "SELECT source::text, target::text FROM cypher('testkit_graph', $$ MATCH (a:Place)-[:ROUTE]->(b:Place) RETURN a.slug AS source, b.slug AS target $$) "
             "AS (source agtype, target agtype) ORDER BY source::text, target::text;",
         )

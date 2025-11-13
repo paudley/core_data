@@ -354,8 +354,6 @@ SELECT uuid_generate_v5(uuid_ns_url(), slug || ':api'), place_id
 FROM places
 ON CONFLICT (token) DO NOTHING;
 
--- Build a lightweight Apache AGE graph that mirrors the connectivity from route_edges.
-LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 
 SELECT drop_graph('testkit_graph', true)

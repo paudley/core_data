@@ -10,7 +10,7 @@ shared_buffers = ${PG_SHARED_BUFFERS}
 work_mem = ${PG_WORK_MEM}
 maintenance_work_mem = ${PG_MAINTENANCE_WORK_MEM}
 effective_cache_size = ${PG_EFFECTIVE_CACHE_SIZE}
-shared_preload_libraries = 'pgaudit,pg_stat_statements,pg_cron,pg_squeeze,auto_explain,pg_buffercache,pg_partman_bgw'
+shared_preload_libraries = 'age,pgaudit,pg_stat_statements,pg_cron,pg_squeeze,auto_explain,pg_buffercache,pg_partman_bgw'
 wal_level = logical
 archive_mode = on
 archive_command = 'pgbackrest --config=/var/lib/postgresql/data/pgbackrest.conf --stanza=main archive-push %p'

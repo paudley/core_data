@@ -23,8 +23,6 @@ SELECT embedding <-> '[1,2,4]'::vector AS distance FROM core_data_vector_demo OR
 -- PostGIS smoke
 SELECT ST_AsText(ST_Buffer(ST_GeomFromText('POINT(0 0)'), 1.0));
 
--- Apache AGE smoke
-LOAD 'age';
 SET search_path = ag_catalog, "$user", public;
 SELECT create_graph('core_data_smoke_graph')
   WHERE NOT EXISTS (SELECT 1 FROM ag_catalog.ag_graph WHERE name = 'core_data_smoke_graph');
