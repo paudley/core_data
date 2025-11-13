@@ -11,8 +11,8 @@ POSTGRES_PORT=${POSTGRES_PORT:-5432}
 PASSWORD_FILE=${POSTGRES_SUPERUSER_PASSWORD_FILE:-/run/secrets/postgres_superuser_password}
 
 if [[ ! -r "${PASSWORD_FILE}" ]]; then
-  echo "[pghero] password file ${PASSWORD_FILE} not readable" >&2
-  exit 1
+	echo "[pghero] password file ${PASSWORD_FILE} not readable" >&2
+	exit 1
 fi
 
 PASSWORD=$(cat "${PASSWORD_FILE}")

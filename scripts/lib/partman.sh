@@ -11,12 +11,12 @@ source "${LIB_PARTMAN_DIR}/common.sh"
 
 # partman_run_maintenance <database>
 partman_run_maintenance() {
-  ensure_env
-  local database=${1:-${POSTGRES_DB:-postgres}}
+	ensure_env
+	local database=${1:-${POSTGRES_DB:-postgres}}
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
-         --set=ON_ERROR_STOP=1 <<'SQL'
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
+		--set=ON_ERROR_STOP=1 <<'SQL'
 SELECT n.nspname AS partman_schema
   FROM pg_extension e
   JOIN pg_namespace n ON n.oid = e.extnamespace
@@ -34,18 +34,18 @@ SQL
 
 # partman_show_config <database> [parent_table]
 partman_show_config() {
-  ensure_env
-  local database=${1:-${POSTGRES_DB:-postgres}}
-  local parent_filter=${2:-}
+	ensure_env
+	local database=${1:-${POSTGRES_DB:-postgres}}
+	local parent_filter=${2:-}
 
-  if [[ -n ${parent_filter} && ! ${parent_filter} =~ \. ]]; then
-    echo "[partman] parent table must be schema-qualified (e.g., schema.table)." >&2
-    exit 1
-  fi
+	if [[ -n ${parent_filter} && ! ${parent_filter} =~ \. ]]; then
+		echo "[partman] parent table must be schema-qualified (e.g., schema.table)." >&2
+		exit 1
+	fi
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
-         --set=ON_ERROR_STOP=1 --set=parent_filter="${parent_filter}" <<'SQL'
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
+		--set=ON_ERROR_STOP=1 --set=parent_filter="${parent_filter}" <<'SQL'
 \pset footer off
 SELECT n.nspname AS partman_schema
   FROM pg_extension e
@@ -92,39 +92,39 @@ SQL
 #                         <type> <start_partition> <premake> <default_table>
 #                         <automatic_mode> <jobmon> <time_encoder> <time_decoder>
 partman_create_parent() {
-  ensure_env
-  if [[ $# -lt 4 ]]; then
-    echo "Usage: partman_create_parent <db> <schema.table> <control_column> <interval> [type] [start_partition] [premake] [default_table] [automatic_mode] [jobmon] [time_encoder] [time_decoder]" >&2
-    exit 1
-  fi
+	ensure_env
+	if [[ $# -lt 4 ]]; then
+		echo "Usage: partman_create_parent <db> <schema.table> <control_column> <interval> [type] [start_partition] [premake] [default_table] [automatic_mode] [jobmon] [time_encoder] [time_decoder]" >&2
+		exit 1
+	fi
 
-  local database=$1
-  local parent_table=$2
-  local control_column=$3
-  local interval=$4
-  local type=${5:-range}
-  local start_partition=${6:-}
-  local premake=${7:-}
-  local default_table=${8:-true}
-  local automatic_mode=${9:-on}
-  local jobmon=${10:-true}
-  local time_encoder=${11:-}
-  local time_decoder=${12:-}
+	local database=$1
+	local parent_table=$2
+	local control_column=$3
+	local interval=$4
+	local type=${5:-range}
+	local start_partition=${6:-}
+	local premake=${7:-}
+	local default_table=${8:-true}
+	local automatic_mode=${9:-on}
+	local jobmon=${10:-true}
+	local time_encoder=${11:-}
+	local time_decoder=${12:-}
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
-         --set=ON_ERROR_STOP=1 \
-         --set=parent_table="${parent_table}" \
-         --set=control_column="${control_column}" \
-         --set=interval="${interval}" \
-         --set=partman_type="${type}" \
-         --set=start_partition="${start_partition}" \
-         --set=premake="${premake}" \
-         --set=default_table="${default_table}" \
-         --set=automatic_mode="${automatic_mode}" \
-         --set=jobmon="${jobmon}" \
-         --set=time_encoder="${time_encoder}" \
-         --set=time_decoder="${time_decoder}" <<'SQL'
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
+		--set=ON_ERROR_STOP=1 \
+		--set=parent_table="${parent_table}" \
+		--set=control_column="${control_column}" \
+		--set=interval="${interval}" \
+		--set=partman_type="${type}" \
+		--set=start_partition="${start_partition}" \
+		--set=premake="${premake}" \
+		--set=default_table="${default_table}" \
+		--set=automatic_mode="${automatic_mode}" \
+		--set=jobmon="${jobmon}" \
+		--set=time_encoder="${time_encoder}" \
+		--set=time_decoder="${time_decoder}" <<'SQL'
 DO
 $$
 DECLARE

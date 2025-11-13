@@ -20,11 +20,11 @@ import urllib.parse
 import urllib.request
 import uuid
 import warnings
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-import pytest
 import psycopg
-from psycopg.rows import tuple_row
+import pytest
 from graphql import (
     GraphQLArgument,
     GraphQLField,
@@ -35,7 +35,7 @@ from graphql import (
     GraphQLString,
     graphql_sync,
 )
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from psycopg.rows import tuple_row
 
 ROOT = Path(__file__).resolve().parents[1]
 MANAGE = ROOT / "scripts" / "manage.sh"
@@ -236,9 +236,7 @@ def manage_env(tmp_path_factory):
     rabbitmq_port = _find_free_port()
     rabbitmq_mgmt_port = _find_free_port()
 
-    compose_profiles = os.environ.get(
-        "TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached,rabbitmq"
-    )
+    compose_profiles = os.environ.get("TEST_COMPOSE_PROFILES", "valkey,pgbouncer,memcached,rabbitmq")
 
     backups_target = workdir / "backups"
     backups_target.mkdir(parents=True, exist_ok=True)
@@ -350,9 +348,7 @@ def manage_env(tmp_path_factory):
 
     env = os.environ.copy()
     env["ENV_FILE"] = str(env_file)
-    project_name = env.setdefault(
-        "COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}"
-    )
+    project_name = env.setdefault("COMPOSE_PROJECT_NAME", f"core_data_ci_{uuid.uuid4().hex[:8]}")
     env["PG_BADGER_JOBS"] = "1"
     for key, value in replacements.items():
         env[key] = value
@@ -386,17 +382,14 @@ def manage_env(tmp_path_factory):
         caps = service_config.get("cap_drop", [])
         assert caps == ["ALL"], f"service {service} should drop all capabilities"
         seccomp_opts = service_config.get("security_opt", [])
-        assert any(
-            opt.startswith("seccomp:") or opt.startswith("seccomp=")
-            for opt in seccomp_opts
-        ), f"service {service} should define a seccomp security option"
+        assert any(opt.startswith("seccomp:") or opt.startswith("seccomp=") for opt in seccomp_opts), (
+            f"service {service} should define a seccomp security option"
+        )
 
     try:
         yield env, project_name
     finally:
-        subprocess.run(
-            ["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False
-        )
+        subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
         subprocess.run(
             ["docker", "pull", "busybox"],
             check=False,
@@ -437,9 +430,7 @@ def manage_env(tmp_path_factory):
             busybox_volume_command(f"rm -rf /data/{rel}")
         if backup_entry is not None:
             backup_rel = backup_entry.relative_to(data_root)
-            busybox_volume_command(
-                f"mv /data/{backup_rel} /data/{rel}"
-            )
+            busybox_volume_command(f"mv /data/{backup_rel} /data/{rel}")
 
 
 def run_manage(env, *args, check=True):
@@ -533,9 +524,7 @@ def container_ip(project_name, service, retries=60, delay=2):
                 return ip_addr
             last_error = RuntimeError(f"container {service} has no assigned IP yet")
         else:
-            last_error = RuntimeError(
-                f"failed to inspect container {service}: {result.stderr.strip()}"
-            )
+            last_error = RuntimeError(f"failed to inspect container {service}: {result.stderr.strip()}")
         exec_result = subprocess.run(
             ["docker", "exec", container, "hostname", "-i"],
             capture_output=True,
@@ -546,9 +535,7 @@ def container_ip(project_name, service, retries=60, delay=2):
             if ip_candidate:
                 return ip_candidate.split()[0]
         elif exec_result.stderr:
-            last_error = RuntimeError(
-                f"failed to exec hostname in {service}: {exec_result.stderr.strip()}"
-            )
+            last_error = RuntimeError(f"failed to exec hostname in {service}: {exec_result.stderr.strip()}")
         time.sleep(delay)
     if last_error:
         raise last_error
@@ -598,14 +585,8 @@ def wait_for_container(project_name, service, retries=60, delay=2):
                     capture_output=True,
                     text=True,
                 )
-                if (
-                    health.returncode == 0
-                    and health.stdout.strip()
-                    and health.stdout.strip() not in {"healthy", ""}
-                ):
-                    last_error = RuntimeError(
-                        f"container {service} health {health.stdout.strip()}"
-                    )
+                if health.returncode == 0 and health.stdout.strip() and health.stdout.strip() not in {"healthy", ""}:
+                    last_error = RuntimeError(f"container {service} health {health.stdout.strip()}")
                 else:
                     return
             elif status == "exited":
@@ -633,9 +614,7 @@ def wait_for_container(project_name, service, retries=60, delay=2):
                 )
                 exit_code = code.stdout.strip() if code.returncode == 0 else "?"
                 details = reason.stdout.strip() if reason.returncode == 0 else ""
-                raise RuntimeError(
-                    f"container {service} exited with code {exit_code}: {details}"
-                )
+                raise RuntimeError(f"container {service} exited with code {exit_code}: {details}")
             else:
                 if status in {"restarting", "paused"}:
                     exit_code = subprocess.run(
@@ -662,17 +641,11 @@ def wait_for_container(project_name, service, retries=60, delay=2):
                     )
                     exit_part = exit_code.stdout.strip() if exit_code.returncode == 0 else "?"
                     detail_part = error_detail.stdout.strip() if error_detail.returncode == 0 else ""
-                    last_error = RuntimeError(
-                        f"container {service} status {status} exit {exit_part} {detail_part}"
-                    )
+                    last_error = RuntimeError(f"container {service} status {status} exit {exit_part} {detail_part}")
                 else:
-                    last_error = RuntimeError(
-                        f"container {service} status {status}"
-                    )
+                    last_error = RuntimeError(f"container {service} status {status}")
         else:
-            last_error = RuntimeError(
-                f"failed to inspect container {service}: {inspect.stderr.strip()}"
-            )
+            last_error = RuntimeError(f"failed to inspect container {service}: {inspect.stderr.strip()}")
         time.sleep(delay)
     if last_error:
         logs = subprocess.run(
@@ -681,22 +654,16 @@ def wait_for_container(project_name, service, retries=60, delay=2):
             text=True,
         )
         if logs.returncode == 0:
-            raise RuntimeError(
-                f"{last_error}; recent logs:\n{logs.stdout}"
-            ) from last_error
+            raise RuntimeError(f"{last_error}; recent logs:\n{logs.stdout}") from last_error
         raise last_error
     raise RuntimeError(f"container {service} failed to reach running state")
 
 
 def inspect_container(project_name, service):
     container = container_name(project_name, service)
-    result = subprocess.run(
-        ["docker", "inspect", container], capture_output=True, text=True
-    )
+    result = subprocess.run(["docker", "inspect", container], capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(
-            f"failed to inspect container {service}: {result.stderr.strip()}"
-        )
+        raise RuntimeError(f"failed to inspect container {service}: {result.stderr.strip()}")
     data = json.loads(result.stdout)
     if not data:
         raise RuntimeError(f"docker inspect returned no data for {service}")
@@ -711,9 +678,7 @@ def assert_service_security(project_name, service):
     assert "ALL" in cap_drop, f"{service} should drop all capabilities"
     sec_opts = host_cfg.get("SecurityOpt") or []
     assert any("seccomp" in opt for opt in sec_opts), f"{service} missing seccomp profile"
-    assert any(opt.startswith("no-new-privileges") for opt in sec_opts), (
-        f"{service} should set no-new-privileges"
-    )
+    assert any(opt.startswith("no-new-privileges") for opt in sec_opts), f"{service} should set no-new-privileges"
     assert not host_cfg.get("Privileged", False), f"{service} should not run privileged"
 
 
@@ -734,9 +699,7 @@ def pick_endpoint(primary, secondary=None, *, primary_retries=15, secondary_retr
             try:
                 secondary = secondary()
             except (RuntimeError, OSError, ValueError) as resolver_error:  # noqa: PERF203
-                raise RuntimeError(
-                    f"failed to resolve secondary endpoint: {resolver_error}"
-                ) from resolver_error
+                raise RuntimeError(f"failed to resolve secondary endpoint: {resolver_error}") from resolver_error
         try:
             wait_for_port(*secondary, retries=secondary_retries, delay=delay)
             return secondary
@@ -779,13 +742,7 @@ def check_memcached(host, port):
     with socket.create_connection((host, port), timeout=5) as sock:
         sock.settimeout(5)
         payload = b"online"
-        sock.sendall(
-            b"set e2e_network_check 0 30 "
-            + str(len(payload)).encode()
-            + b"\r\n"
-            + payload
-            + b"\r\n"
-        )
+        sock.sendall(b"set e2e_network_check 0 30 " + str(len(payload)).encode() + b"\r\n" + payload + b"\r\n")
         assert sock.recv(128).startswith(b"STORED")
         sock.sendall(b"get e2e_network_check\r\n")
         data = sock.recv(256)
@@ -954,14 +911,8 @@ def exercise_network_clients(env, app_db, app_user, app_password):
         env_values[key.strip()] = value.strip()
 
     project_name = env.get("COMPOSE_PROJECT_NAME")
-    compose_profiles_raw = env.get(
-        "COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", "")
-    )
-    active_profiles = {
-        profile.strip()
-        for profile in compose_profiles_raw.split(",")
-        if profile.strip()
-    }
+    compose_profiles_raw = env.get("COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", ""))
+    active_profiles = {profile.strip() for profile in compose_profiles_raw.split(",") if profile.strip()}
 
     def profile_enabled(sidecar: str) -> bool:
         profile_map = {
@@ -999,9 +950,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
     rabbitmq_mgmt_host_port = resolve_port(
         "RABBITMQ_MANAGEMENT_HOST_PORT", env_values.get("RABBITMQ_MANAGEMENT_PORT", "15672")
     )
-    pgbouncer_host_port = resolve_port(
-        "PGBOUNCER_HOST_PORT", env_values.get("PGBOUNCER_PORT", "6432")
-    )
+    pgbouncer_host_port = resolve_port("PGBOUNCER_HOST_PORT", env_values.get("PGBOUNCER_PORT", "6432"))
     pghero_host_port = int(env["PGHERO_PORT"])
 
     if profile_enabled("valkey"):
@@ -1051,9 +1000,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
             secondary_retries=30,
         )
         rabbitmq_mgmt_primary = ("127.0.0.1", rabbitmq_mgmt_host_port)
-        rabbitmq_mgmt_secondary = container_endpoint_factory(
-            project_name, "rabbitmq", 15672
-        )
+        rabbitmq_mgmt_secondary = container_endpoint_factory(project_name, "rabbitmq", 15672)
         rabbitmq_mgmt_host, rabbitmq_mgmt_port = pick_endpoint(
             rabbitmq_mgmt_primary,
             rabbitmq_mgmt_secondary,
@@ -1094,9 +1041,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
 
     pgbouncer_available = profile_enabled("pgbouncer") and "pgbouncer" not in unavailable
     if not pgbouncer_available and profile_enabled("pgbouncer"):
-        warnings.warn(
-            f"Skipping PgBouncer checks: {unavailable['pgbouncer']}", RuntimeWarning
-        )
+        warnings.warn(f"Skipping PgBouncer checks: {unavailable['pgbouncer']}", RuntimeWarning)
     if pgbouncer_available:
         pgbouncer_primary = ("127.0.0.1", pgbouncer_host_port)
         pgbouncer_secondary = container_endpoint_factory(project_name, "pgbouncer", 6432)
@@ -1229,14 +1174,8 @@ def test_full_workflow(manage_env):
         key, value = line.split("=", 1)
         env_values[key.strip()] = value.strip()
 
-    compose_profiles_raw = env.get(
-        "COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", "")
-    )
-    active_profiles = {
-        profile.strip()
-        for profile in compose_profiles_raw.split(",")
-        if profile.strip()
-    }
+    compose_profiles_raw = env.get("COMPOSE_PROFILES", env_values.get("COMPOSE_PROFILES", ""))
+    active_profiles = {profile.strip() for profile in compose_profiles_raw.split(",") if profile.strip()}
 
     def profile_enabled(name: str) -> bool:
         return name in active_profiles
@@ -1298,9 +1237,7 @@ def test_full_workflow(manage_env):
     run_manage(env, "upgrade", "--new-version", "17")
     wait_for_ready(env)
 
-    status = subprocess.run(
-        [str(MANAGE), "status"], cwd=ROOT, env=env, capture_output=True, text=True
-    )
+    status = subprocess.run([str(MANAGE), "status"], cwd=ROOT, env=env, capture_output=True, text=True)
     assert status.returncode == 0
     assert f"{project_name}_postgres" in status.stdout
 
@@ -1501,7 +1438,7 @@ def test_test_dataset_bootstrap(manage_env):
             "-t",
             "-A",
             "-c",
-            "SET search_path = ag_catalog, \"$user\", public; "
+            'SET search_path = ag_catalog, "$user", public; '
             "SELECT source::text, target::text FROM cypher('testkit_graph', $$ MATCH (a:Place)-[:ROUTE]->(b:Place) RETURN a.slug AS source, b.slug AS target $$) "
             "AS (source agtype, target agtype) ORDER BY source::text, target::text;",
         )
@@ -1521,9 +1458,7 @@ def test_test_dataset_bootstrap(manage_env):
                 row_factory=tuple_row,
             ) as conn:
                 with conn.cursor() as cur:
-                    cur.execute(
-                        "SELECT slug FROM testkit.places ORDER BY slug LIMIT 1;"
-                    )
+                    cur.execute("SELECT slug FROM testkit.places ORDER BY slug LIMIT 1;")
                     return cur.fetchone()[0]
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
@@ -1694,6 +1629,7 @@ def test_config_check(manage_env):
     result = run_manage(env, "config-check", check=False)
     assert result.returncode == 0, result.stdout + result.stderr
 
+
 def test_create_env_noninteractive(manage_env, tmp_path):
     env, _ = manage_env
     target = tmp_path / "generated.env"
@@ -1710,9 +1646,7 @@ def test_create_env_noninteractive(manage_env, tmp_path):
         path.unlink(missing_ok=True)
 
     try:
-        result = run_manage(
-            env, "create-env", "--non-interactive", "--force", "--output", str(target)
-        )
+        result = run_manage(env, "create-env", "--non-interactive", "--force", "--output", str(target))
         assert result.returncode == 0
         assert target.exists()
         content = target.read_text().splitlines()
@@ -1722,10 +1656,7 @@ def test_create_env_noninteractive(manage_env, tmp_path):
                 key, value = line.split("=", 1)
                 env_map[key.strip()] = value.strip()
 
-        assert (
-            env_map["POSTGRES_SUPERUSER_PASSWORD_FILE"]
-            == "./secrets/postgres_superuser_password"
-        )
+        assert env_map["POSTGRES_SUPERUSER_PASSWORD_FILE"] == "./secrets/postgres_superuser_password"
         assert env_map["POSTGRES_SUPERUSER_PASSWORD"] == ""
         assert env_map["POSTGRES_UID"] == str(os.getuid())
         assert env_map["POSTGRES_GID"] == str(os.getgid())
@@ -1737,14 +1668,8 @@ def test_create_env_noninteractive(manage_env, tmp_path):
         assert env_mode == 0o600
 
         assert env_map["VALKEY_PASSWORD_FILE"] == "./secrets/valkey_password"
-        assert (
-            env_map["PGBOUNCER_AUTH_PASSWORD_FILE"]
-            == "./secrets/pgbouncer_auth_password"
-        )
-        assert (
-            env_map["PGBOUNCER_STATS_PASSWORD_FILE"]
-            == "./secrets/pgbouncer_stats_password"
-        )
+        assert env_map["PGBOUNCER_AUTH_PASSWORD_FILE"] == "./secrets/pgbouncer_auth_password"
+        assert env_map["PGBOUNCER_STATS_PASSWORD_FILE"] == "./secrets/pgbouncer_stats_password"
 
         for path in (
             postgres_secret,

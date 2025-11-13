@@ -11,22 +11,23 @@ LIB_AUDIT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${LIB_AUDIT_DIR}/common.sh"
 
 copy_query_to_file() {
-  local db=$1
-  local query=$2
-  local target_path=$3
+	local db=$1
+	local query=$2
+	local target_path=$3
 
-  local encoded
-  encoded=$(printf '%s' "${query}" | base64 | tr -d '\n')
-  compose_exec bash -lc "echo '${encoded}' | base64 -d > /tmp/core_data_audit.sql"
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    bash -lc "psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname '${db}' --csv --file /tmp/core_data_audit.sql > '${target_path}'"
-  compose_exec bash -lc "rm -f /tmp/core_data_audit.sql"
+	local encoded
+	encoded=$(printf '%s' "${query}" | base64 | tr -d '\n')
+	compose_exec bash -lc "echo '${encoded}' | base64 -d > /tmp/core_data_audit.sql"
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		bash -lc "psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname '${db}' --csv --file /tmp/core_data_audit.sql > '${target_path}'"
+	compose_exec bash -lc "rm -f /tmp/core_data_audit.sql"
 }
 
 _snapshot_pg_stat_statements() {
-  local target_path=$1
-  local limit=${2:-100}
-query=$(cat <<SQL
+	local target_path=$1
+	local limit=${2:-100}
+	query=$(
+		cat <<SQL
 SELECT now() AS collected_at,
 SELECT now() AS collected_at,
        d.datname,
@@ -42,33 +43,34 @@ SELECT now() AS collected_at,
  ORDER BY s.total_exec_time DESC
  LIMIT ${limit};
 SQL
-)
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	)
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
 }
 
 snapshot_pg_stat_statements() {
-  ensure_env
-  local target_path=${1:-}
-  local limit=${2:-100}
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-      --csv --command "SELECT now() AS collected_at, d.datname, s.queryid, s.calls, s.total_exec_time, s.rows, s.shared_blks_hit, s.shared_blks_dirtied, s.shared_blks_written FROM pg_stat_statements s JOIN pg_database d ON d.oid = s.dbid ORDER BY s.total_exec_time DESC LIMIT ${limit};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  if _snapshot_pg_stat_statements "${target_path}" "${limit}"; then
-    echo "pg_stat_statements snapshot written to ${target_path}" >&2
-  else
-    echo "[audit] WARNING: failed to capture pg_stat_statements snapshot" >&2
-  fi
+	ensure_env
+	local target_path=${1:-}
+	local limit=${2:-100}
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+			--csv --command "SELECT now() AS collected_at, d.datname, s.queryid, s.calls, s.total_exec_time, s.rows, s.shared_blks_hit, s.shared_blks_dirtied, s.shared_blks_written FROM pg_stat_statements s JOIN pg_database d ON d.oid = s.dbid ORDER BY s.total_exec_time DESC LIMIT ${limit};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	if _snapshot_pg_stat_statements "${target_path}" "${limit}"; then
+		echo "pg_stat_statements snapshot written to ${target_path}" >&2
+	else
+		echo "[audit] WARNING: failed to capture pg_stat_statements snapshot" >&2
+	fi
 }
 
 audit_roles() {
-  ensure_env
-  local target_path=${1:-}
-  local query
-query=$(cat <<'SQL'
+	ensure_env
+	local target_path=${1:-}
+	local query
+	query=$(
+		cat <<'SQL'
 SELECT rolname,
        rolsuper,
        rolreplication,
@@ -85,42 +87,43 @@ SELECT rolname,
 WHERE rolname NOT LIKE 'pg_%'
 ORDER BY rolname;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
-  echo "Role audit written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	echo "Role audit written to ${target_path}" >&2
 }
 
 audit_extensions() {
-  ensure_env
-  local target_path=${1:-}
-  local script="set -euo pipefail; export PGHOST='${POSTGRES_HOST}'; export PGPASSWORD='${POSTGRES_SUPERUSER_PASSWORD:-}'; dbs=\$(psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname '${POSTGRES_DB:-postgres}' --tuples-only --no-align --command \"SELECT datname FROM pg_database WHERE datistemplate = false\");"
-  script+=" if [ -z \"\$dbs\" ]; then exit 0; fi;"
-  if [[ -z ${target_path} ]]; then
-    script+=" printf 'database,extension,extversion,default_version,status\\n';"
-    script+=" for db in \$dbs; do psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname \"\$db\" --tuples-only --no-align --field-separator ',' --command \"SELECT '\$db' AS database, extname, extversion, (SELECT default_version FROM pg_available_extensions WHERE name = extname) AS default_version, CASE WHEN extversion = (SELECT default_version FROM pg_available_extensions WHERE name = extname) THEN 'ok' ELSE 'version drift' END AS status FROM pg_extension ORDER BY extname\"; done"
-    compose_exec bash -lc "${script}"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  script+=" printf 'database,extension,extversion,default_version,status\\n' > '${target_path}';"
-  script+=" for db in \$dbs; do psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname \"\$db\" --tuples-only --no-align --field-separator ',' --command \"SELECT '\$db' AS database, extname, extversion, (SELECT default_version FROM pg_available_extensions WHERE name = extname) AS default_version, CASE WHEN extversion = (SELECT default_version FROM pg_available_extensions WHERE name = extname) THEN 'ok' ELSE 'version drift' END AS status FROM pg_extension ORDER BY extname\" >> '${target_path}'; done"
-  compose_exec bash -lc "${script}"
-  echo "Extension audit written to ${target_path}" >&2
+	ensure_env
+	local target_path=${1:-}
+	local script="set -euo pipefail; export PGHOST='${POSTGRES_HOST}'; export PGPASSWORD='${POSTGRES_SUPERUSER_PASSWORD:-}'; dbs=\$(psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname '${POSTGRES_DB:-postgres}' --tuples-only --no-align --command \"SELECT datname FROM pg_database WHERE datistemplate = false\");"
+	script+=" if [ -z \"\$dbs\" ]; then exit 0; fi;"
+	if [[ -z ${target_path} ]]; then
+		script+=" printf 'database,extension,extversion,default_version,status\\n';"
+		script+=" for db in \$dbs; do psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname \"\$db\" --tuples-only --no-align --field-separator ',' --command \"SELECT '\$db' AS database, extname, extversion, (SELECT default_version FROM pg_available_extensions WHERE name = extname) AS default_version, CASE WHEN extversion = (SELECT default_version FROM pg_available_extensions WHERE name = extname) THEN 'ok' ELSE 'version drift' END AS status FROM pg_extension ORDER BY extname\"; done"
+		compose_exec bash -lc "${script}"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	script+=" printf 'database,extension,extversion,default_version,status\\n' > '${target_path}';"
+	script+=" for db in \$dbs; do psql --username '${POSTGRES_SUPERUSER:-postgres}' --dbname \"\$db\" --tuples-only --no-align --field-separator ',' --command \"SELECT '\$db' AS database, extname, extversion, (SELECT default_version FROM pg_available_extensions WHERE name = extname) AS default_version, CASE WHEN extversion = (SELECT default_version FROM pg_available_extensions WHERE name = extname) THEN 'ok' ELSE 'version drift' END AS status FROM pg_extension ORDER BY extname\" >> '${target_path}'; done"
+	compose_exec bash -lc "${script}"
+	echo "Extension audit written to ${target_path}" >&2
 }
 
 audit_autovacuum() {
-  ensure_env
-  local target_path=${1:-}
-  local dead_threshold=${2:-100000}
-  local ratio_threshold=${3:-0.2}
-  local query
-query=$(cat <<SQL
+	ensure_env
+	local target_path=${1:-}
+	local dead_threshold=${2:-100000}
+	local ratio_threshold=${3:-0.2}
+	local query
+	query=$(
+		cat <<SQL
 SELECT now() AS collected_at,
        schemaname,
        relname,
@@ -136,24 +139,24 @@ WHERE n_dead_tup > ${dead_threshold}
    OR (n_live_tup > 0 AND (n_dead_tup::numeric / NULLIF(n_live_tup,0)) > ${ratio_threshold})
  ORDER BY n_dead_tup DESC;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
-  echo "Autovacuum findings written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	echo "Autovacuum findings written to ${target_path}" >&2
 }
 
 audit_pg_cron() {
-  ensure_env
-  local target_path=${1:-}
-  local schema
-  schema=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --tuples-only --no-align \
-         --command "SELECT quote_ident(n.nspname)\
+	ensure_env
+	local target_path=${1:-}
+	local schema
+	schema=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --tuples-only --no-align \
+		--command "SELECT quote_ident(n.nspname)\
                       FROM pg_extension e\
                       JOIN pg_depend d\
                         ON d.refobjid = e.oid\
@@ -164,18 +167,19 @@ audit_pg_cron() {
                      WHERE e.extname = 'pg_cron'\
                        AND c.relname = 'job'\
                      LIMIT 1;")
-  schema=${schema//$'\n'/}
-  if [[ -z ${schema} ]]; then
-    if [[ -n ${target_path} ]]; then
-      compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")' && echo 'pg_cron extension not installed' > '${target_path}'"
-    else
-      echo "[audit] pg_cron extension not installed; skipping cron audit." >&2
-    fi
-    return
-  fi
+	schema=${schema//$'\n'/}
+	if [[ -z ${schema} ]]; then
+		if [[ -n ${target_path} ]]; then
+			compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")' && echo 'pg_cron extension not installed' > '${target_path}'"
+		else
+			echo "[audit] pg_cron extension not installed; skipping cron audit." >&2
+		fi
+		return
+	fi
 
-  local query
-query=$(cat <<SQL
+	local query
+	query=$(
+		cat <<SQL
 WITH latest AS (
   SELECT jobid,
          max(start_time) AS last_start
@@ -199,27 +203,28 @@ SELECT j.jobid,
          ON d.jobid = j.jobid AND l.last_start IS NOT NULL AND d.start_time = l.last_start
  ORDER BY j.jobname;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "postgres" "${query}" "${target_path}"
-  echo "pg_cron schedule written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "postgres" "${query}" "${target_path}"
+	echo "pg_cron schedule written to ${target_path}" >&2
 }
 
 audit_pg_buffercache() {
-  ensure_env
-  local target_path=${1:-}
-  local limit=${2:-50}
-  if ! [[ ${limit} =~ ^[0-9]+$ ]]; then
-    echo "[audit] invalid limit '${limit}', falling back to 50" >&2
-    limit=50
-  fi
-  local query
-query=$(cat <<SQL
+	ensure_env
+	local target_path=${1:-}
+	local limit=${2:-50}
+	if ! [[ ${limit} =~ ^[0-9]+$ ]]; then
+		echo "[audit] invalid limit '${limit}', falling back to 50" >&2
+		limit=50
+	fi
+	local query
+	query=$(
+		cat <<SQL
 SELECT now() AS collected_at,
        n.nspname AS schema_name,
        c.relname AS relation_name,
@@ -238,55 +243,57 @@ SELECT now() AS collected_at,
  ORDER BY buffers DESC
  LIMIT ${limit};
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  if copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"; then
-    echo "Buffer cache snapshot written to ${target_path}" >&2
-  else
-    echo "[audit] WARNING: failed to capture pg_buffercache snapshot" >&2
-  fi
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	if copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"; then
+		echo "Buffer cache snapshot written to ${target_path}" >&2
+	else
+		echo "[audit] WARNING: failed to capture pg_buffercache snapshot" >&2
+	fi
 }
 
 audit_pg_squeeze() {
-  ensure_env
-  local target_path=${1:-}
-  local exists
-  exists=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --tuples-only --no-align --command "SELECT to_regclass('squeeze.tables') IS NOT NULL;")
-  if [[ ${exists,,} != "t" && ${exists,,} != "true" ]]; then
-    if [[ -n ${target_path} ]]; then
-      compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")' && echo 'squeeze.tables not available' > '${target_path}'"
-    else
-      echo "[audit] squeeze.tables not available; skipping." >&2
-    fi
-    return
-  fi
-  local query
-query=$(cat <<'SQL'
+	ensure_env
+	local target_path=${1:-}
+	local exists
+	exists=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --tuples-only --no-align --command "SELECT to_regclass('squeeze.tables') IS NOT NULL;")
+	if [[ ${exists,,} != "t" && ${exists,,} != "true" ]]; then
+		if [[ -n ${target_path} ]]; then
+			compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")' && echo 'squeeze.tables not available' > '${target_path}'"
+		else
+			echo "[audit] squeeze.tables not available; skipping." >&2
+		fi
+		return
+	fi
+	local query
+	query=$(
+		cat <<'SQL'
 SELECT * FROM squeeze.tables ORDER BY 1;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "postgres" "${query}" "${target_path}"
-  echo "pg_squeeze activity written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "postgres" "${query}" "${target_path}"
+	echo "pg_squeeze activity written to ${target_path}" >&2
 }
 
 audit_index_bloat() {
-  ensure_env
-  local target_path=${1:-}
-  local min_size_mb=${2:-10}
-  local query
-query=$(cat <<SQL
+	ensure_env
+	local target_path=${1:-}
+	local min_size_mb=${2:-10}
+	local query
+	query=$(
+		cat <<SQL
 WITH stats AS (
   SELECT i.schemaname,
          i.relname AS table_name,
@@ -306,22 +313,23 @@ SELECT schemaname,
   FROM stats
  ORDER BY estimated_bloat_pct DESC, index_size_bytes DESC;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
-  echo "Index bloat report written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	echo "Index bloat report written to ${target_path}" >&2
 }
 
 audit_schema_snapshot() {
-  ensure_env
-  local target_path=${1:-}
-  local query
-query=$(cat <<'SQL'
+	ensure_env
+	local target_path=${1:-}
+	local query
+	query=$(
+		cat <<'SQL'
 SELECT table_schema,
        table_name,
        ordinal_position,
@@ -333,23 +341,24 @@ SELECT table_schema,
  WHERE table_schema NOT IN ('information_schema','pg_catalog')
  ORDER BY table_schema, table_name, ordinal_position;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
-  echo "Schema snapshot written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	echo "Schema snapshot written to ${target_path}" >&2
 }
 
 audit_replication_lag() {
-  ensure_env
-  local target_path=${1:-}
-  local lag_warn_seconds=${2:-300}
-  local query
-query=$(cat <<SQL
+	ensure_env
+	local target_path=${1:-}
+	local lag_warn_seconds=${2:-300}
+	local query
+	query=$(
+		cat <<SQL
 SELECT now() AS collected_at,
        application_name,
        client_addr,
@@ -362,23 +371,23 @@ SELECT now() AS collected_at,
   FROM pg_stat_replication
  ORDER BY application_name;
 SQL
-)
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
-  echo "Replication lag report written to ${target_path}" >&2
+	)
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" --csv --command "${query};"
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	copy_query_to_file "${POSTGRES_DB:-postgres}" "${query}" "${target_path}"
+	echo "Replication lag report written to ${target_path}" >&2
 }
 
 audit_security() {
-  ensure_env
-  local target_path=${1:-}
-  if [[ -z ${target_path} ]]; then
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<'SQL'
+	ensure_env
+	local target_path=${1:-}
+	if [[ -z ${target_path} ]]; then
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<'SQL'
 \pset format unaligned
 \pset tuples_only on
 SELECT '== HBA entries that use trust authentication =='::text;
@@ -398,11 +407,11 @@ SELECT format('%s.%s', n.nspname, c.relname)
    AND n.nspname <> 'information_schema'
    AND NOT c.relrowsecurity;
 SQL
-    return
-  fi
-  compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
+		return
+	fi
+	compose_exec bash -lc "mkdir -p '$(dirname "${target_path}")'"
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 \pset format unaligned
 \pset tuples_only on
 \o '${target_path}'
@@ -424,14 +433,13 @@ SELECT format('%s.%s', n.nspname, c.relname)
    AND NOT c.relrowsecurity;
 \o
 SQL
-  echo "Security audit written to ${target_path}" >&2
+	echo "Security audit written to ${target_path}" >&2
 }
 
-
 summarize_pgaudit_logs() {
-  ensure_env
-  local container_dir=$1
-  compose_exec env TARGET_DIR="${container_dir}" python3 <<'PY'
+	ensure_env
+	local container_dir=$1
+	compose_exec env TARGET_DIR="${container_dir}" python3 <<'PY'
 import csv
 import glob
 import os
@@ -473,11 +481,11 @@ PY
 }
 
 config_drift_report() {
-  ensure_env
-  local drift=0
-  compose_exec bash -lc "envsubst < /opt/core_data/conf/postgresql.conf.tpl > /tmp/core_data_expected_postgresql.conf"
-  compose_exec bash -lc "envsubst < /opt/core_data/conf/pg_hba.conf.tpl > /tmp/core_data_expected_pg_hba.conf"
-  compose_exec bash -lc '
+	ensure_env
+	local drift=0
+	compose_exec bash -lc "envsubst < /opt/core_data/conf/postgresql.conf.tpl > /tmp/core_data_expected_postgresql.conf"
+	compose_exec bash -lc "envsubst < /opt/core_data/conf/pg_hba.conf.tpl > /tmp/core_data_expected_pg_hba.conf"
+	compose_exec bash -lc '
     if [[ -d /opt/core_data/conf/pg_hba.d ]]; then
       shopt -s nullglob
       extras=(/opt/core_data/conf/pg_hba.d/*)
@@ -510,26 +518,26 @@ config_drift_report() {
       echo "# --- END networks.allow entries ---" >> /tmp/core_data_expected_pg_hba.conf
     fi
   '
-  local conf_diff
-  conf_diff=$(compose_exec bash -lc "diff -u /tmp/core_data_expected_postgresql.conf /var/lib/postgresql/data/postgresql.conf || true")
-  if [[ -n ${conf_diff} ]]; then
-    echo "[config-check] postgresql.conf drift detected:" >&2
-    echo "${conf_diff}"
-    drift=1
-  else
-    echo "[config-check] postgresql.conf matches rendered template." >&2
-  fi
-  local hba_diff
-  hba_diff=$(compose_exec bash -lc "diff -u /tmp/core_data_expected_pg_hba.conf /var/lib/postgresql/data/pg_hba.conf || true")
-  if [[ -n ${hba_diff} ]]; then
-    echo "[config-check] pg_hba.conf drift detected:" >&2
-    echo "${hba_diff}"
-    drift=1
-  else
-    echo "[config-check] pg_hba.conf matches rendered template." >&2
-  fi
-  if [[ ${drift} -ne 0 ]]; then
-    return 1
-  fi
-  return 0
+	local conf_diff
+	conf_diff=$(compose_exec bash -lc "diff -u /tmp/core_data_expected_postgresql.conf /var/lib/postgresql/data/postgresql.conf || true")
+	if [[ -n ${conf_diff} ]]; then
+		echo "[config-check] postgresql.conf drift detected:" >&2
+		echo "${conf_diff}"
+		drift=1
+	else
+		echo "[config-check] postgresql.conf matches rendered template." >&2
+	fi
+	local hba_diff
+	hba_diff=$(compose_exec bash -lc "diff -u /tmp/core_data_expected_pg_hba.conf /var/lib/postgresql/data/pg_hba.conf || true")
+	if [[ -n ${hba_diff} ]]; then
+		echo "[config-check] pg_hba.conf drift detected:" >&2
+		echo "${hba_diff}"
+		drift=1
+	else
+		echo "[config-check] pg_hba.conf matches rendered template." >&2
+	fi
+	if [[ ${drift} -ne 0 ]]; then
+		return 1
+	fi
+	return 0
 }

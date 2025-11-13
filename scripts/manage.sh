@@ -46,26 +46,26 @@ source "${SCRIPT_DIR}/lib/test_dataset.sh"
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
 bootstrap_database() {
-  local db="$1"
+	local db="$1"
 
-  for ext in "${CORE_DATA_EXTENSIONS[@]}"; do
-    if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
-      continue
-    fi
-    if [[ "${ext}" == "pg_partman" ]]; then
-      local pg_partman_sql
-      pg_partman_sql=$(generate_pg_partman_sql)
-      compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-        psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" \
-             --command "${pg_partman_sql}" >/dev/null
-      continue
-    fi
-    compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-      psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
-  done
+	for ext in "${CORE_DATA_EXTENSIONS[@]}"; do
+		if [[ "${ext}" == "pg_cron" && "${db}" != "postgres" ]]; then
+			continue
+		fi
+		if [[ "${ext}" == "pg_partman" ]]; then
+			local pg_partman_sql
+			pg_partman_sql=$(generate_pg_partman_sql)
+			compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+				psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" \
+				--command "${pg_partman_sql}" >/dev/null
+			continue
+		fi
+		compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "CREATE EXTENSION IF NOT EXISTS \"${ext}\";" >/dev/null
+	done
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL'
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS core_data_admin;
 ALTER SCHEMA core_data_admin OWNER TO CURRENT_USER;
 
@@ -107,18 +107,48 @@ SQL
 }
 
 schedule_pg_squeeze_job() {
-  local db="$1"
-  local job_name="core_data_pgsqueeze_${db}"
+	local db="$1"
+	local job_name="core_data_pgsqueeze_${db}"
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres <<SQL >/dev/null
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres <<SQL >/dev/null
 SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = '${job_name}';
 SELECT cron.schedule_in_database('${job_name}', '15 3 * * *', \$\$SELECT core_data_admin.refresh_pg_squeeze_targets();\$\$, '${db}');
 SQL
 }
 
+warn_if_config_drift() {
+  if ! compose_has_service "${POSTGRES_SERVICE_NAME}"; then
+    return
+  fi
+  if ! compose_exec bash -lc "[[ -f /var/lib/postgresql/data/.core_data_config_rendered ]]" >/dev/null 2>&1; then
+    return
+  fi
+  local ready=false
+  local max_attempts=${CONFIG_DRIFT_READY_RETRIES:-10}
+  local attempt=1
+  while (( attempt <= max_attempts )); do
+    if compose_exec pg_isready -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; then
+      ready=true
+      break
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
+  if [[ "${ready}" == false ]]; then
+    echo "[core_data] Skipping config drift check; PostgreSQL is not ready yet." >&2
+    return
+  fi
+  if ! config_drift_report >/dev/null 2>&1; then
+    cat <<'WARN' >&2
+[core_data] WARNING: PostgreSQL configs differ from the rendered templates.
+[core_data] Run './scripts/manage.sh config-render' to resync postgresql.conf/pg_hba.conf, then rerun './scripts/manage.sh config-check' to verify.
+WARN
+  fi
+}
+
 usage() {
-  cat <<USAGE
+	cat <<USAGE
 core_data management CLI
 
 Usage: ${0##*/} <command> [options]
@@ -147,6 +177,7 @@ Commands:
   stanza-create               Initialize pgBackRest stanza.
   restore-snapshot [args]     Run pgBackRest restore (pass-through args).
   provision-qa <db>           Provision QA database from latest backup.
+  config-render               Re-render postgresql.conf/pg_hba.conf then restart PostgreSQL.
   config-check                Compare live configs to rendered templates.
   audit-roles [--output PATH] Report on role posture (CSV if output path supplied).
   audit-extensions [--output PATH]
@@ -239,131 +270,131 @@ USAGE
 }
 
 detect_external_ip() {
-  if [[ -n "${CORE_DATA_EXTERNAL_IP:-}" ]]; then
-    printf '%s\n' "${CORE_DATA_EXTERNAL_IP}"
-    return
-  fi
+	if [[ -n "${CORE_DATA_EXTERNAL_IP:-}" ]]; then
+		printf '%s\n' "${CORE_DATA_EXTERNAL_IP}"
+		return
+	fi
 
-  local candidate
+	local candidate
 
-  if command -v hostname >/dev/null 2>&1; then
-    candidate=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1 || true)
-    if [[ -n "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return
-    fi
-  fi
+	if command -v hostname >/dev/null 2>&1; then
+		candidate=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -E '^[0-9]+(\.[0-9]+){3}$' | grep -v '^127\.' | head -n1 || true)
+		if [[ -n "${candidate}" ]]; then
+			printf '%s\n' "${candidate}"
+			return
+		fi
+	fi
 
-  if command -v ip >/dev/null 2>&1; then
-    candidate=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
-    if [[ -n "${candidate}" ]]; then
-      printf '%s\n' "${candidate}"
-      return
-    fi
-  fi
+	if command -v ip >/dev/null 2>&1; then
+		candidate=$(ip -4 addr show scope global 2>/dev/null | awk '/inet / {print $2}' | cut -d/ -f1 | head -n1)
+		if [[ -n "${candidate}" ]]; then
+			printf '%s\n' "${candidate}"
+			return
+		fi
+	fi
 
-  printf '%s\n' "127.0.0.1"
+	printf '%s\n' "127.0.0.1"
 }
 
 cmd_service_urls() {
-  ensure_env
+	ensure_env
 
-  local host_ip
-  host_ip=$(detect_external_ip)
+	local host_ip
+	host_ip=$(detect_external_ip)
 
-  load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
-  load_secret_from_file VALKEY_PASSWORD
-  load_secret_from_file PGBOUNCER_STATS_PASSWORD
-  load_secret_from_file PGHERO_PASSWORD
-  load_secret_from_file RABBITMQ_DEFAULT_PASS
+	load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
+	load_secret_from_file VALKEY_PASSWORD
+	load_secret_from_file PGBOUNCER_STATS_PASSWORD
+	load_secret_from_file PGHERO_PASSWORD
+	load_secret_from_file RABBITMQ_DEFAULT_PASS
 
-  local db_name=${POSTGRES_DB:-postgres}
-  local db_user=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
-  local db_port=${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}
-  local db_password=${POSTGRES_SUPERUSER_PASSWORD:-}
+	local db_name=${POSTGRES_DB:-postgres}
+	local db_user=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
+	local db_port=${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}
+	local db_password=${POSTGRES_SUPERUSER_PASSWORD:-}
 
-  local valkey_port=${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}
-  local valkey_password=${VALKEY_PASSWORD:-}
+	local valkey_port=${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}
+	local valkey_password=${VALKEY_PASSWORD:-}
 
-  local memcached_port=${MEMCACHED_PORT:-11211}
+	local memcached_port=${MEMCACHED_PORT:-11211}
 
-  local rabbitmq_user=${RABBITMQ_DEFAULT_USER:-coredata}
-  local rabbitmq_password=${RABBITMQ_DEFAULT_PASS:-}
-  local rabbitmq_port=${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}
-  local rabbitmq_mgmt_port=${RABBITMQ_MANAGEMENT_HOST_PORT:-${RABBITMQ_MANAGEMENT_PORT:-15672}}
+	local rabbitmq_user=${RABBITMQ_DEFAULT_USER:-coredata}
+	local rabbitmq_password=${RABBITMQ_DEFAULT_PASS:-}
+	local rabbitmq_port=${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}
+	local rabbitmq_mgmt_port=${RABBITMQ_MANAGEMENT_HOST_PORT:-${RABBITMQ_MANAGEMENT_PORT:-15672}}
 
-  local pgbouncer_stats_user=${PGBOUNCER_STATS_USER:-pgbouncer_stats}
-  local pgbouncer_stats_password=${PGBOUNCER_STATS_PASSWORD:-}
-  local pgbouncer_admin_db=pgbouncer
+	local pgbouncer_stats_user=${PGBOUNCER_STATS_USER:-pgbouncer_stats}
+	local pgbouncer_stats_password=${PGBOUNCER_STATS_PASSWORD:-}
+	local pgbouncer_admin_db=pgbouncer
 
-  local pghero_port=${PGHERO_PORT:-8080}
-  local pghero_user=${PGHERO_USER:-admin}
-  local pghero_password=${PGHERO_PASSWORD:-}
+	local pghero_port=${PGHERO_PORT:-8080}
+	local pghero_user=${PGHERO_USER:-admin}
+	local pghero_password=${PGHERO_PASSWORD:-}
 
-  printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
-    "${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
+	printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+		"${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
 
-  printf 'PGBOUNCER_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
-    "${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
+	printf 'PGBOUNCER_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+		"${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
 
-  if [[ -n "${pgbouncer_stats_password}" ]]; then
-    printf 'PGBOUNCER_ADMIN_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
-      "${pgbouncer_stats_user}" "${pgbouncer_stats_password}" "${host_ip}" "${db_port}" "${pgbouncer_admin_db}"
-  fi
+	if [[ -n "${pgbouncer_stats_password}" ]]; then
+		printf 'PGBOUNCER_ADMIN_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
+			"${pgbouncer_stats_user}" "${pgbouncer_stats_password}" "${host_ip}" "${db_port}" "${pgbouncer_admin_db}"
+	fi
 
-  if [[ -n "${valkey_password}" ]]; then
-    printf 'VALKEY_URL=redis://:%s@%s:%s/0\n' \
-      "${valkey_password}" "${host_ip}" "${valkey_port}"
-  else
-    printf 'VALKEY_URL=redis://%s:%s/0\n' "${host_ip}" "${valkey_port}"
-  fi
+	if [[ -n "${valkey_password}" ]]; then
+		printf 'VALKEY_URL=redis://:%s@%s:%s/0\n' \
+			"${valkey_password}" "${host_ip}" "${valkey_port}"
+	else
+		printf 'VALKEY_URL=redis://%s:%s/0\n' "${host_ip}" "${valkey_port}"
+	fi
 
-  printf 'MEMCACHED_URL=memcached://%s:%s\n' "${host_ip}" "${memcached_port}"
+	printf 'MEMCACHED_URL=memcached://%s:%s\n' "${host_ip}" "${memcached_port}"
 
-  if [[ -n "${rabbitmq_password}" ]]; then
-    printf 'RABBITMQ_URL=amqp://%s:%s@%s:%s/\n' \
-      "${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_port}"
-    printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s@%s:%s/\n' \
-      "${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_mgmt_port}"
-  else
-    printf 'RABBITMQ_URL=amqp://%s:%s/\n' "${host_ip}" "${rabbitmq_port}"
-    printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s/\n' "${host_ip}" "${rabbitmq_mgmt_port}"
-  fi
+	if [[ -n "${rabbitmq_password}" ]]; then
+		printf 'RABBITMQ_URL=amqp://%s:%s@%s:%s/\n' \
+			"${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_port}"
+		printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s@%s:%s/\n' \
+			"${rabbitmq_user}" "${rabbitmq_password}" "${host_ip}" "${rabbitmq_mgmt_port}"
+	else
+		printf 'RABBITMQ_URL=amqp://%s:%s/\n' "${host_ip}" "${rabbitmq_port}"
+		printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s/\n' "${host_ip}" "${rabbitmq_mgmt_port}"
+	fi
 
-  if [[ -n "${pghero_password}" ]]; then
-    printf 'PGHERO_URL=http://%s:%s@%s:%s/\n' \
-      "${pghero_user}" "${pghero_password}" "${host_ip}" "${pghero_port}"
-  else
-    printf 'PGHERO_URL=http://%s:%s/\n' "${host_ip}" "${pghero_port}"
-  fi
+	if [[ -n "${pghero_password}" ]]; then
+		printf 'PGHERO_URL=http://%s:%s@%s:%s/\n' \
+			"${pghero_user}" "${pghero_password}" "${host_ip}" "${pghero_port}"
+	else
+		printf 'PGHERO_URL=http://%s:%s/\n' "${host_ip}" "${pghero_port}"
+	fi
 }
 
 cmd_apparmor_load() {
-  local parser=${APPARMOR_PARSER:-apparmor_parser}
-  if ! command -v "${parser}" >/dev/null 2>&1; then
-    echo "[apparmor] ${parser} not found. Install apparmor-utils (Debian/Ubuntu) or ensure apparmor_parser is on PATH." >&2
-    exit 1
-  fi
-  if [[ $EUID -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
-    echo "[apparmor] sudo required to load profiles or rerun as root." >&2
-    exit 1
-  fi
-  local loaded=false
-  for profile in "${ROOT_DIR}/apparmor"/*.profile; do
-    [[ -e "${profile}" ]] || continue
-    if [[ $EUID -ne 0 ]]; then
-      sudo "${parser}" -r -W "${profile}" || exit 1
-    else
-      "${parser}" -r -W "${profile}" || exit 1
-    fi
-    loaded=true
-    echo "[apparmor] loaded ${profile##*/}" >&2
-  done
-  if [[ ${loaded} == false ]]; then
-    echo "[apparmor] no profiles found under ${ROOT_DIR}/apparmor" >&2
-    exit 1
-  fi
-  echo "[apparmor] profiles loaded. Set CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal (or your custom profile) before composing." >&2
+	local parser=${APPARMOR_PARSER:-apparmor_parser}
+	if ! command -v "${parser}" >/dev/null 2>&1; then
+		echo "[apparmor] ${parser} not found. Install apparmor-utils (Debian/Ubuntu) or ensure apparmor_parser is on PATH." >&2
+		exit 1
+	fi
+	if [[ $EUID -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
+		echo "[apparmor] sudo required to load profiles or rerun as root." >&2
+		exit 1
+	fi
+	local loaded=false
+	for profile in "${ROOT_DIR}/apparmor"/*.profile; do
+		[[ -e "${profile}" ]] || continue
+		if [[ $EUID -ne 0 ]]; then
+			sudo "${parser}" -r -W "${profile}" || exit 1
+		else
+			"${parser}" -r -W "${profile}" || exit 1
+		fi
+		loaded=true
+		echo "[apparmor] loaded ${profile##*/}" >&2
+	done
+	if [[ ${loaded} == false ]]; then
+		echo "[apparmor] no profiles found under ${ROOT_DIR}/apparmor" >&2
+		exit 1
+	fi
+	echo "[apparmor] profiles loaded. Set CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal (or your custom profile) before composing." >&2
 }
 
 ensure_compose
@@ -371,523 +402,691 @@ ensure_compose
 COMMAND=${1:-help}
 shift || true
 
-  case "${COMMAND}" in
-  create-env)
-    shift
-    bash "${SCRIPT_DIR}/create_env.sh" "$@"
-    ;;
-  build-image)
-    ensure_env
-    uid=${POSTGRES_UID:-$(id -u)}
-    gid=${POSTGRES_GID:-$(id -g)}
-    runtime_user=${POSTGRES_RUNTIME_USER:-postgres}
-    runtime_gecos=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL Administrator"}
-    runtime_home=${POSTGRES_RUNTIME_HOME:-/home/${runtime_user}}
-    compose build \
-      --build-arg CORE_UID="${uid}" \
-      --build-arg CORE_GID="${gid}" \
-      --build-arg CORE_USERNAME="${runtime_user}" \
-      --build-arg CORE_GECOS="${runtime_gecos}" \
-      --build-arg CORE_HOME="${runtime_home}" \
-      postgres
-    ;;
-  up)
-    ensure_env
-    compose up -d
-    ;;
-  down)
-    compose down
-    ;;
-  networks-refresh)
-    ensure_env
-    compose run --rm network_probe
-    if compose_has_service "postgres"; then
-      if [[ -n $(compose ps -q "${POSTGRES_SERVICE_NAME:-postgres}" 2>/dev/null) ]]; then
-        compose_exec bash -lc "/docker-entrypoint-initdb.d/00-render-config.sh"
-      fi
-    fi
-    if compose_has_service "pgbouncer"; then
-      if [[ -n $(compose ps -q pgbouncer 2>/dev/null) ]]; then
-        # shellcheck disable=SC2016  # Single quotes intentional - variables expand inside container
-        compose_exec_service pgbouncer sh -c 'for pid in $(pgrep pgbouncer || true); do kill -HUP "$pid"; done'
-      fi
-    fi
-    ;;
-  networks-show)
-    allow_path="${ROOT_DIR}/network_access/allow.list"
-    if [[ -f "${allow_path}" ]]; then
-      cat "${allow_path}"
-    else
-      echo "[core_data] allow.list not generated yet. Run '${0##*/} networks-refresh' first." >&2
-      exit 1
-    fi
-    ;;
-  psql)
-    ensure_env
-    user_flag_provided=false
-    host_flag_provided=false
-    for arg in "$@"; do
-      case "${arg}" in
-        -U|--username|-U*|--username=*)
-          user_flag_provided=true
-          break
-          ;;
-      esac
-    done
-    for arg in "$@"; do
-      case "${arg}" in
-        -h|--host|-h*|--host=*)
-          host_flag_provided=true
-          break
-          ;;
-      esac
-    done
-    declare -a psql_env=()
-    declare -a psql_cmd=(psql)
-    host_env="${PGHOST:-${POSTGRES_HOST}}"
-    if [[ "${user_flag_provided}" == "true" ]]; then
-      if [[ -n "${PGUSER:-}" ]]; then
-        psql_env+=("PGUSER=${PGUSER}")
-      fi
-      if [[ -n "${PGPASSWORD:-}" ]]; then
-        psql_env+=("PGPASSWORD=${PGPASSWORD}")
-      fi
-    else
-      psql_env+=("PGPASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-}")
-      psql_cmd+=(--username "${POSTGRES_SUPERUSER:-postgres}")
-    fi
-    if [[ "${host_flag_provided}" != "true" && -n "${host_env}" ]]; then
-      psql_env+=("PGHOST=${host_env}")
-    fi
-    wants_tty=false
-    if [[ -t 0 && -t 1 ]]; then
-      wants_tty=true
-      for arg in "$@"; do
-        case "${arg}" in
-          -c|--command|--command=*|-f|--file|--file=*)
-            wants_tty=false
-            break
-            ;;
-          -[^-]*)
-            if [[ "${arg}" == -*c* ]]; then
-              wants_tty=false
-              break
-            fi
-            ;;
-        esac
-      done
-    fi
-    psql_cmd+=("$@")
-    if [[ ${#psql_env[@]} -gt 0 ]]; then
-      if [[ "${wants_tty}" == "true" ]]; then
-        compose_exec_interactive env "${psql_env[@]}" "${psql_cmd[@]}"
-      else
-        compose_exec env "${psql_env[@]}" "${psql_cmd[@]}"
-      fi
-    else
-      if [[ "${wants_tty}" == "true" ]]; then
-        compose_exec_interactive "${psql_cmd[@]}"
-      else
-        compose_exec "${psql_cmd[@]}"
-      fi
-    fi
-    ;;
-  create-user)
-    cmd_create_user "$@"
-    ;;
-  drop-user)
-    cmd_drop_user "$@"
-    ;;
-  create-db)
-    cmd_create_db "$@"
-    ;;
-  drop-db)
-    cmd_drop_db "$@"
-    ;;
-  dump)
-    cmd_dump "$@"
-    ;;
-  dump-sql)
-    cmd_dump_sql "$@"
-    ;;
-  pgtune-config)
-    ensure_env
-    db_type=${PGTUNE_DB_TYPE:-oltp}
-    connections=""
-    total_memory=""
-    output_path="/var/lib/postgresql/data/postgresql.pgtune.conf"
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db-type)
-          db_type=$2; shift 2 ;;
-        --db-type=*)
-          db_type=${1#*=}; shift ;;
-        --connections)
-          connections=$2; shift 2 ;;
-        --connections=*)
-          connections=${1#*=}; shift ;;
-        --memory)
-          total_memory=$2; shift 2 ;;
-        --memory=*)
-          total_memory=${1#*=}; shift ;;
-        --output)
-          output_path=$2; shift 2 ;;
-        --output=*)
-          output_path=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} pgtune-config [--db-type TYPE] [--connections N] [--memory VALUE] [--output PATH]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for pgtune-config: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    args=(--type "$db_type" --input-config /var/lib/postgresql/data/postgresql.conf --output-config "$output_path" --version "${PG_VERSION%%.*}")
-    [[ -n $connections ]] && args+=(--connections "$connections")
-    [[ -n $total_memory ]] && args+=(--memory "$total_memory")
-    compose_exec python3 /opt/core_data/tools/pgtune.py "${args[@]}"
-    compose_exec bash -lc "chmod 600 '$output_path'"
-    compose_exec bash -lc "pg_ctl -D /var/lib/postgresql/data reload"
-    echo "Generated tuned settings at ${output_path}. PostgreSQL reloaded to pick up include_if_exists." >&2
-    ;;
-  pgbadger-report)
-    cmd_pgbadger_report "$@"
-    ;;
-  daily-maintenance)
-    cmd_daily_maintenance "$@"
-    ;;
-  restore-dump)
-    cmd_restore_dump "$@"
-    ;;
-  backup)
-    cmd_backup "$@"
-    ;;
-  stanza-create)
-    cmd_stanza_create "$@"
-    ;;
-  restore-snapshot)
-    cmd_restore_snapshot "$@"
-    ;;
-  provision-qa)
-    cmd_provision_qa "$@"
-    ;;
-  config-check)
-    if config_drift_report; then
-      echo "Configuration matches expected templates." >&2
-    else
-      exit 1
-    fi
-    ;;
-  audit-roles)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-roles [--output PATH]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for audit-roles: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_roles "${output}"
-    ;;
-  audit-extensions)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-extensions [--output PATH]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for audit-extensions: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_extensions "${output}"
-    ;;
-  audit-autovacuum)
-    output=""
-    dead_threshold=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
-    ratio_threshold=${DAILY_DEAD_TUPLE_RATIO:-0.2}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --dead-threshold)
-          dead_threshold=$2; shift 2 ;;
-        --dead-threshold=*)
-          dead_threshold=${1#*=}; shift ;;
-        --ratio)
-          ratio_threshold=$2; shift 2 ;;
-        --ratio=*)
-          ratio_threshold=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-autovacuum [--output PATH] [--dead-threshold N] [--ratio FLOAT]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for audit-autovacuum: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_autovacuum "${output}" "${dead_threshold}" "${ratio_threshold}"
-    ;;
-  audit-replication)
-    output=""
-    lag_seconds=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --lag-seconds)
-          lag_seconds=$2; shift 2 ;;
-        --lag-seconds=*)
-          lag_seconds=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-replication [--output PATH] [--lag-seconds N]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for audit-replication: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_replication_lag "${output}" "${lag_seconds}"
-    ;;
-  audit-security)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-security [--output PATH]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for audit-security: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_security "${output}"
-    ;;
-  audit-index-bloat)
-    output=""
-    min_size=${DAILY_INDEX_MIN_SIZE_MB:-10}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --min-size-mb)
-          min_size=$2; shift 2 ;;
-        --min-size-mb=*)
-          min_size=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-index-bloat [--output PATH] [--min-size-mb N]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for audit-index-bloat: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_index_bloat "${output}" "${min_size}"
-    ;;
-  audit-buffercache)
-    output=""
-    limit=${PG_BUFFERCACHE_LIMIT:-50}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --limit)
-          limit=$2; shift 2 ;;
-        --limit=*)
-          limit=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-buffercache [--output PATH] [--limit N]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for audit-buffercache: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_pg_buffercache "${output}" "${limit}"
-    ;;
-  audit-schema)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-schema [--output PATH]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for audit-schema: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_schema_snapshot "${output}"
-    ;;
-  audit-cron)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-cron [--output PATH]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for audit-cron: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_pg_cron "${output}"
-    ;;
-  audit-squeeze)
-    output=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} audit-squeeze [--output PATH]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for audit-squeeze: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    audit_pg_squeeze "${output}"
-    ;;
-  snapshot-pgstat)
-    output=""
-    limit=${PG_STAT_STATEMENTS_LIMIT:-100}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --limit)
-          limit=$2; shift 2 ;;
-        --limit=*)
-          limit=${1#*=}; shift ;;
-        --)
-          shift; break ;;
-        -h|--help)
-          echo "Usage: ${0##*/} snapshot-pgstat [--output PATH] [--limit N]" >&2
-          exit 0 ;;
-        *)
-          echo "Unknown option for snapshot-pgstat: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    snapshot_pg_stat_statements "${output}" "${limit}"
-    ;;
-  diff-pgstat)
-    base=""
-    compare=""
-    limit=${PG_STAT_STATEMENTS_LIMIT:-100}
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --base)
-          base=$2; shift 2 ;;
-        --base=*)
-          base=${1#*=}; shift ;;
-        --compare)
-          compare=$2; shift 2 ;;
-        --compare=*)
-          compare=${1#*=}; shift ;;
-        --limit)
-          limit=$2; shift 2 ;;
-        --limit=*)
-          limit=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} diff-pgstat --base PATH --compare PATH [--limit N]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for diff-pgstat: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    if [[ -z ${base} || -z ${compare} ]]; then
-      echo "--base and --compare are required" >&2
-      exit 1
-    fi
-    python3 "${SCRIPT_DIR}/perf_diff.py" --base "${base}" --compare "${compare}" --limit "${limit}"
-    ;;
-  compact)
-    ensure_env
-    level=""
-    tables=""
-    scope="all"
-    confirm=false
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --level)
-          level=$2; shift 2 ;;
-        --level=*)
-          level=${1#*=}; shift ;;
-        --tables)
-          tables=$2; shift 2 ;;
-        --tables=*)
-          tables=${1#*=}; shift ;;
-        --scope)
-          scope=$2; shift 2 ;;
-        --scope=*)
-          scope=${1#*=}; shift ;;
-        --yes|-y)
-          confirm=true; shift ;;
-        -h|--help)
-          cat <<USAGE >&2
+case "${COMMAND}" in
+create-env)
+	shift
+	bash "${SCRIPT_DIR}/create_env.sh" "$@"
+	;;
+build-image)
+	ensure_env
+	uid=${POSTGRES_UID:-$(id -u)}
+	gid=${POSTGRES_GID:-$(id -g)}
+	runtime_user=${POSTGRES_RUNTIME_USER:-postgres}
+	runtime_gecos=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL Administrator"}
+	runtime_home=${POSTGRES_RUNTIME_HOME:-/home/${runtime_user}}
+	compose build \
+		--build-arg CORE_UID="${uid}" \
+		--build-arg CORE_GID="${gid}" \
+		--build-arg CORE_USERNAME="${runtime_user}" \
+		--build-arg CORE_GECOS="${runtime_gecos}" \
+		--build-arg CORE_HOME="${runtime_home}" \
+		postgres
+	;;
+up)
+	ensure_env
+	compose up -d
+	warn_if_config_drift
+	;;
+down)
+	compose down
+	;;
+networks-refresh)
+	ensure_env
+	compose run --rm network_probe
+	if compose_has_service "postgres"; then
+		if [[ -n $(compose ps -q "${POSTGRES_SERVICE_NAME:-postgres}" 2>/dev/null) ]]; then
+			compose_exec bash -lc "/docker-entrypoint-initdb.d/00-render-config.sh"
+		fi
+	fi
+	if compose_has_service "pgbouncer"; then
+		if [[ -n $(compose ps -q pgbouncer 2>/dev/null) ]]; then
+			# shellcheck disable=SC2016  # Single quotes intentional - variables expand inside container
+			compose_exec_service pgbouncer sh -c 'for pid in $(pgrep pgbouncer || true); do kill -HUP "$pid"; done'
+		fi
+	fi
+	;;
+networks-show)
+	allow_path="${ROOT_DIR}/network_access/allow.list"
+	if [[ -f "${allow_path}" ]]; then
+		cat "${allow_path}"
+	else
+		echo "[core_data] allow.list not generated yet. Run '${0##*/} networks-refresh' first." >&2
+		exit 1
+	fi
+	;;
+psql)
+	ensure_env
+	user_flag_provided=false
+	host_flag_provided=false
+	for arg in "$@"; do
+		case "${arg}" in
+		-U | --username | -U* | --username=*)
+			user_flag_provided=true
+			break
+			;;
+		esac
+	done
+	for arg in "$@"; do
+		case "${arg}" in
+		-h | --host | -h* | --host=*)
+			host_flag_provided=true
+			break
+			;;
+		esac
+	done
+	declare -a psql_env=()
+	declare -a psql_cmd=(psql)
+	host_env="${PGHOST:-${POSTGRES_HOST}}"
+	if [[ "${user_flag_provided}" == "true" ]]; then
+		if [[ -n "${PGUSER:-}" ]]; then
+			psql_env+=("PGUSER=${PGUSER}")
+		fi
+		if [[ -n "${PGPASSWORD:-}" ]]; then
+			psql_env+=("PGPASSWORD=${PGPASSWORD}")
+		fi
+	else
+		psql_env+=("PGPASSWORD=${POSTGRES_SUPERUSER_PASSWORD:-}")
+		psql_cmd+=(--username "${POSTGRES_SUPERUSER:-postgres}")
+	fi
+	if [[ "${host_flag_provided}" != "true" && -n "${host_env}" ]]; then
+		psql_env+=("PGHOST=${host_env}")
+	fi
+	wants_tty=false
+	if [[ -t 0 && -t 1 ]]; then
+		wants_tty=true
+		for arg in "$@"; do
+			case "${arg}" in
+			-c | --command | --command=* | -f | --file | --file=*)
+				wants_tty=false
+				break
+				;;
+			-[^-]*)
+				if [[ "${arg}" == -*c* ]]; then
+					wants_tty=false
+					break
+				fi
+				;;
+			esac
+		done
+	fi
+	psql_cmd+=("$@")
+	if [[ ${#psql_env[@]} -gt 0 ]]; then
+		if [[ "${wants_tty}" == "true" ]]; then
+			compose_exec_interactive env "${psql_env[@]}" "${psql_cmd[@]}"
+		else
+			compose_exec env "${psql_env[@]}" "${psql_cmd[@]}"
+		fi
+	else
+		if [[ "${wants_tty}" == "true" ]]; then
+			compose_exec_interactive "${psql_cmd[@]}"
+		else
+			compose_exec "${psql_cmd[@]}"
+		fi
+	fi
+	;;
+create-user)
+	cmd_create_user "$@"
+	;;
+drop-user)
+	cmd_drop_user "$@"
+	;;
+create-db)
+	cmd_create_db "$@"
+	;;
+drop-db)
+	cmd_drop_db "$@"
+	;;
+dump)
+	cmd_dump "$@"
+	;;
+dump-sql)
+	cmd_dump_sql "$@"
+	;;
+pgtune-config)
+	ensure_env
+	db_type=${PGTUNE_DB_TYPE:-oltp}
+	connections=""
+	total_memory=""
+	output_path="/var/lib/postgresql/data/postgresql.pgtune.conf"
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db-type)
+			db_type=$2
+			shift 2
+			;;
+		--db-type=*)
+			db_type=${1#*=}
+			shift
+			;;
+		--connections)
+			connections=$2
+			shift 2
+			;;
+		--connections=*)
+			connections=${1#*=}
+			shift
+			;;
+		--memory)
+			total_memory=$2
+			shift 2
+			;;
+		--memory=*)
+			total_memory=${1#*=}
+			shift
+			;;
+		--output)
+			output_path=$2
+			shift 2
+			;;
+		--output=*)
+			output_path=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} pgtune-config [--db-type TYPE] [--connections N] [--memory VALUE] [--output PATH]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for pgtune-config: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	args=(--type "$db_type" --input-config /var/lib/postgresql/data/postgresql.conf --output-config "$output_path" --version "${PG_VERSION%%.*}")
+	[[ -n $connections ]] && args+=(--connections "$connections")
+	[[ -n $total_memory ]] && args+=(--memory "$total_memory")
+	compose_exec python3 /opt/core_data/tools/pgtune.py "${args[@]}"
+	compose_exec bash -lc "chmod 600 '$output_path'"
+	compose_exec bash -lc "pg_ctl -D /var/lib/postgresql/data reload"
+	echo "Generated tuned settings at ${output_path}. PostgreSQL reloaded to pick up include_if_exists." >&2
+	;;
+pgbadger-report)
+	cmd_pgbadger_report "$@"
+	;;
+daily-maintenance)
+	cmd_daily_maintenance "$@"
+	;;
+restore-dump)
+	cmd_restore_dump "$@"
+	;;
+backup)
+	cmd_backup "$@"
+	;;
+stanza-create)
+	cmd_stanza_create "$@"
+	;;
+restore-snapshot)
+	cmd_restore_snapshot "$@"
+	;;
+provision-qa)
+	cmd_provision_qa "$@"
+	;;
+config-render)
+	ensure_env
+	ensure_postgres_running
+	compose_exec env FORCE_RENDER_CONFIG=1 /docker-entrypoint-initdb.d/00-render-config.sh
+	;;
+config-check)
+	if config_drift_report; then
+		echo "Configuration matches expected templates." >&2
+	else
+		exit 1
+	fi
+	;;
+audit-roles)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-roles [--output PATH]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for audit-roles: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_roles "${output}"
+	;;
+audit-extensions)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-extensions [--output PATH]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for audit-extensions: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_extensions "${output}"
+	;;
+audit-autovacuum)
+	output=""
+	dead_threshold=${DAILY_DEAD_TUPLE_THRESHOLD:-100000}
+	ratio_threshold=${DAILY_DEAD_TUPLE_RATIO:-0.2}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--dead-threshold)
+			dead_threshold=$2
+			shift 2
+			;;
+		--dead-threshold=*)
+			dead_threshold=${1#*=}
+			shift
+			;;
+		--ratio)
+			ratio_threshold=$2
+			shift 2
+			;;
+		--ratio=*)
+			ratio_threshold=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-autovacuum [--output PATH] [--dead-threshold N] [--ratio FLOAT]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for audit-autovacuum: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_autovacuum "${output}" "${dead_threshold}" "${ratio_threshold}"
+	;;
+audit-replication)
+	output=""
+	lag_seconds=${DAILY_REPLICATION_LAG_THRESHOLD:-300}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--lag-seconds)
+			lag_seconds=$2
+			shift 2
+			;;
+		--lag-seconds=*)
+			lag_seconds=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-replication [--output PATH] [--lag-seconds N]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for audit-replication: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_replication_lag "${output}" "${lag_seconds}"
+	;;
+audit-security)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-security [--output PATH]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for audit-security: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_security "${output}"
+	;;
+audit-index-bloat)
+	output=""
+	min_size=${DAILY_INDEX_MIN_SIZE_MB:-10}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--min-size-mb)
+			min_size=$2
+			shift 2
+			;;
+		--min-size-mb=*)
+			min_size=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-index-bloat [--output PATH] [--min-size-mb N]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for audit-index-bloat: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_index_bloat "${output}" "${min_size}"
+	;;
+audit-buffercache)
+	output=""
+	limit=${PG_BUFFERCACHE_LIMIT:-50}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--limit)
+			limit=$2
+			shift 2
+			;;
+		--limit=*)
+			limit=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-buffercache [--output PATH] [--limit N]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for audit-buffercache: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_pg_buffercache "${output}" "${limit}"
+	;;
+audit-schema)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-schema [--output PATH]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for audit-schema: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_schema_snapshot "${output}"
+	;;
+audit-cron)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-cron [--output PATH]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for audit-cron: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_pg_cron "${output}"
+	;;
+audit-squeeze)
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} audit-squeeze [--output PATH]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for audit-squeeze: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	audit_pg_squeeze "${output}"
+	;;
+snapshot-pgstat)
+	output=""
+	limit=${PG_STAT_STATEMENTS_LIMIT:-100}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--limit)
+			limit=$2
+			shift 2
+			;;
+		--limit=*)
+			limit=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} snapshot-pgstat [--output PATH] [--limit N]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option for snapshot-pgstat: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	snapshot_pg_stat_statements "${output}" "${limit}"
+	;;
+diff-pgstat)
+	base=""
+	compare=""
+	limit=${PG_STAT_STATEMENTS_LIMIT:-100}
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--base)
+			base=$2
+			shift 2
+			;;
+		--base=*)
+			base=${1#*=}
+			shift
+			;;
+		--compare)
+			compare=$2
+			shift 2
+			;;
+		--compare=*)
+			compare=${1#*=}
+			shift
+			;;
+		--limit)
+			limit=$2
+			shift 2
+			;;
+		--limit=*)
+			limit=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} diff-pgstat --base PATH --compare PATH [--limit N]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for diff-pgstat: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	if [[ -z ${base} || -z ${compare} ]]; then
+		echo "--base and --compare are required" >&2
+		exit 1
+	fi
+	python3 "${SCRIPT_DIR}/perf_diff.py" --base "${base}" --compare "${compare}" --limit "${limit}"
+	;;
+compact)
+	ensure_env
+	level=""
+	tables=""
+	scope="all"
+	confirm=false
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--level)
+			level=$2
+			shift 2
+			;;
+		--level=*)
+			level=${1#*=}
+			shift
+			;;
+		--tables)
+			tables=$2
+			shift 2
+			;;
+		--tables=*)
+			tables=${1#*=}
+			shift
+			;;
+		--scope)
+			scope=$2
+			shift 2
+			;;
+		--scope=*)
+			scope=${1#*=}
+			shift
+			;;
+		--yes | -y)
+			confirm=true
+			shift
+			;;
+		-h | --help)
+			cat <<USAGE >&2
 Usage: ${0##*/} compact --level <1|2|3|4> [--tables schema.table[,..]] [--scope schema.table[,..]|all] [--yes]
 
 Level 1: Run autovacuum audit report.
@@ -895,217 +1094,302 @@ Level 2: Refresh pg_squeeze targets and report status.
 Level 3: Execute pg_repack on provided tables (requires --tables).
 Level 4: Run VACUUM FULL (default all tables, or provide --scope) and requires --yes confirmation.
 USAGE
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for compact: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    if [[ -z ${level} ]]; then
-      echo "[compact] --level is required" >&2
-      exit 1
-    fi
-    case "${level}" in
-      1)
-        audit_autovacuum
-        ;;
-      2)
-        refresh_pg_squeeze
-        ;;
-      3)
-        if [[ -z ${tables} ]]; then
-          echo "[compact] Level 3 requires --tables schema.table[,schema.table...]" >&2
-          exit 1
-        fi
-        run_pg_repack "${tables}"
-        ;;
-      4)
-        if [[ ${confirm} != true ]]; then
-          echo "[compact] Level 4 (VACUUM FULL) requires --yes confirmation" >&2
-          exit 1
-        fi
-        run_vacuum_full "${scope}"
-        ;;
-      *)
-        echo "[compact] Unknown level '${level}'" >&2
-        exit 1
-        ;;
-    esac
-    ;;
-  exercise-extensions)
-    db=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db)
-          db=$2; shift 2 ;;
-        --db=*)
-          db=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} exercise-extensions [--db NAME]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for exercise-extensions: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    exercise_extensions "${db}"
-    ;;
-  pgtap-smoke)
-    db=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db)
-          db=$2; shift 2 ;;
-        --db=*)
-          db=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} pgtap-smoke [--db NAME]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for pgtap-smoke: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    run_pgtap_smoke "${db}"
-    ;;
-  test-dataset)
-    cmd_test_dataset "$@"
-    ;;
-  async-queue)
-    subcommand=${1:-help}
-    shift || true
-    case "${subcommand}" in
-      bootstrap)
-        db=""
-        schema=""
-        while [[ $# -gt 0 ]]; do
-          case "$1" in
-            --db)
-              db=$2; shift 2 ;;
-            --db=*)
-              db=${1#*=}; shift ;;
-            --schema)
-              schema=$2; shift 2 ;;
-            --schema=*)
-              schema=${1#*=}; shift ;;
-            -h|--help)
-              echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
-              exit 0 ;;
-            --)
-              shift; break ;;
-            *)
-              echo "Unknown option for async-queue bootstrap: $1" >&2
-              exit 1 ;;
-          esac
-        done
-        async_queue_bootstrap "${db:-${POSTGRES_DB:-postgres}}" "${schema:-${ASYNCQ_DEFAULT_SCHEMA:-asyncq}}"
-        ;;
-      help|-h|--help)
-        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
-        ;;
-      *)
-        echo "Unknown async-queue subcommand: ${subcommand}" >&2
-        echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
-        exit 1 ;;
-    esac
-    ;;
-  partman-maintenance)
-    db=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db)
-          db=$2; shift 2 ;;
-        --db=*)
-          db=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} partman-maintenance [--db NAME]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for partman-maintenance: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    partman_run_maintenance "${db:-${POSTGRES_DB:-postgres}}"
-    ;;
-  partman-show-config)
-    db=""
-    parent=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db)
-          db=$2; shift 2 ;;
-        --db=*)
-          db=${1#*=}; shift ;;
-        --parent)
-          parent=$2; shift 2 ;;
-        --parent=*)
-          parent=${1#*=}; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} partman-show-config [--db NAME] [--parent schema.table]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for partman-show-config: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    partman_show_config "${db:-${POSTGRES_DB:-postgres}}" "${parent}"
-    ;;
-  partman-create-parent)
-    db=""
-    part_type="range"
-    start_partition=""
-    premake=""
-    default_table=true
-    automatic_mode="on"
-    jobmon=true
-    time_encoder=""
-    time_decoder=""
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --db)
-          db=$2; shift 2 ;;
-        --db=*)
-          db=${1#*=}; shift ;;
-        --type)
-          part_type=$2; shift 2 ;;
-        --type=*)
-          part_type=${1#*=}; shift ;;
-        --start)
-          start_partition=$2; shift 2 ;;
-        --start=*)
-          start_partition=${1#*=}; shift ;;
-        --premake)
-          premake=$2; shift 2 ;;
-        --premake=*)
-          premake=${1#*=}; shift ;;
-        --no-default-table)
-          default_table=false; shift ;;
-        --automatic)
-          automatic_mode=$2; shift 2 ;;
-        --automatic=*)
-          automatic_mode=${1#*=}; shift ;;
-        --no-jobmon)
-          jobmon=false; shift ;;
-        --time-encoder)
-          time_encoder=$2; shift 2 ;;
-        --time-encoder=*)
-          time_encoder=${1#*=}; shift ;;
-        --time-decoder)
-          time_decoder=$2; shift 2 ;;
-        --time-decoder=*)
-          time_decoder=${1#*=}; shift ;;
-        -h|--help)
-          cat <<'USAGE' >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for compact: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	if [[ -z ${level} ]]; then
+		echo "[compact] --level is required" >&2
+		exit 1
+	fi
+	case "${level}" in
+	1)
+		audit_autovacuum
+		;;
+	2)
+		refresh_pg_squeeze
+		;;
+	3)
+		if [[ -z ${tables} ]]; then
+			echo "[compact] Level 3 requires --tables schema.table[,schema.table...]" >&2
+			exit 1
+		fi
+		run_pg_repack "${tables}"
+		;;
+	4)
+		if [[ ${confirm} != true ]]; then
+			echo "[compact] Level 4 (VACUUM FULL) requires --yes confirmation" >&2
+			exit 1
+		fi
+		run_vacuum_full "${scope}"
+		;;
+	*)
+		echo "[compact] Unknown level '${level}'" >&2
+		exit 1
+		;;
+	esac
+	;;
+exercise-extensions)
+	db=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} exercise-extensions [--db NAME]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for exercise-extensions: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	exercise_extensions "${db}"
+	;;
+pgtap-smoke)
+	db=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} pgtap-smoke [--db NAME]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for pgtap-smoke: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	run_pgtap_smoke "${db}"
+	;;
+test-dataset)
+	cmd_test_dataset "$@"
+	;;
+async-queue)
+	subcommand=${1:-help}
+	shift || true
+	case "${subcommand}" in
+	bootstrap)
+		db=""
+		schema=""
+		while [[ $# -gt 0 ]]; do
+			case "$1" in
+			--db)
+				db=$2
+				shift 2
+				;;
+			--db=*)
+				db=${1#*=}
+				shift
+				;;
+			--schema)
+				schema=$2
+				shift 2
+				;;
+			--schema=*)
+				schema=${1#*=}
+				shift
+				;;
+			-h | --help)
+				echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+				exit 0
+				;;
+			--)
+				shift
+				break
+				;;
+			*)
+				echo "Unknown option for async-queue bootstrap: $1" >&2
+				exit 1
+				;;
+			esac
+		done
+		async_queue_bootstrap "${db:-${POSTGRES_DB:-postgres}}" "${schema:-${ASYNCQ_DEFAULT_SCHEMA:-asyncq}}"
+		;;
+	help | -h | --help)
+		echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+		;;
+	*)
+		echo "Unknown async-queue subcommand: ${subcommand}" >&2
+		echo "Usage: ${0##*/} async-queue bootstrap [--db NAME] [--schema NAME]" >&2
+		exit 1
+		;;
+	esac
+	;;
+partman-maintenance)
+	db=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} partman-maintenance [--db NAME]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for partman-maintenance: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	partman_run_maintenance "${db:-${POSTGRES_DB:-postgres}}"
+	;;
+partman-show-config)
+	db=""
+	parent=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		--parent)
+			parent=$2
+			shift 2
+			;;
+		--parent=*)
+			parent=${1#*=}
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} partman-show-config [--db NAME] [--parent schema.table]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for partman-show-config: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	partman_show_config "${db:-${POSTGRES_DB:-postgres}}" "${parent}"
+	;;
+partman-create-parent)
+	db=""
+	part_type="range"
+	start_partition=""
+	premake=""
+	default_table=true
+	automatic_mode="on"
+	jobmon=true
+	time_encoder=""
+	time_decoder=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		--type)
+			part_type=$2
+			shift 2
+			;;
+		--type=*)
+			part_type=${1#*=}
+			shift
+			;;
+		--start)
+			start_partition=$2
+			shift 2
+			;;
+		--start=*)
+			start_partition=${1#*=}
+			shift
+			;;
+		--premake)
+			premake=$2
+			shift 2
+			;;
+		--premake=*)
+			premake=${1#*=}
+			shift
+			;;
+		--no-default-table)
+			default_table=false
+			shift
+			;;
+		--automatic)
+			automatic_mode=$2
+			shift 2
+			;;
+		--automatic=*)
+			automatic_mode=${1#*=}
+			shift
+			;;
+		--no-jobmon)
+			jobmon=false
+			shift
+			;;
+		--time-encoder)
+			time_encoder=$2
+			shift 2
+			;;
+		--time-encoder=*)
+			time_encoder=${1#*=}
+			shift
+			;;
+		--time-decoder)
+			time_decoder=$2
+			shift 2
+			;;
+		--time-decoder=*)
+			time_decoder=${1#*=}
+			shift
+			;;
+		-h | --help)
+			cat <<'USAGE' >&2
 Usage: manage.sh partman-create-parent [options] schema.table control_column interval
 
 Options:
@@ -1119,134 +1403,148 @@ Options:
   --time-encoder FUNC       Override time encoder function
   --time-decoder FUNC       Override time decoder function
 USAGE
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          break ;;
-      esac
-    done
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			break
+			;;
+		esac
+	done
 
-    if [[ $# -lt 3 ]]; then
-      echo "Usage: ${0##*/} partman-create-parent [options] schema.table control_column interval" >&2
-      exit 1
-    fi
+	if [[ $# -lt 3 ]]; then
+		echo "Usage: ${0##*/} partman-create-parent [options] schema.table control_column interval" >&2
+		exit 1
+	fi
 
-    parent_table=$1
-    control_column=$2
-    interval=$3
-    shift 3
+	parent_table=$1
+	control_column=$2
+	interval=$3
+	shift 3
 
-    if [[ $# -gt 0 ]]; then
-      echo "Unknown positional arguments: $*" >&2
-      exit 1
-    fi
+	if [[ $# -gt 0 ]]; then
+		echo "Unknown positional arguments: $*" >&2
+		exit 1
+	fi
 
-    partman_create_parent \
-      "${db:-${POSTGRES_DB:-postgres}}" \
-      "${parent_table}" \
-      "${control_column}" \
-      "${interval}" \
-      "${part_type}" \
-      "${start_partition}" \
-      "${premake}" \
-      "${default_table}" \
-      "${automatic_mode}" \
-      "${jobmon}" \
-      "${time_encoder}" \
-      "${time_decoder}"
-    ;;
-  valkey-cli)
-    cmd_valkey_cli "$@"
-    ;;
-  valkey-bgsave)
-    cmd_valkey_bgsave
-    ;;
-  rabbitmq-ctl)
-    cmd_rabbitmq_ctl "$@"
-    ;;
-  rabbitmq-diagnostics)
-    cmd_rabbitmq_diagnostics "$@"
-    ;;
-  rabbitmq-export)
-    cmd_rabbitmq_export "$@"
-    ;;
-  rabbitmq-overview)
-    cmd_rabbitmq_overview "$@"
-    ;;
-  pgbouncer-stats)
-    cmd_pgbouncer_stats
-    ;;
-  pgbouncer-pools)
-    cmd_pgbouncer_show_pools
-    ;;
-  memcached-stats)
-    cmd_memcached_stats
-    ;;
-  service-urls)
-    cmd_service_urls
-    ;;
-  seccomp-status)
-    cmd_seccomp_status "$@"
-    ;;
-  seccomp-trace)
-    cmd_seccomp_trace "$@"
-    ;;
-  seccomp-generate)
-    cmd_seccomp_generate "$@"
-    ;;
-  seccomp-verify)
-    cmd_seccomp_verify "$@"
-    ;;
-  apparmor-load)
-    cmd_apparmor_load "$@"
-    ;;
-  version-status)
-    output=""
-    only_outdated=false
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-        --output)
-          output=$2; shift 2 ;;
-        --output=*)
-          output=${1#*=}; shift ;;
-        --only-outdated)
-          only_outdated=true; shift ;;
-        -h|--help)
-          echo "Usage: ${0##*/} version-status [--only-outdated] [--output PATH]" >&2
-          exit 0 ;;
-        --)
-          shift; break ;;
-        *)
-          echo "Unknown option for version-status: $1" >&2
-          exit 1 ;;
-      esac
-    done
-    cmd=(python3 "${SCRIPT_DIR}/version_status.py")
-    if [[ ${only_outdated} == true ]]; then
-      cmd+=("--only-outdated")
-    fi
-    if [[ -n ${output} ]]; then
-      cmd+=("--output" "${output}")
-    fi
-    "${cmd[@]}"
-    ;;
-  upgrade)
-    cmd_upgrade "$@"
-    ;;
+	partman_create_parent \
+		"${db:-${POSTGRES_DB:-postgres}}" \
+		"${parent_table}" \
+		"${control_column}" \
+		"${interval}" \
+		"${part_type}" \
+		"${start_partition}" \
+		"${premake}" \
+		"${default_table}" \
+		"${automatic_mode}" \
+		"${jobmon}" \
+		"${time_encoder}" \
+		"${time_decoder}"
+	;;
+valkey-cli)
+	cmd_valkey_cli "$@"
+	;;
+valkey-bgsave)
+	cmd_valkey_bgsave
+	;;
+rabbitmq-ctl)
+	cmd_rabbitmq_ctl "$@"
+	;;
+rabbitmq-diagnostics)
+	cmd_rabbitmq_diagnostics "$@"
+	;;
+rabbitmq-export)
+	cmd_rabbitmq_export "$@"
+	;;
+rabbitmq-overview)
+	cmd_rabbitmq_overview "$@"
+	;;
+pgbouncer-stats)
+	cmd_pgbouncer_stats
+	;;
+pgbouncer-pools)
+	cmd_pgbouncer_show_pools
+	;;
+memcached-stats)
+	cmd_memcached_stats
+	;;
+service-urls)
+	cmd_service_urls
+	;;
+seccomp-status)
+	cmd_seccomp_status "$@"
+	;;
+seccomp-trace)
+	cmd_seccomp_trace "$@"
+	;;
+seccomp-generate)
+	cmd_seccomp_generate "$@"
+	;;
+seccomp-verify)
+	cmd_seccomp_verify "$@"
+	;;
+apparmor-load)
+	cmd_apparmor_load "$@"
+	;;
+version-status)
+	output=""
+	only_outdated=false
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--only-outdated)
+			only_outdated=true
+			shift
+			;;
+		-h | --help)
+			echo "Usage: ${0##*/} version-status [--only-outdated] [--output PATH]" >&2
+			exit 0
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			echo "Unknown option for version-status: $1" >&2
+			exit 1
+			;;
+		esac
+	done
+	cmd=(python3 "${SCRIPT_DIR}/version_status.py")
+	if [[ ${only_outdated} == true ]]; then
+		cmd+=("--only-outdated")
+	fi
+	if [[ -n ${output} ]]; then
+		cmd+=("--output" "${output}")
+	fi
+	"${cmd[@]}"
+	;;
+upgrade)
+	cmd_upgrade "$@"
+	;;
 
-  logs)
-    compose logs -f postgres
-    ;;
-  status)
-    compose ps
-    ;;
-  help|--help|-h)
-    usage
-    ;;
-  *)
-    echo "Unknown command: ${COMMAND}" >&2
-    usage
-    exit 1
-    ;;
+logs)
+	compose logs -f postgres
+	;;
+status)
+	compose ps
+	;;
+help | --help | -h)
+	usage
+	;;
+*)
+	echo "Unknown command: ${COMMAND}" >&2
+	usage
+	exit 1
+	;;
 esac

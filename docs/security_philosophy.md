@@ -11,24 +11,24 @@ Our priority chain is **data infrastructure as code ➜ automated admin ➜ huma
 
 Dropping Linux capabilities is our default posture for long-running services. We centralise the rule in the `x-security-defaults` anchor inside `docker-compose.yml` so every service opts in automatically. The matrix below captures the current state.
 
-| Service | Capabilities granted | Rationale / verification |
-| --- | --- | --- |
-| `postgres` | `cap_drop: [ALL]` | Runs as non-root with no privileged syscalls required. Verified via `docker compose config --format json` during `pytest -k manage_env` and by exercising initdb, pg_partman, pg_dump, pg_restore, backups, and async queue flows. |
-| `logical_backup` | `cap_drop: [ALL]` | Same image as `postgres`; only `pg_dump*` tooling executes. Verified by the integration test suite and manual backup/restore runs. |
-| `pghero` | `cap_drop: [ALL]` | Ruby app that only queries Postgres; no extra kernel features required. |
-| `pgbouncer` | `cap_drop: [ALL]` | Bitnami image drops root privileges internally; connection pooling works without additional capabilities. |
-| `valkey` | `cap_drop: [ALL]` | Alpine ValKey container operates entirely in user space; health checks succeed under the drop. |
-| `memcached` | `cap_drop: [ALL]` | Uses standard TCP sockets and in-memory storage; no capabilities needed. |
-| `rabbitmq` | `cap_drop: [ALL]` | Official RabbitMQ image runs as the `rabbitmq` user; management/AMQP traffic works without elevated privileges. |
-| `volume_prep` | uses Docker defaults | Runs as `root` solely to chown initial volumes before other services start. We leave it outside the anchor because it needs short-lived filesystem ownership privileges and exits immediately after preparation. |
+| Service          | Capabilities granted | Rationale / verification                                                                                                                                                                                                           |
+| ---------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `postgres`       | `cap_drop: [ALL]`    | Runs as non-root with no privileged syscalls required. Verified via `docker compose config --format json` during `pytest -k manage_env` and by exercising initdb, pg\_partman, pg\_dump, pg\_restore, backups, and async queue flows. |
+| `logical_backup` | `cap_drop: [ALL]`    | Same image as `postgres`; only `pg_dump*` tooling executes. Verified by the integration test suite and manual backup/restore runs.                                                                                                 |
+| `pghero`         | `cap_drop: [ALL]`    | Ruby app that only queries Postgres; no extra kernel features required.                                                                                                                                                            |
+| `pgbouncer`      | `cap_drop: [ALL]`    | Bitnami image drops root privileges internally; connection pooling works without additional capabilities.                                                                                                                          |
+| `valkey`         | `cap_drop: [ALL]`    | Alpine ValKey container operates entirely in user space; health checks succeed under the drop.                                                                                                                                     |
+| `memcached`      | `cap_drop: [ALL]`    | Uses standard TCP sockets and in-memory storage; no capabilities needed.                                                                                                                                                           |
+| `rabbitmq`       | `cap_drop: [ALL]`    | Official RabbitMQ image runs as the `rabbitmq` user; management/AMQP traffic works without elevated privileges.                                                                                                                    |
+| `volume_prep`    | uses Docker defaults | Runs as `root` solely to chown initial volumes before other services start. We leave it outside the anchor because it needs short-lived filesystem ownership privileges and exits immediately after preparation.                   |
 
 If a future service genuinely needs a capability, document the syscall failure, add the minimum `cap_add` entry with justification, and update this matrix plus the automated test coverage.
 
 ## Verification
 
-- `pytest -k manage_env` ensures the compose configuration retains `cap_drop: [ALL]` for every runtime service listed above.
-- Full workflow tests (`pytest -k full_workflow`) exercise pg_dump/pg_restore, async queue automation, pg_partman maintenance, ValKey, Memcached, and PgBouncer with the capability policy in place.
-- Manual smoke tests (`./scripts/manage.sh backup --type=full --verify`, `./scripts/manage.sh daily-maintenance`) remain part of the release checklist when altering security posture.
+* `pytest -k manage_env` ensures the compose configuration retains `cap_drop: [ALL]` for every runtime service listed above.
+* Full workflow tests (`pytest -k full_workflow`) exercise pg\_dump/pg\_restore, async queue automation, pg\_partman maintenance, ValKey, Memcached, and PgBouncer with the capability policy in place.
+* Manual smoke tests (`./scripts/manage.sh backup --type=full --verify`, `./scripts/manage.sh daily-maintenance`) remain part of the release checklist when altering security posture.
 
 Re-run these checks whenever the compose topology changes or when adding new operational automation.
 
@@ -36,22 +36,22 @@ Re-run these checks whenever the compose topology changes or when adding new ope
 
 Each long-lived container enables a seccomp profile via `security_opt`. The repository ships per-service whitelists in `seccomp/*.json`, all generated from workload traces so operators start from a pragmatic baseline.
 
-| Service | Default profile |
-| --- | --- |
-| postgres | `seccomp/postgres.json` |
-| logical_backup | `seccomp/logical_backup.json` |
-| pgbouncer | `seccomp/pgbouncer.json` |
-| valkey | `seccomp/valkey.json` |
-| memcached | `seccomp/memcached.json` |
-| pghero | `seccomp/pghero.json` |
-| rabbitmq | `seccomp/docker-default.json` |
+| Service        | Default profile               |
+| -------------- | ----------------------------- |
+| postgres       | `seccomp/postgres.json`       |
+| logical\_backup | `seccomp/logical_backup.json` |
+| pgbouncer      | `seccomp/pgbouncer.json`      |
+| valkey         | `seccomp/valkey.json`         |
+| memcached      | `seccomp/memcached.json`      |
+| pghero         | `seccomp/pghero.json`         |
+| rabbitmq       | `seccomp/docker-default.json` |
 
 Operators should iterate toward tighter profiles using the helper commands baked into `manage.sh`:
 
-- `seccomp-status` shows which profile string each service resolves to and whether the referenced JSON exists on disk.
-- `seccomp-trace <service>` scaffolds `seccomp/traces/` and prints a ready-to-run `docker compose run` example that wraps the service entrypoint with `/opt/core_data/scripts/trace_entrypoint.sh` (which in turn launches `strace -ff`).
-- `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` merges Docker's stock profile (`seccomp/docker-default.json`) with any syscalls observed in your traces (`*.trace`) so you keep runtime compatibility while still capturing service-specific behaviour.
-- `seccomp-verify` gates CI or local builds by inspecting `docker compose config --format json` and ensuring every service keeps a `seccomp:` option.
+* `seccomp-status` shows which profile string each service resolves to and whether the referenced JSON exists on disk.
+* `seccomp-trace <service>` scaffolds `seccomp/traces/` and prints a ready-to-run `docker compose run` example that wraps the service entrypoint with `/opt/core_data/scripts/trace_entrypoint.sh` (which in turn launches `strace -ff`).
+* `seccomp-generate <service> [--trace-dir DIR] [--output PATH]` merges Docker's stock profile (`seccomp/docker-default.json`) with any syscalls observed in your traces (`*.trace`) so you keep runtime compatibility while still capturing service-specific behaviour.
+* `seccomp-verify` gates CI or local builds by inspecting `docker compose config --format json` and ensuring every service keeps a `seccomp:` option.
 
 Override the profile for an individual service by exporting `CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json` (for example `CORE_DATA_SECCOMP_POSTGRES=seccomp:/opt/core_data/seccomp/postgres-tight.json`). To temporarily fall back to Docker's permissive mode during debugging, set the override to `seccomp=unconfined` and document why in your runbook.
 

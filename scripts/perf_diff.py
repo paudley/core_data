@@ -10,9 +10,8 @@ import argparse
 import csv
 import sys
 from pathlib import Path
-from typing import Dict, Tuple
 
-Snapshot = Dict[Tuple[str, str], Dict[str, float]]
+Snapshot = dict[tuple[str, str], dict[str, float]]
 
 
 def load_snapshot(path: Path) -> Snapshot:
@@ -62,9 +61,7 @@ def main() -> int:
     limit = args.limit if args.limit > 0 else len(deltas)
 
     writer = csv.writer(sys.stdout)
-    writer.writerow(
-        ["datname", "queryid", "calls_delta", "exec_time_delta", "rows_delta"]
-    )
+    writer.writerow(["datname", "queryid", "calls_delta", "exec_time_delta", "rows_delta"])
     for row in deltas[:limit]:
         writer.writerow(
             [

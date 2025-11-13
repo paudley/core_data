@@ -3,18 +3,19 @@ SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 SPDX-License-Identifier: MIT
 -->
 
-# core_data
+# core\_data
 
 [![CI](https://github.com/paudley/core_data/actions/workflows/ci.yml/badge.svg)](https://github.com/paudley/core_data/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A reproducible PostgreSQL 17 platform delivered as code. core_data builds a hardened database image with spatial, vector, and graph extensions, provisions PgHero for observability, and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
+A reproducible PostgreSQL 17 platform delivered as code. core\_data builds a hardened database image with spatial, vector, and graph extensions, provisions PgHero for observability, and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
 
 ## Why You Want This
-- Run the same Postgres 17 stack everywhere: laptop, CI runner, or production.
-- Ship with the heavy hitters pre-installed—PostGIS, pgvector, AGE, pg_cron, pgBackRest—without custom build scripts.
-- Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
-- Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
+
+* Run the same Postgres 17 stack everywhere: laptop, CI runner, or production.
+* Ship with the heavy hitters pre-installed—PostGIS, pgvector, AGE, pg\_cron, pgBackRest—without custom build scripts.
+* Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
+* Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
 
 ## Published Docker Images
 
@@ -34,18 +35,19 @@ docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
 
 Images follow a hybrid versioning strategy combining PostgreSQL version with semantic versioning:
 
-| Tag Pattern | Example | Description |
-|-------------|---------|-------------|
-| `latest` | `latest` | Latest stable release |
-| `{PG_VERSION}-v{MAJOR}.{MINOR}.{PATCH}` | `17.2-v1.0.0` | Exact version (recommended for production) |
-| `{PG_VERSION}-v{MAJOR}.{MINOR}` | `17.2-v1.0` | Latest patch for minor version |
-| `{PG_VERSION}-v{MAJOR}` | `17.2-v1` | Latest minor for major version |
-| `{PG_VERSION}` | `17.2` | Latest semantic version for PostgreSQL version |
-| `{PG_MAJOR}` | `17` | Latest for PostgreSQL major version |
+| Tag Pattern                             | Example       | Description                                    |
+| --------------------------------------- | ------------- | ---------------------------------------------- |
+| `latest`                                | `latest`      | Latest stable release                          |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}.{PATCH}` | `17.2-v1.0.0` | Exact version (recommended for production)     |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}`         | `17.2-v1.0`   | Latest patch for minor version                 |
+| `{PG_VERSION}-v{MAJOR}`                 | `17.2-v1`     | Latest minor for major version                 |
+| `{PG_VERSION}`                          | `17.2`        | Latest semantic version for PostgreSQL version |
+| `{PG_MAJOR}`                            | `17`          | Latest for PostgreSQL major version            |
 
 **Version Format**: `{PostgreSQL_Version}-v{Semantic_Version}`
-- Example: `17.2-v1.0.0` means PostgreSQL 17.2 with semantic version 1.0.0
-- See [docs/RELEASING.md](docs/RELEASING.md) for complete versioning details
+
+* Example: `17.2-v1.0.0` means PostgreSQL 17.2 with semantic version 1.0.0
+* See [docs/RELEASING.md](docs/RELEASING.md) for complete versioning details
 
 ### Security & Verification
 
@@ -63,6 +65,7 @@ gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
 ```
 
 Expected verification output:
+
 ```
 ✓ Verification succeeded!
 
@@ -72,13 +75,15 @@ paudley/core_data https://slsa.dev/provenance/v1  .github/workflows/publish-dock
 ```
 
 **What's Verified:**
-- **SLSA Provenance**: Confirms the image was built by GitHub Actions from this repository
-- **SBOM**: Software Bill of Materials listing all components and dependencies
-- **Build Reproducibility**: Links image digest to specific source code commit
+
+* **SLSA Provenance**: Confirms the image was built by GitHub Actions from this repository
+* **SBOM**: Software Bill of Materials listing all components and dependencies
+* **Build Reproducibility**: Links image digest to specific source code commit
 
 **Learn More:**
-- [Artifact Attestations Guide](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
-- [Release Process Documentation](docs/RELEASING.md)
+
+* [Artifact Attestations Guide](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+* [Release Process Documentation](docs/RELEASING.md)
 
 ### Using Published Images in Docker Compose
 
@@ -95,32 +100,35 @@ services:
 ```
 
 Or override via `.env`:
+
 ```bash
 POSTGRES_IMAGE_NAME=ghcr.io/paudley/core-data-postgres
 POSTGRES_IMAGE_TAG=17.2-v1.0.0
 ```
 
 ## Highlights
-- Custom Docker image with PostGIS, pgvector, Apache AGE, pg_cron, pg_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
-- Init scripts render configuration from templates, create application databases, and enable extensions automatically.
-- `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
-- PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
-- Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
-- TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
-- Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
-- Optional profiles bundle ValKey, PgBouncer, and Memcached with sensible defaults, secrets, and CLI helpers so you can layer caches and pooling alongside PostgreSQL in one step.
-- CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
+
+* Custom Docker image with PostGIS, pgvector, Apache AGE, pg\_cron, pg\_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
+* Init scripts render configuration from templates, create application databases, and enable extensions automatically.
+* `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
+* PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
+* Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
+* TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
+* Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
+* Optional profiles bundle ValKey, PgBouncer, and Memcached with sensible defaults, secrets, and CLI helpers so you can layer caches and pooling alongside PostgreSQL in one step.
+* CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ### Default Extension Bundle
-core_data provisions a batteries-included extension stack in every non-template database at init time:
 
-- **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`.
-- **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
-- **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`.
-- **Connectivity** — `postgres_fdw`, `dblink`.
-- **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
-- **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
-- **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
+core\_data provisions a batteries-included extension stack in every non-template database at init time:
+
+* **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`.
+* **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
+* **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`.
+* **Connectivity** — `postgres_fdw`, `dblink`.
+* **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
+* **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
+* **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
 
 The same bundle is installed into `template1` so freshly created databases inherit the tooling automatically.
 
@@ -131,6 +139,7 @@ Use `./scripts/manage.sh partman-show-config` to inspect tracked parents, `partm
 Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight background-job queue. It provisions an `asyncq.jobs` table plus helpers (`enqueue`, `dequeue`, `complete`, `fail`, `extend_lease`) that rely on `FOR UPDATE SKIP LOCKED`, `pg_notify`, and UUID leasing. Point a worker at the queue with `SELECT * FROM asyncq.dequeue('default');` in a loop and call `asyncq.complete(...)` or `asyncq.fail(...)` as you process jobs.
 
 ## Quick Start
+
 1. Bootstrap environment config: `./scripts/manage.sh create-env` to walk through password creation, host UID/GID selection, and resource sizing (writes `.env` + secrets).
 2. Build and start the stack:
    ```bash
@@ -141,7 +150,9 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
    ```bash
    docker compose exec postgres /opt/core_data/scripts/healthcheck.sh
    ./scripts/manage.sh psql -c 'SELECT 1;'
- ```
+   ```
+
+```
 4. Explore the CLI: `./scripts/manage.sh help`
 
 ## Project Ethos
@@ -174,16 +185,18 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 
 ## Project Layout
 ```
-core_data/
-├── .env.example              # Template for environment-specific settings (never commit real secrets)
-├── docker-compose.yml        # Orchestrates PostgreSQL and PgHero services
-├── scripts/                  # Operator tooling (manage.sh + lib modules + maintenance workflow)
-├── postgres/                 # Custom image build assets, configs, and initdb scripts
-├── backups/                  # Host output directory for logical dumps and reports
-├── secrets/                  # Docker secret material (e.g., postgres_superuser_password)
-├── README.md                 # This guide
-├── THIRD_PARTY_LICENSES.md   # Upstream license attributions for vendored tooling
-└── AGENTS.md                 # Contributor quick-reference & runbooks
+
+core\_data/
+├── .env.example # Template for environment-specific settings (never commit real secrets)
+├── docker-compose.yml # Orchestrates PostgreSQL and PgHero services
+├── scripts/ # Operator tooling (manage.sh + lib modules + maintenance workflow)
+├── postgres/ # Custom image build assets, configs, and initdb scripts
+├── backups/ # Host output directory for logical dumps and reports
+├── secrets/ # Docker secret material (e.g., postgres\_superuser\_password)
+├── README.md # This guide
+├── THIRD\_PARTY\_LICENSES.md # Upstream license attributions for vendored tooling
+└── AGENTS.md # Contributor quick-reference & runbooks
+
 ```
 If you override the named volumes with host bind mounts, keep those directories out of version control—they contain live cluster state and pgBackRest archives.
 
@@ -201,6 +214,7 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `backup [--verify]` / `stanza-create` / `restore-snapshot` | Manage pgBackRest backups & optionally restore the latest backup into a throwaway data dir for checksum verification. |
 | `daily-maintenance` | Run dumps, log capture, pgBadger analysis, and retention pruning. |
 | `provision-qa` | Differential backup + targeted restore for QA databases. |
+| `config-render` | Re-render `postgresql.conf` / `pg_hba.conf` from the templates and restart PostgreSQL (terminates active connections; required for some settings like `shared_buffers` and `max_connections`). |
 | `config-check` | Compare live `postgresql.conf` / `pg_hba.conf` against rendered templates to catch drift. |
 | `audit-roles` / `audit-security` | Generate CSV/text reports covering role hygiene, passwords, and HBA/RLS posture. |
 | `audit-extensions` | Confirm bundled extensions are present and on expected versions. |
@@ -278,3 +292,4 @@ Thank you to the maintainers and communities behind the components that make cor
 - [pg_repack](https://github.com/reorg/pg_repack) & [pgtap](https://github.com/theory/pgtap) – maintenance & testing extensions.
 
 Their work powers the database-as-code experience delivered by core_data.
+```

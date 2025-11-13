@@ -1,10 +1,10 @@
-# Contributing to core_data
+# Contributing to core\_data
 
-First off, thank you for considering contributing to core_data! It's people like you that make the project great.
+First off, thank you for considering contributing to core\_data! It's people like you that make the project great.
 
 ## Code of Conduct
 
-This project follows standard open source collaboration practices. Please be respectful and constructive in all interactions. Please report any unacceptable behavior to [paudley@blackcat.ca](mailto:paudley@blackcat.ca).
+This project follows standard open source collaboration practices. Please be respectful and constructive in all interactions. Please report any unacceptable behavior to <paudley@blackcat.ca>.
 
 ## How Can I Contribute?
 
@@ -17,7 +17,7 @@ Before creating bug reports, please check [existing issues](https://github.com/p
 * **Provide specific examples to demonstrate the steps**
 * **Describe the behavior you observed and what you expected**
 * **Include logs and error messages**
-* **Include your environment details** (OS, Docker version, core_data commit)
+* **Include your environment details** (OS, Docker version, core\_data commit)
 
 ### Suggesting Enhancements
 
@@ -43,8 +43,8 @@ Enhancement suggestions are tracked as [GitHub issues](https://github.com/paudle
 
 ### Prerequisites
 
-- Git
-- Docker
+* Git
+* Docker
 
 ### Setting Up Your Development Environment
 
@@ -56,32 +56,33 @@ cd core_data
 
 ## Documentation
 
-- Update README.md if you change functionality
-- Update inline documentation and docstrings
+* Update README.md if you change functionality
+* Update inline documentation and docstrings
 
 ## Verification Checklist
 
 Before requesting review, make sure you:
 
-- [ ] ran `python -m pytest -k full_workflow`
-- [ ] exercised affected `./scripts/manage.sh` commands manually when applicable
-- [ ] updated README.md / AGENTS.md if behavior or process changed
-- [ ] confirmed `.github/workflows/ci.yml` still reflects the desired automation
+* \[ ] ran `python -m pytest -k full_workflow`
+* \[ ] exercised affected `./scripts/manage.sh` commands manually when applicable
+* \[ ] updated README.md / AGENTS.md if behavior or process changed
+* \[ ] confirmed `.github/workflows/ci.yml` still reflects the desired automation
 
 ## Commit Messages
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):
 
-- `feat:` New feature
-- `fix:` Bug fix
-- `docs:` Documentation only changes
-- `style:` Code style changes (formatting, etc.)
-- `refactor:` Code change that neither fixes a bug nor adds a feature
-- `perf:` Performance improvement
-- `test:` Adding or updating tests
-- `chore:` Changes to build process or auxiliary tools
+* `feat:` New feature
+* `fix:` Bug fix
+* `docs:` Documentation only changes
+* `style:` Code style changes (formatting, etc.)
+* `refactor:` Code change that neither fixes a bug nor adds a feature
+* `perf:` Performance improvement
+* `test:` Adding or updating tests
+* `chore:` Changes to build process or auxiliary tools
 
 Examples:
+
 ```
 feat: add support for GitLab repositories
 fix: handle empty commit messages gracefully
@@ -98,6 +99,7 @@ Feel free to open an issue with the "question" label or reach out to the maintai
 By contributing, you agree that your contributions will be licensed under the MIT License (SPDX: MIT).
 
 All source code files should include the SPDX license identifier at the top:
+
 ```python
 # SPDX-License-Identifier: MIT
 # Copyright (c) 2025 Blackcat Informatics® Inc.
@@ -105,4 +107,4 @@ All source code files should include the SPDX license identifier at the top:
 
 ## Acknowledgments
 
-Thank you to all contributors who help make core_data better!
+Thank you to all contributors who help make core\_data better!

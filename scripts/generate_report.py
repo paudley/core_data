@@ -10,9 +10,8 @@ import argparse
 import csv
 import html
 from pathlib import Path
-from typing import Dict, List, Tuple
 
-SECTION_FILES: List[Tuple[str, str]] = [
+SECTION_FILES: list[tuple[str, str]] = [
     ("Autovacuum Findings", "autovacuum_findings.csv"),
     ("Index Bloat", "index_bloat.csv"),
     ("pg_squeeze Activity", "pg_squeeze.csv"),
@@ -36,11 +35,9 @@ SECTION_FILES: List[Tuple[str, str]] = [
 TEXT_SUFFIXES = {".txt", ".json"}
 
 
-def load_csv(
-    path: Path, limit: int = 10
-) -> Tuple[List[str], List[Dict[str, str]], int]:
-    headers: List[str] = []
-    preview: List[Dict[str, str]] = []
+def load_csv(path: Path, limit: int = 10) -> tuple[list[str], list[dict[str, str]], int]:
+    headers: list[str] = []
+    preview: list[dict[str, str]] = []
     total = 0
     with path.open(newline="") as fh:
         reader = csv.DictReader(fh)
@@ -53,12 +50,12 @@ def load_csv(
     return headers, preview, total
 
 
-def render_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
+def render_table(headers: list[str], rows: list[dict[str, str]]) -> str:
     if not headers:
         return "<p>No columns reported.</p>"
 
     head_html = "".join(f"<th>{html.escape(h)}</th>" for h in headers)
-    body_rows: List[str] = []
+    body_rows: list[str] = []
     if not rows:
         colspan = max(len(headers), 1)
         body_rows.append(f'<tr><td colspan="{colspan}">No rows</td></tr>')
@@ -73,9 +70,7 @@ def render_table(headers: List[str], rows: List[Dict[str, str]]) -> str:
             body_rows.append(f"<tr>{''.join(cells)}</tr>")
 
     body_html = "".join(body_rows)
-    return (
-        f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
-    )
+    return f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
 
 
 def render_text(path: Path, limit: int = 2000) -> str:
@@ -94,7 +89,7 @@ def main() -> int:
     parser.add_argument("--rows", type=int, default=10, help="Rows per table to render")
     args = parser.parse_args()
 
-    sections: List[str] = []
+    sections: list[str] = []
 
     for title, filename in SECTION_FILES:
         path = args.input / filename
@@ -102,17 +97,13 @@ def main() -> int:
             continue
         if path.suffix in TEXT_SUFFIXES:
             content = render_text(path)
-            sections.append(
-                f"<section><h2>{html.escape(title)}</h2>{content}</section>"
-            )
+            sections.append(f"<section><h2>{html.escape(title)}</h2>{content}</section>")
             continue
         headers, rows, total = load_csv(path, args.rows)
         table_html = render_table(headers, rows)
         sections.append(
-            (
                 f"<section><h2>{html.escape(title)} (showing {min(len(rows), args.rows)} of {total})"
                 f"</h2>{table_html}</section>"
-            )
         )
 
     pg_badger = args.input / "pgbadger.html"
@@ -143,9 +134,7 @@ def main() -> int:
   {sections}
 </body>
 </html>
-""".format(
-        directory=html.escape(str(args.input)), sections="\n".join(sections)
-    )
+""".format(directory=html.escape(str(args.input)), sections="\n".join(sections))
 
     args.output.write_text(html_doc)
     return 0

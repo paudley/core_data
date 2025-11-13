@@ -5,7 +5,7 @@
 # Helper functions for shared extension bootstrap logic.
 
 generate_pg_partman_sql() {
-  cat <<'SQL'
+	cat <<'SQL'
 DO
 $$
 DECLARE
