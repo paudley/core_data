@@ -99,4 +99,4 @@ VOLUME ["/var/lib/postgresql/data", "/var/lib/pgbackrest", "/home/postgres"]
 USER ${CORE_USERNAME}
 
 HEALTHCHECK --start-period=30s --interval=10s --timeout=5s --retries=5 \
-    CMD pg_isready -U "$${POSTGRES_USER:-postgres}" || exit 1
+    CMD ["/opt/core_data/scripts/healthcheck.sh"]
