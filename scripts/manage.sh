@@ -162,7 +162,7 @@ Commands:
   stanza-create               Initialize pgBackRest stanza.
   restore-snapshot [args]     Run pgBackRest restore (pass-through args).
   provision-qa <db>           Provision QA database from latest backup.
-  config-render               Re-render postgresql.conf/pg_hba.conf then reload PostgreSQL.
+  config-render               Re-render postgresql.conf/pg_hba.conf then restart PostgreSQL.
   config-check                Compare live configs to rendered templates.
   audit-roles [--output PATH] Report on role posture (CSV if output path supplied).
   audit-extensions [--output PATH]

@@ -118,4 +118,15 @@ ensure_postgres_running() {
     echo "[core_data] Postgres container is not running. Start it with './scripts/manage.sh up' first." >&2
     exit 1
   fi
+  # Wait for PostgreSQL to be ready to accept connections
+  local max_attempts=30
+  local attempt=1
+  while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
+    if (( attempt >= max_attempts )); then
+      echo "[core_data] Postgres is running but not ready to accept connections after $((attempt)) attempts." >&2
+      exit 1
+    fi
+    sleep 1
+    attempt=$((attempt + 1))
+  done
 }
