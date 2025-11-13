@@ -42,3 +42,4 @@ seccomp/traces/
 
 # Node (if used for tooling)
 node_modules/
+.lint-cache

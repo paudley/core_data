@@ -14,13 +14,13 @@ ASYNCQ_DEFAULT_LEASE=${ASYNCQ_DEFAULT_LEASE:-30 seconds}
 ASYNCQ_DEFAULT_RETRY=${ASYNCQ_DEFAULT_RETRY:-5 minutes}
 
 async_queue_bootstrap() {
-  ensure_env
-  local database=${1:-${POSTGRES_DB:-postgres}}
-  local schema=${2:-${ASYNCQ_DEFAULT_SCHEMA}}
+	ensure_env
+	local database=${1:-${POSTGRES_DB:-postgres}}
+	local schema=${2:-${ASYNCQ_DEFAULT_SCHEMA}}
 
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
-         --set ON_ERROR_STOP=1 --set="schema_name=${schema}" <<'SQL'
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" \
+		--set ON_ERROR_STOP=1 --set="schema_name=${schema}" <<'SQL'
 DO
 $$
 DECLARE

@@ -26,6 +26,7 @@ from subprocess import PIPE, STDOUT, Popen
 try:
     # ctypes is only available starting in Python 2.5
     from ctypes import *
+
     # wintypes is only is available on Windows
     from ctypes.wintypes import *
 
@@ -71,9 +72,7 @@ def total_mem():
             # Least ugly way to find the amount of RAM on OS X, tested on
             # 10.6
             cmd = "sysctl hw.memsize"
-            p = Popen(
-                cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True
-            )
+            p = Popen(cmd, shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True)
             output = p.stdout.read()
             m = re.match(r"^hw.memsize[:=]\s*(\d+)$", output.strip())
             if m and m.groups():
@@ -121,7 +120,7 @@ def arch_bits(arch):
     return 64
 
 
-class PGConfigLine(object):
+class PGConfigLine:
     """
     Stores the value of a single line in the postgresql.conf file, with the
     following fields:
@@ -195,15 +194,15 @@ class PGConfigLine(object):
         return self.sets_parameter
 
     def __str__(self):
-        result = ["%s sets=%s" % (self.line_number, self.sets_parameter)]
+        result = ["{} sets={}".format(self.line_number, self.sets_parameter)]
         if self.sets_parameter:
-            result.append("%s=%s" % (self.name, self.value))
+            result.append("{}={}".format(self.name, self.value))
             # TODO:  Include comment_section, readable,raw, delimiter
         result.append("original_line:  %s" % self.original_line)
         return " ".join(result)
 
 
-class PGConfigFile(object):
+class PGConfigFile:
     """
     Read, write, and manage a postgresql.conf file
 
@@ -297,7 +296,7 @@ class PGConfigFile(object):
         # TODO Clamp the new value against the min and max for this setting
         # print name,"min=",settings.min_val(name),"max=",settings.max_val(name)
 
-        text = "%s = %s" % (name, value)
+        text = "{} = {}".format(name, value)
         new_line = PGConfigLine(text)
         new_line.process_line()
 
@@ -335,10 +334,10 @@ class PGConfigFile(object):
     def debug_print_settings(self):
         print("Settings listing:")
         for k, line in list(self.param_to_line.items()):
-            print("%s = %s" % (k, line.value()))
+            print("{} = {}".format(k, line.value()))
 
 
-class PGSettings(object):
+class PGSettings:
     """
     Read and index a delimited text dump of a typical pg_settings dump for
     the appropriate architecture.  Maximum values are different for some
@@ -362,9 +361,7 @@ class PGSettings(object):
         self.version = ver
 
     def read_config_file(self):
-        setting_dump_file = os.path.join(
-            self.settings_dir, "pg_settings-%s-%s" % (self.version, self.arch)
-        )
+        setting_dump_file = os.path.join(self.settings_dir, "pg_settings-{}-{}".format(self.version, self.arch))
         setting_columns = [
             "name",
             "setting",
@@ -379,9 +376,7 @@ class PGSettings(object):
             "enumvals",
             "boot_val",
         ]
-        reader = csv.DictReader(
-            open(setting_dump_file), setting_columns, delimiter="\t"
-        )
+        reader = csv.DictReader(open(setting_dump_file), setting_columns, delimiter="\t")
         for d in reader:
             # Convert nulls into blanks
             for key in list(d.keys()):
@@ -645,20 +640,12 @@ def wizard_tune(config, options, settings):
 
     # Header to identify when the program ran, before any new settings
     config.identify_session("")
+    config.identify_session("#------------------------------------------------------------------------------")
+    config.identify_session("# pgtune for version {} run on {}".format(options.db_version, datetime.date.today()))
     config.identify_session(
-        "#------------------------------------------------------------------------------"
+        "# Based on {} KB RAM, platform {}, {} clients and {} workload".format(mem, options.platform, con, db_type)
     )
-    config.identify_session(
-        "# pgtune for version %s run on %s"
-        % (options.db_version, datetime.date.today())
-    )
-    config.identify_session(
-        "# Based on %s KB RAM, platform %s, %s clients and %s workload"
-        % (mem, options.platform, con, db_type)
-    )
-    config.identify_session(
-        "#------------------------------------------------------------------------------"
-    )
+    config.identify_session("#------------------------------------------------------------------------------")
     config.identify_session("")
 
     # Write the new settings out
@@ -673,9 +660,7 @@ def wizard_tune(config, options, settings):
 
 
 def read_options(program_args):
-    parser = optparse.OptionParser(
-        usage="usage: %prog [options]", version="0.9.4b", conflict_handler="resolve"
-    )
+    parser = optparse.OptionParser(usage="usage: %prog [options]", version="0.9.4b", conflict_handler="resolve")
 
     parser.add_option(
         "-i",
@@ -732,9 +717,7 @@ def read_options(program_args):
         "--arch",
         dest="arch",
         default=platform.machine(),
-        help="Processor architecture, this system is "
-        + platform.machine()
-        + ".  Valid options are i386 and x86_64.",
+        help="Processor architecture, this system is " + platform.machine() + ".  Valid options are i386 and x86_64.",
     )
 
     parser.add_option(
@@ -820,9 +803,7 @@ def main(program_args):
     if options.settings_dir is None:
         options.settings_dir = os.path.abspath(os.path.dirname(sys.argv[0]))
 
-    settings = PGSettings(
-        options.settings_dir, options.db_version, arch_bits(options.arch)
-    )
+    settings = PGSettings(options.settings_dir, options.db_version, arch_bits(options.arch))
 
     settings.read_config_file()
     config.store_settings(settings)

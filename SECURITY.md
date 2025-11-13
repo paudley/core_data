@@ -6,36 +6,37 @@ We release patches for security vulnerabilities. Currently supported versions:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 0.1.x   | :white\_check\_mark: |
 | < 0.1   | :x:                |
 
 ## Reporting a Vulnerability
 
-We take the security of core_data seriously. If you believe you have found a security vulnerability, please report it to us as described below.
+We take the security of core\_data seriously. If you believe you have found a security vulnerability, please report it to us as described below.
 
 ### Please DO NOT:
-- Open a public GitHub issue for security vulnerabilities
-- Post about the vulnerability on social media or forums
+
+* Open a public GitHub issue for security vulnerabilities
+* Post about the vulnerability on social media or forums
 
 ### Please DO:
-- Email us directly at [secure@blackcat.ca](mailto:secure@blackcat.ca)
-- Include the word "SECURITY" in the subject line
-- Provide detailed steps to reproduce the vulnerability
-- Include the impact and potential exploit scenarios
+
+* Email us directly at <secure@blackcat.ca>
+* Include the word "SECURITY" in the subject line
+* Provide detailed steps to reproduce the vulnerability
+* Include the impact and potential exploit scenarios
 
 ### What to Expect
 
-- **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
-- **Assessment**: We will investigate and validate the reported vulnerability within 7 days
-- **Resolution**: We aim to release a patch within 30 days of validation
-- **Disclosure**: We will coordinate public disclosure with you after the patch is released
+* **Acknowledgment**: We will acknowledge receipt of your vulnerability report within 48 hours
+* **Assessment**: We will investigate and validate the reported vulnerability within 7 days
+* **Resolution**: We aim to release a patch within 30 days of validation
+* **Disclosure**: We will coordinate public disclosure with you after the patch is released
 
 ## Security Best Practices for Users
 
 ### Dependencies
 
 We regularly update dependencies to address known vulnerabilities:
-
 
 ## Vulnerability Disclosure Policy
 
@@ -51,8 +52,8 @@ We follow responsible disclosure practices:
 
 Stay informed about security updates:
 
-- Watch the repository for releases
-- Subscribe to security advisories
+* Watch the repository for releases
+* Subscribe to security advisories
 
 ## Hall of Fame
 
@@ -63,10 +64,11 @@ We thank the following security researchers for responsibly disclosing vulnerabi
 ## Contact
 
 For security concerns, contact:
-- Email: [secure@blackcat.ca](mailto:secure@blackcat.ca)
-- PGP Key:
 
------BEGIN PGP PUBLIC KEY BLOCK-----
+* Email: <secure@blackcat.ca>
+* PGP Key:
+
+\-----BEGIN PGP PUBLIC KEY BLOCK-----
 Version: GnuPG v2
 
 mQINBFhhjUABEADg4mASErImePxCj0Ri8v08Axa1D1gnWPQBqtJW+P6OpQRuRXw0
@@ -120,10 +122,10 @@ qL+AeU7BXe9VtTdvKyOwsdS/ayX0NeriPSxReZlBPgoG9/SEX+hyki9n7lS8eJby
 jmyGBkMW5wHhJjlyy7SiZ/gg4Sb59vNLjbhQTJOB9DcCCWRHDZXR2avsJjP35YOQ
 XE4dvUx/JNzvuZ/nkLMnuVf+feQJsvc+kLNV1K2sFGffpC/ZdBkU0lz5oLfqTtAM
 1k2Eu+FYVJiyxA6fujgY65hx/hj/qZZJeuBTNgfWwiTn/A==
-=fCTf
------END PGP PUBLIC KEY BLOCK-----
-
+\=fCTf
+\-----END PGP PUBLIC KEY BLOCK-----
 
 For general questions, use:
-- GitHub Issues: [https://github.com/paudley/core_data/issues](https://github.com/paudley/core_data/issues)
-- Email: [paudley@blackcat.ca](mailto:paudley@blackcat.ca)
+
+* GitHub Issues: <https://github.com/paudley/core_data/issues>
+* Email: <paudley@blackcat.ca>

@@ -10,131 +10,131 @@ SEC_COMP_DEFAULT_PROFILE=${SEC_COMP_DEFAULT_PROFILE:-${SEC_COMP_PROFILE_DIR}/doc
 SEC_COMP_TRACE_DIR=${SEC_COMP_TRACE_DIR:-${SEC_COMP_PROFILE_DIR}/traces}
 
 declare -A SEC_COMP_SERVICE_DEFAULT_SPEC=(
-  [postgres]='seccomp:./seccomp/postgres.json'
-  [logical_backup]='seccomp:./seccomp/logical_backup.json'
-  [pgbouncer]='seccomp:./seccomp/pgbouncer.json'
-  [valkey]='seccomp:./seccomp/valkey.json'
-  [memcached]='seccomp:./seccomp/memcached.json'
-  [pghero]='seccomp:./seccomp/pghero.json'
-  [rabbitmq]='seccomp:./seccomp/docker-default.json'
+	[postgres]='seccomp:./seccomp/postgres.json'
+	[logical_backup]='seccomp:./seccomp/logical_backup.json'
+	[pgbouncer]='seccomp:./seccomp/pgbouncer.json'
+	[valkey]='seccomp:./seccomp/valkey.json'
+	[memcached]='seccomp:./seccomp/memcached.json'
+	[pghero]='seccomp:./seccomp/pghero.json'
+	[rabbitmq]='seccomp:./seccomp/docker-default.json'
 )
 
 MANDATORY_SYSCALLS=(
-  "open"
-  "openat"
-  "close_range"
-  "openat2"
-  "pidfd_close"
-  "pidfd_getfd"
-  "pidfd_open"
-  "pidfd_send_signal"
-  "capget"
-  "capset"
-  "fstatat"
-  "newfstatat"
-  "statx"
-  "setuid"
-  "setgid"
-  "setresuid"
-  "setresgid"
-  "setgroups"
-  "setfsuid"
-  "setfsgid"
+	"open"
+	"openat"
+	"close_range"
+	"openat2"
+	"pidfd_close"
+	"pidfd_getfd"
+	"pidfd_open"
+	"pidfd_send_signal"
+	"capget"
+	"capset"
+	"fstatat"
+	"newfstatat"
+	"statx"
+	"setuid"
+	"setgid"
+	"setresuid"
+	"setresgid"
+	"setgroups"
+	"setfsuid"
+	"setfsgid"
 )
 
 _seccomp_profile_var() {
-  local service=$1
-  local upper
-  upper=$(printf '%s' "${service}" | tr '[:lower:]' '[:upper:]')
-  echo "CORE_DATA_SECCOMP_${upper//-/_}"
+	local service=$1
+	local upper
+	upper=$(printf '%s' "${service}" | tr '[:lower:]' '[:upper:]')
+	echo "CORE_DATA_SECCOMP_${upper//-/_}"
 }
 
 seccomp_resolve_profile() {
-  local service=$1
-  local var
-  var=$(_seccomp_profile_var "${service}")
-  local value=${!var-}
-  if [[ -n ${value} ]]; then
-    printf '%s\n' "${value}"
-    return
-  fi
-  local default_spec=${SEC_COMP_SERVICE_DEFAULT_SPEC[${service}]-}
-  if [[ -n ${default_spec} ]]; then
-    printf '%s\n' "${default_spec}"
-    return
-  fi
-  printf 'seccomp:%s\n' "${SEC_COMP_DEFAULT_PROFILE}"
+	local service=$1
+	local var
+	var=$(_seccomp_profile_var "${service}")
+	local value=${!var-}
+	if [[ -n ${value} ]]; then
+		printf '%s\n' "${value}"
+		return
+	fi
+	local default_spec=${SEC_COMP_SERVICE_DEFAULT_SPEC[${service}]-}
+	if [[ -n ${default_spec} ]]; then
+		printf '%s\n' "${default_spec}"
+		return
+	fi
+	printf 'seccomp:%s\n' "${SEC_COMP_DEFAULT_PROFILE}"
 }
 
 seccomp_extract_path() {
-  local spec=$1
-  case "${spec}" in
-    seccomp:*)
-      printf '%s\n' "${spec#seccomp:}"
-      ;;
-    seccomp=*)
-      printf '%s\n' "${spec#seccomp=}"
-      ;;
-    *)
-      printf '\n'
-      ;;
-  esac
+	local spec=$1
+	case "${spec}" in
+	seccomp:*)
+		printf '%s\n' "${spec#seccomp:}"
+		;;
+	seccomp=*)
+		printf '%s\n' "${spec#seccomp=}"
+		;;
+	*)
+		printf '\n'
+		;;
+	esac
 }
 
 seccomp_status_line() {
-  local service=$1
-  local spec
-  spec=$(seccomp_resolve_profile "${service}")
-  local profile_path
-  profile_path=$(seccomp_extract_path "${spec}")
-  if [[ -z ${profile_path} ]]; then
-    printf '%-16s %s\n' "${service}" "${spec}"
-    return
-  fi
-  local resolved
-  if [[ ${profile_path} == /* ]]; then
-    resolved=${profile_path}
-  else
-    resolved=${ROOT_DIR}/${profile_path#./}
-  fi
-  if [[ -f ${resolved} ]]; then
-    printf '%-16s %s (present)\n' "${service}" "${spec}"
-  else
-    printf '%-16s %s (missing)\n' "${service}" "${spec}"
-  fi
+	local service=$1
+	local spec
+	spec=$(seccomp_resolve_profile "${service}")
+	local profile_path
+	profile_path=$(seccomp_extract_path "${spec}")
+	if [[ -z ${profile_path} ]]; then
+		printf '%-16s %s\n' "${service}" "${spec}"
+		return
+	fi
+	local resolved
+	if [[ ${profile_path} == /* ]]; then
+		resolved=${profile_path}
+	else
+		resolved=${ROOT_DIR}/${profile_path#./}
+	fi
+	if [[ -f ${resolved} ]]; then
+		printf '%-16s %s (present)\n' "${service}" "${spec}"
+	else
+		printf '%-16s %s (missing)\n' "${service}" "${spec}"
+	fi
 }
 
 cmd_seccomp_status() {
-  ensure_env
-  echo "Service         Profile"
-  echo "---------------- -------"
-  for service in "${SEC_COMP_SERVICES[@]}"; do
-    seccomp_status_line "${service}"
-  done
-  echo
-  echo "Profiles inherit from ${SEC_COMP_DEFAULT_PROFILE} (Docker's baseline) plus traced syscalls. Override with CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json when you need a custom override."
+	ensure_env
+	echo "Service         Profile"
+	echo "---------------- -------"
+	for service in "${SEC_COMP_SERVICES[@]}"; do
+		seccomp_status_line "${service}"
+	done
+	echo
+	echo "Profiles inherit from ${SEC_COMP_DEFAULT_PROFILE} (Docker's baseline) plus traced syscalls. Override with CORE_DATA_SECCOMP_<SERVICE>=seccomp:/path/to/profile.json when you need a custom override."
 }
 
 cmd_seccomp_trace() {
-  ensure_env
-  if [[ $# -lt 1 ]]; then
-    echo "Usage: ${0##*/} seccomp-trace <service>" >&2
-    exit 1
-  fi
-  local service=$1
-  local found=false
-  for candidate in "${SEC_COMP_SERVICES[@]}"; do
-    if [[ ${candidate} == "${service}" ]]; then
-      found=true
-      break
-    fi
-  done
-  if [[ ${found} == false ]]; then
-    echo "Unknown service '${service}'. Valid options: ${SEC_COMP_SERVICES[*]}" >&2
-    exit 1
-  fi
-  mkdir -p "${SEC_COMP_TRACE_DIR}" >&2
-  cat <<MSG
+	ensure_env
+	if [[ $# -lt 1 ]]; then
+		echo "Usage: ${0##*/} seccomp-trace <service>" >&2
+		exit 1
+	fi
+	local service=$1
+	local found=false
+	for candidate in "${SEC_COMP_SERVICES[@]}"; do
+		if [[ ${candidate} == "${service}" ]]; then
+			found=true
+			break
+		fi
+	done
+	if [[ ${found} == false ]]; then
+		echo "Unknown service '${service}'. Valid options: ${SEC_COMP_SERVICES[*]}" >&2
+		exit 1
+	fi
+	mkdir -p "${SEC_COMP_TRACE_DIR}" >&2
+	cat <<MSG
 [seccomp] Trace helper prepared directory ${SEC_COMP_TRACE_DIR}/${service}.
 
 Recommended workflow:
@@ -156,64 +156,64 @@ MSG
 }
 
 cmd_seccomp_generate() {
-  ensure_env
-  if [[ $# -lt 1 ]]; then
-    echo "Usage: ${0##*/} seccomp-generate <service> [--trace-dir DIR] [--output PATH]" >&2
-    exit 1
-  fi
-  local service=$1
-  shift
-  local trace_dir=${SEC_COMP_TRACE_DIR}
-  local output=""
-  while [[ $# -gt 0 ]]; do
-    case $1 in
-      --trace-dir)
-        trace_dir=$2
-        shift 2
-        ;;
-      --trace-dir=*)
-        trace_dir=${1#*=}
-        shift
-        ;;
-      --output)
-        output=$2
-        shift 2
-        ;;
-      --output=*)
-        output=${1#*=}
-        shift
-        ;;
-      --help|-h)
-        echo "Usage: ${0##*/} seccomp-generate <service> [--trace-dir DIR] [--output PATH]" >&2
-        exit 0
-        ;;
-      *)
-        echo "Unknown option '${1}'" >&2
-        exit 1
-        ;;
-    esac
-  done
+	ensure_env
+	if [[ $# -lt 1 ]]; then
+		echo "Usage: ${0##*/} seccomp-generate <service> [--trace-dir DIR] [--output PATH]" >&2
+		exit 1
+	fi
+	local service=$1
+	shift
+	local trace_dir=${SEC_COMP_TRACE_DIR}
+	local output=""
+	while [[ $# -gt 0 ]]; do
+		case $1 in
+		--trace-dir)
+			trace_dir=$2
+			shift 2
+			;;
+		--trace-dir=*)
+			trace_dir=${1#*=}
+			shift
+			;;
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--help | -h)
+			echo "Usage: ${0##*/} seccomp-generate <service> [--trace-dir DIR] [--output PATH]" >&2
+			exit 0
+			;;
+		*)
+			echo "Unknown option '${1}'" >&2
+			exit 1
+			;;
+		esac
+	done
 
-  if [[ ! -d ${trace_dir} ]]; then
-    echo "[seccomp] Trace directory '${trace_dir}' not found. Run seccomp-trace first." >&2
-    exit 1
-  fi
+	if [[ ! -d ${trace_dir} ]]; then
+		echo "[seccomp] Trace directory '${trace_dir}' not found. Run seccomp-trace first." >&2
+		exit 1
+	fi
 
-  local spec
-  spec=$(seccomp_resolve_profile "${service}")
-  local profile_path
-  profile_path=$(seccomp_extract_path "${spec}")
-  if [[ -z ${profile_path} ]]; then
-    profile_path=${SEC_COMP_DEFAULT_PROFILE}
-  fi
-  if [[ -z ${output} ]]; then
-    output=${profile_path}
-  fi
-  mkdir -p "$(dirname "${output}")"
+	local spec
+	spec=$(seccomp_resolve_profile "${service}")
+	local profile_path
+	profile_path=$(seccomp_extract_path "${spec}")
+	if [[ -z ${profile_path} ]]; then
+		profile_path=${SEC_COMP_DEFAULT_PROFILE}
+	fi
+	if [[ -z ${output} ]]; then
+		output=${profile_path}
+	fi
+	mkdir -p "$(dirname "${output}")"
 
-  local mandatory_csv
-  mandatory_csv=$(printf '%s,' "${MANDATORY_SYSCALLS[@]}")
-  MANDATORY_SYSCALLS="${mandatory_csv%,}" DEFAULT_SECCOMP_PROFILE="${SEC_COMP_DEFAULT_PROFILE}" python3 - "${trace_dir}" "${output}" <<'PY'
+	local mandatory_csv
+	mandatory_csv=$(printf '%s,' "${MANDATORY_SYSCALLS[@]}")
+	MANDATORY_SYSCALLS="${mandatory_csv%,}" DEFAULT_SECCOMP_PROFILE="${SEC_COMP_DEFAULT_PROFILE}" python3 - "${trace_dir}" "${output}" <<'PY'
 import json
 import os
 import sys
@@ -287,12 +287,12 @@ PY
 }
 
 cmd_seccomp_verify() {
-  ensure_env
-  if ! compose config --format json >"${TMPDIR:-/tmp}/core_data_seccomp.json"; then
-    echo "[seccomp] Unable to render compose configuration." >&2
-    exit 1
-  fi
-  python3 - "${TMPDIR:-/tmp}/core_data_seccomp.json" <<'PY'
+	ensure_env
+	if ! compose config --format json >"${TMPDIR:-/tmp}/core_data_seccomp.json"; then
+		echo "[seccomp] Unable to render compose configuration." >&2
+		exit 1
+	fi
+	python3 - "${TMPDIR:-/tmp}/core_data_seccomp.json" <<'PY'
 import json
 import sys
 

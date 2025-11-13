@@ -4,21 +4,21 @@ This document describes the process for creating and publishing releases of the 
 
 ## Table of Contents
 
-- [Overview](#overview)
-- [Version Strategy](#version-strategy)
-- [Release Checklist](#release-checklist)
-- [Creating a Release](#creating-a-release)
-- [Verifying the Release](#verifying-the-release)
-- [Troubleshooting](#troubleshooting)
+* [Overview](#overview)
+* [Version Strategy](#version-strategy)
+* [Release Checklist](#release-checklist)
+* [Creating a Release](#creating-a-release)
+* [Verifying the Release](#verifying-the-release)
+* [Troubleshooting](#troubleshooting)
 
 ## Overview
 
 Releases are published automatically to GitHub Container Registry (GHCR) when version tags are pushed to the repository. Each release includes:
 
-- **Docker images** published to `ghcr.io/<username>/core-data-postgres`
-- **SLSA attestations** for build provenance verification
-- **SBOM** (Software Bill of Materials) for dependency tracking
-- **Multiple tags** for flexible version referencing
+* **Docker images** published to `ghcr.io/<username>/core-data-postgres`
+* **SLSA attestations** for build provenance verification
+* **SBOM** (Software Bill of Materials) for dependency tracking
+* **Multiple tags** for flexible version referencing
 
 ## Version Strategy
 
@@ -31,49 +31,52 @@ We use a **hybrid versioning strategy** that combines PostgreSQL version with se
 ```
 
 **Examples:**
-- `17.2-v1.0.0` - Initial stable release with PostgreSQL 17.2
-- `17.2-v1.0.1` - Patch/build fix (PostgreSQL version unchanged)
-- `17.2-v1.1.0` - New extensions or features added (minor bump)
-- `17.3-v1.2.0` - PostgreSQL minor update with features
-- `18.0-v2.0.0` - PostgreSQL major upgrade (breaking change)
+
+* `17.2-v1.0.0` - Initial stable release with PostgreSQL 17.2
+* `17.2-v1.0.1` - Patch/build fix (PostgreSQL version unchanged)
+* `17.2-v1.1.0` - New extensions or features added (minor bump)
+* `17.3-v1.2.0` - PostgreSQL minor update with features
+* `18.0-v2.0.0` - PostgreSQL major upgrade (breaking change)
 
 ### Version Components
 
 #### PostgreSQL Version (`{PG_VERSION}`)
-- Format: `MAJOR.MINOR` (e.g., `17.2`)
-- Changes when the base PostgreSQL version is updated
-- Major version changes (17 → 18) typically require semantic major version bump
+
+* Format: `MAJOR.MINOR` (e.g., `17.2`)
+* Changes when the base PostgreSQL version is updated
+* Major version changes (17 → 18) typically require semantic major version bump
 
 #### Semantic Version (`{SEMANTIC_VERSION}`)
-- Format: `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
-- Follows [Semantic Versioning 2.0.0](https://semver.org/)
-  - **MAJOR**: Breaking changes, PostgreSQL major upgrades
-  - **MINOR**: New features, extensions, backward-compatible changes
-  - **PATCH**: Bug fixes, security patches, build improvements
+
+* Format: `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
+* Follows [Semantic Versioning 2.0.0](https://semver.org/)
+  * **MAJOR**: Breaking changes, PostgreSQL major upgrades
+  * **MINOR**: New features, extensions, backward-compatible changes
+  * **PATCH**: Bug fixes, security patches, build improvements
 
 ### Generated Docker Tags
 
 For a release tag `17.2-v1.0.0`, the following Docker image tags are automatically created:
 
-- `17.2-v1.0.0` - Full version (exact release)
-- `17.2-v1.0` - Minor version (latest patch)
-- `17.2-v1` - Major version (latest minor)
-- `17.2` - PostgreSQL version (latest semantic version)
-- `17` - PostgreSQL major version (latest minor)
-- `latest` - Latest stable release
+* `17.2-v1.0.0` - Full version (exact release)
+* `17.2-v1.0` - Minor version (latest patch)
+* `17.2-v1` - Major version (latest minor)
+* `17.2` - PostgreSQL version (latest semantic version)
+* `17` - PostgreSQL major version (latest minor)
+* `latest` - Latest stable release
 
 ## Release Checklist
 
 Before creating a release, ensure:
 
-- [ ] All tests pass in CI (`smoke` and `markers` jobs)
-- [ ] Docker build validation passes
-- [ ] `CHANGELOG.md` is updated with changes since last release
-- [ ] `VERSION` file contains the correct semantic version
-- [ ] Documentation is up to date
-- [ ] Breaking changes are clearly documented
-- [ ] Security vulnerabilities are addressed
-- [ ] Local testing is complete
+* \[ ] All tests pass in CI (`smoke` and `markers` jobs)
+* \[ ] Docker build validation passes
+* \[ ] `CHANGELOG.md` is updated with changes since last release
+* \[ ] `VERSION` file contains the correct semantic version
+* \[ ] Documentation is up to date
+* \[ ] Breaking changes are clearly documented
+* \[ ] Security vulnerabilities are addressed
+* \[ ] Local testing is complete
 
 ## Creating a Release
 
@@ -163,7 +166,7 @@ After the workflow completes, create a GitHub Release:
 
 #### GitHub Release Template
 
-```markdown
+````markdown
 ## Core Data PostgreSQL 17.2-v1.0.0
 
 PostgreSQL 17.2 with comprehensive extension suite for spatial, vector, and graph data.
@@ -172,7 +175,7 @@ PostgreSQL 17.2 with comprehensive extension suite for spatial, vector, and grap
 
 ```bash
 docker pull ghcr.io/<username>/core-data-postgres:17.2-v1.0.0
-```
+````
 
 ### 🔐 Verify Attestation
 
@@ -183,18 +186,19 @@ gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
 
 ### 📋 What's Changed
 
-See [CHANGELOG.md](https://github.com/<username>/core_data/blob/main/CHANGELOG.md#17.2-v1.0.0) for complete details.
+See [CHANGELOG.md](https://github.com/%3Cusername%3E/core_data/blob/main/CHANGELOG.md#17.2-v1.0.0) for complete details.
 
 ### 🐳 Available Tags
 
-- `ghcr.io/<username>/core-data-postgres:17.2-v1.0.0` (exact version)
-- `ghcr.io/<username>/core-data-postgres:17.2` (PostgreSQL version)
-- `ghcr.io/<username>/core-data-postgres:latest` (latest stable)
+* `ghcr.io/<username>/core-data-postgres:17.2-v1.0.0` (exact version)
+* `ghcr.io/<username>/core-data-postgres:17.2` (PostgreSQL version)
+* `ghcr.io/<username>/core-data-postgres:latest` (latest stable)
 
 ### 🔒 Security
 
 This release includes SLSA build attestations and SBOM for supply chain security.
-```
+
+````
 
 ## Verifying the Release
 
@@ -202,7 +206,7 @@ This release includes SLSA build attestations and SBOM for supply chain security
 
 ```bash
 docker pull ghcr.io/<username>/core-data-postgres:17.2-v1.0.0
-```
+````
 
 ### 2. Verify Attestation
 
@@ -214,6 +218,7 @@ gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
 ```
 
 Expected output:
+
 ```
 ✓ Verification succeeded!
 
@@ -242,6 +247,7 @@ docker run --rm ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
 ```
 
 Expected output:
+
 ```
 postgres (PostgreSQL) 17.2 (Debian 17.2-1.pgdg120+1)
 ```
@@ -262,6 +268,7 @@ docker run --rm \
 **Symptom**: Build step fails in GitHub Actions
 
 **Solutions**:
+
 1. Check build logs for specific errors
 2. Verify Dockerfile syntax locally: `docker build -f postgres/Dockerfile .`
 3. Ensure all build dependencies are available
@@ -272,6 +279,7 @@ docker run --rm \
 **Symptom**: Build succeeds but attestation step fails
 
 **Solutions**:
+
 1. Verify workflow permissions include `id-token: write` and `attestations: write`
 2. Check if `GITHUB_TOKEN` has required permissions
 3. Ensure repository settings allow attestation generation
@@ -284,11 +292,13 @@ docker run --rm \
 **Solutions**:
 
 Delete local tag:
+
 ```bash
 git tag -d 17.2-v1.0.0
 ```
 
 Delete remote tag (use with caution):
+
 ```bash
 git push origin :refs/tags/17.2-v1.0.0
 ```
@@ -300,6 +310,7 @@ Create corrected tag and push again.
 **Symptom**: Docker image has incorrect or missing tags
 
 **Solutions**:
+
 1. Verify tag format matches `{PG_VERSION}-v{SEM_VERSION}` pattern
 2. Check workflow logs for tag extraction step
 3. Ensure version extraction regex is working correctly
@@ -310,6 +321,7 @@ Create corrected tag and push again.
 **Symptom**: Cannot push to GitHub Container Registry
 
 **Solutions**:
+
 1. Verify repository settings → Actions → General → Workflow permissions
 2. Enable "Read and write permissions" for `GITHUB_TOKEN`
 3. Ensure package visibility settings allow publishing
@@ -341,7 +353,7 @@ For critical security fixes or severe bugs:
 
 For questions or issues with the release process:
 
-- Check existing [GitHub Issues](https://github.com/<username>/core_data/issues)
-- Review [GitHub Discussions](https://github.com/<username>/core_data/discussions)
-- Consult [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- Read [Artifact Attestations Guide](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+* Check existing [GitHub Issues](https://github.com/%3Cusername%3E/core_data/issues)
+* Review [GitHub Discussions](https://github.com/%3Cusername%3E/core_data/discussions)
+* Consult [GitHub Actions Documentation](https://docs.github.com/en/actions)
+* Read [Artifact Attestations Guide](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)

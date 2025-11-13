@@ -16,7 +16,6 @@ import sys
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 from packaging.version import Version
 
@@ -30,44 +29,28 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
 class ComponentConfig:
     name: str
     source: str
-    repo: Optional[str] = None
-    alias: Optional[str] = None
-    pattern: Optional[str] = None
+    repo: str | None = None
+    alias: str | None = None
+    pattern: str | None = None
     kind: str = "extension"  # extension|server|core
 
 
-CONFIG: Dict[str, ComponentConfig] = {
-    "postgresql": ComponentConfig(
-        name="postgresql", source="github", repo="postgres/postgres", kind="server"
-    ),
+CONFIG: dict[str, ComponentConfig] = {
+    "postgresql": ComponentConfig(name="postgresql", source="github", repo="postgres/postgres", kind="server"),
     "postgis": ComponentConfig(name="postgis", source="github", repo="postgis/postgis"),
-    "postgis_raster": ComponentConfig(
-        name="postgis_raster", source="alias", alias="postgis"
-    ),
-    "postgis_topology": ComponentConfig(
-        name="postgis_topology", source="alias", alias="postgis"
-    ),
-    "postgis_tiger_geocoder": ComponentConfig(
-        name="postgis_tiger_geocoder", source="alias", alias="postgis"
-    ),
-    "address_standardizer": ComponentConfig(
-        name="address_standardizer", source="alias", alias="postgis"
-    ),
+    "postgis_raster": ComponentConfig(name="postgis_raster", source="alias", alias="postgis"),
+    "postgis_topology": ComponentConfig(name="postgis_topology", source="alias", alias="postgis"),
+    "postgis_tiger_geocoder": ComponentConfig(name="postgis_tiger_geocoder", source="alias", alias="postgis"),
+    "address_standardizer": ComponentConfig(name="address_standardizer", source="alias", alias="postgis"),
     "address_standardizer_data_us": ComponentConfig(
         name="address_standardizer_data_us", source="alias", alias="postgis"
     ),
     "vector": ComponentConfig(name="vector", source="github", repo="pgvector/pgvector"),
     "pgvector": ComponentConfig(name="pgvector", source="alias", alias="vector"),
     "age": ComponentConfig(name="age", source="github", repo="apache/age"),
-    "pg_cron": ComponentConfig(
-        name="pg_cron", source="github", repo="citusdata/pg_cron"
-    ),
-    "pg_partman": ComponentConfig(
-        name="pg_partman", source="github", repo="pgpartman/pg_partman"
-    ),
-    "pg_partman_bgw": ComponentConfig(
-        name="pg_partman_bgw", source="alias", alias="pg_partman"
-    ),
+    "pg_cron": ComponentConfig(name="pg_cron", source="github", repo="citusdata/pg_cron"),
+    "pg_partman": ComponentConfig(name="pg_partman", source="github", repo="pgpartman/pg_partman"),
+    "pg_partman_bgw": ComponentConfig(name="pg_partman_bgw", source="alias", alias="pg_partman"),
     "hypopg": ComponentConfig(name="hypopg", source="github", repo="HypoPG/hypopg"),
     "pg_repack": ComponentConfig(
         name="pg_repack",
@@ -75,38 +58,18 @@ CONFIG: Dict[str, ComponentConfig] = {
         repo="reorg/pg_repack",
         pattern=r"(?i)(?:ver[_-])?([0-9_.]+)",
     ),
-    "pg_squeeze": ComponentConfig(
-        name="pg_squeeze", source="github", repo="cybertec-postgresql/pg_squeeze"
-    ),
+    "pg_squeeze": ComponentConfig(name="pg_squeeze", source="github", repo="cybertec-postgresql/pg_squeeze"),
     "pgtap": ComponentConfig(name="pgtap", source="github", repo="theory/pgtap"),
-    "pgrouting": ComponentConfig(
-        name="pgrouting", source="github", repo="pgRouting/pgrouting"
-    ),
+    "pgrouting": ComponentConfig(name="pgrouting", source="github", repo="pgRouting/pgrouting"),
     # Core extensions follow server lifecycle
-    "pg_stat_statements": ComponentConfig(
-        name="pg_stat_statements", source="alias", alias="postgresql", kind="core"
-    ),
-    "pg_buffercache": ComponentConfig(
-        name="pg_buffercache", source="alias", alias="postgresql", kind="core"
-    ),
-    "pgcrypto": ComponentConfig(
-        name="pgcrypto", source="alias", alias="postgresql", kind="core"
-    ),
-    "citext": ComponentConfig(
-        name="citext", source="alias", alias="postgresql", kind="core"
-    ),
-    "hstore": ComponentConfig(
-        name="hstore", source="alias", alias="postgresql", kind="core"
-    ),
-    "pg_trgm": ComponentConfig(
-        name="pg_trgm", source="alias", alias="postgresql", kind="core"
-    ),
-    "uuid-ossp": ComponentConfig(
-        name="uuid-ossp", source="alias", alias="postgresql", kind="core"
-    ),
-    "fuzzystrmatch": ComponentConfig(
-        name="fuzzystrmatch", source="alias", alias="postgresql", kind="core"
-    ),
+    "pg_stat_statements": ComponentConfig(name="pg_stat_statements", source="alias", alias="postgresql", kind="core"),
+    "pg_buffercache": ComponentConfig(name="pg_buffercache", source="alias", alias="postgresql", kind="core"),
+    "pgcrypto": ComponentConfig(name="pgcrypto", source="alias", alias="postgresql", kind="core"),
+    "citext": ComponentConfig(name="citext", source="alias", alias="postgresql", kind="core"),
+    "hstore": ComponentConfig(name="hstore", source="alias", alias="postgresql", kind="core"),
+    "pg_trgm": ComponentConfig(name="pg_trgm", source="alias", alias="postgresql", kind="core"),
+    "uuid-ossp": ComponentConfig(name="uuid-ossp", source="alias", alias="postgresql", kind="core"),
+    "fuzzystrmatch": ComponentConfig(name="fuzzystrmatch", source="alias", alias="postgresql", kind="core"),
 }
 
 
@@ -122,8 +85,8 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_env(path: Path) -> Dict[str, str]:
-    env: Dict[str, str] = {}
+def load_env(path: Path) -> dict[str, str]:
+    env: dict[str, str] = {}
     if not path.exists():
         return env
     for line in path.read_text().splitlines():
@@ -137,16 +100,12 @@ def load_env(path: Path) -> Dict[str, str]:
     return env
 
 
-def run_command(cmd: List[str]) -> str:
-    result = subprocess.run(
-        cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
+def run_command(cmd: list[str]) -> str:
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
     return result.stdout.strip()
 
 
-def fetch_installed_versions(
-    args: argparse.Namespace, env: Dict[str, str]
-) -> Tuple[str, Dict[str, str]]:
+def fetch_installed_versions(args: argparse.Namespace, env: dict[str, str]) -> tuple[str, dict[str, str]]:
     superuser = env.get("POSTGRES_SUPERUSER", "postgres")
     database = env.get("POSTGRES_DB", "postgres")
 
@@ -174,7 +133,7 @@ def fetch_installed_versions(
         "SELECT extname, extversion FROM pg_extension;",
     ]
     output = run_command(ext_cmd)
-    installed: Dict[str, str] = {}
+    installed: dict[str, str] = {}
     reader = csv.reader(output.splitlines())
     for row in reader:
         if len(row) != 2:
@@ -183,7 +142,7 @@ def fetch_installed_versions(
     return server_version, installed
 
 
-def normalize_version(tag: str, pattern: Optional[str] = None) -> Optional[str]:
+def normalize_version(tag: str, pattern: str | None = None) -> str | None:
     if not tag:
         return None
     if pattern:
@@ -201,7 +160,7 @@ def normalize_version(tag: str, pattern: Optional[str] = None) -> Optional[str]:
     return tag or None
 
 
-def compare_versions(installed: Optional[str], latest: Optional[str]) -> str:
+def compare_versions(installed: str | None, latest: str | None) -> str:
     if not installed:
         return "not_installed"
     if not latest:
@@ -213,7 +172,7 @@ def compare_versions(installed: Optional[str], latest: Optional[str]) -> str:
     except Exception:
         pass
 
-    def split(ver: str) -> List[int]:
+    def split(ver: str) -> list[int]:
         return [int(part) for part in re.findall(r"\d+", ver)]
 
     try:
@@ -224,7 +183,7 @@ def compare_versions(installed: Optional[str], latest: Optional[str]) -> str:
     return "current"
 
 
-def fetch_github_latest(repo: str) -> Optional[str]:
+def fetch_github_latest(repo: str) -> str | None:
     url = f"https://api.github.com/repos/{repo}/releases/latest"
     headers = {"User-Agent": "core-data-version-check"}
     if GITHUB_TOKEN:
@@ -241,7 +200,7 @@ def fetch_github_latest(repo: str) -> Optional[str]:
     return tag
 
 
-def resolve_latest(component: str, cache: Dict[str, Optional[str]]) -> Optional[str]:
+def resolve_latest(component: str, cache: dict[str, str | None]) -> str | None:
     if component in cache:
         return cache[component]
     cfg = CONFIG.get(component)
@@ -267,13 +226,11 @@ def main() -> int:
 
     server_version, installed = fetch_installed_versions(args, env)
 
-    cache: Dict[str, Optional[str]] = {"postgresql": normalize_version(server_version)}
-    rows: List[Dict[str, str]] = []
+    cache: dict[str, str | None] = {"postgresql": normalize_version(server_version)}
+    rows: list[dict[str, str]] = []
 
     for name, cfg in CONFIG.items():
-        installed_version = (
-            server_version if cfg.kind == "server" else installed.get(name)
-        )
+        installed_version = server_version if cfg.kind == "server" else installed.get(name)
         if cfg.kind == "core":
             latest_version = server_version
         else:

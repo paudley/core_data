@@ -10,11 +10,11 @@ LIB_EXT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "${LIB_EXT_DIR}/common.sh"
 
 exercise_extensions() {
-  ensure_env
-  local database=${1:-${POSTGRES_DB:-postgres}}
-  echo "[extensions] Running smoke queries against ${database}" >&2
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
+	ensure_env
+	local database=${1:-${POSTGRES_DB:-postgres}}
+	echo "[extensions] Running smoke queries against ${database}" >&2
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 -- pgvector smoke
 CREATE TEMP TABLE IF NOT EXISTS core_data_vector_demo(id serial primary key, embedding vector(3));
 INSERT INTO core_data_vector_demo(embedding) VALUES ('[1,2,3]'),('[2,2,2]');
@@ -115,11 +115,11 @@ SQL
 }
 
 run_pgtap_smoke() {
-  ensure_env
-  local database=${1:-${POSTGRES_DB:-postgres}}
-  echo "[pgtap] running smoke plan in ${database}" >&2
-  compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-    psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
+	ensure_env
+	local database=${1:-${POSTGRES_DB:-postgres}}
+	echo "[pgtap] running smoke plan in ${database}" >&2
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
 SELECT plan(29);
