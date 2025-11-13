@@ -201,6 +201,7 @@ If you override the named volumes with host bind mounts, keep those directories 
 | `backup [--verify]` / `stanza-create` / `restore-snapshot` | Manage pgBackRest backups & optionally restore the latest backup into a throwaway data dir for checksum verification. |
 | `daily-maintenance` | Run dumps, log capture, pgBadger analysis, and retention pruning. |
 | `provision-qa` | Differential backup + targeted restore for QA databases. |
+| `config-render` | Re-render `postgresql.conf` / `pg_hba.conf` from the templates and reload PostgreSQL without touching volumes manually. |
 | `config-check` | Compare live `postgresql.conf` / `pg_hba.conf` against rendered templates to catch drift. |
 | `audit-roles` / `audit-security` | Generate CSV/text reports covering role hygiene, passwords, and HBA/RLS posture. |
 | `audit-extensions` | Confirm bundled extensions are present and on expected versions. |

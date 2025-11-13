@@ -106,3 +106,16 @@ ensure_env() {
     exit 1
   fi
 }
+
+ensure_postgres_running() {
+  if ! compose_has_service "${POSTGRES_SERVICE_NAME}"; then
+    echo "[core_data] Service '${POSTGRES_SERVICE_NAME}' not defined in docker-compose.yml." >&2
+    exit 1
+  fi
+  local container_id
+  container_id=$(compose ps -q "${POSTGRES_SERVICE_NAME}" 2>/dev/null || true)
+  if [[ -z "${container_id}" ]]; then
+    echo "[core_data] Postgres container is not running. Start it with './scripts/manage.sh up' first." >&2
+    exit 1
+  fi
+}

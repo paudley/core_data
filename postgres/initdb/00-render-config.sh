@@ -9,6 +9,7 @@ SENTINEL="${PGDATA}/.core_data_config_rendered"
 PGBACKREST_CONF_PATH="${PGDATA}/pgbackrest.conf"
 NETWORK_ACCESS_DIR=${NETWORK_ACCESS_DIR:-/opt/core_data/network_access}
 NETWORK_ALLOW_FILE=${NETWORK_ALLOW_FILE:-${NETWORK_ACCESS_DIR}/allow.list}
+FORCE_RENDER_CONFIG=${FORCE_RENDER_CONFIG:-0}
 
 apply_network_allow_entries() {
   local hba_path="${PGDATA}/pg_hba.conf"
@@ -81,12 +82,16 @@ export \
 mkdir -p "${PGDATA}"
 
 if [[ -f "${SENTINEL}" ]]; then
-  echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
-  apply_network_allow_entries
-  if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
-    echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
+  if [[ "${FORCE_RENDER_CONFIG}" != "1" ]]; then
+    echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
+    apply_network_allow_entries
+    if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
+      echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
+    fi
+    exit 0
   fi
-  exit 0
+  echo "[core_data] FORCE_RENDER_CONFIG=1 set; re-rendering templates." >&2
+  rm -f "${SENTINEL}"
 fi
 
 if [[ "${POSTGRES_SSL_ENABLED}" == "on" ]]; then

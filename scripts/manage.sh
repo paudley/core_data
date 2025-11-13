@@ -117,6 +117,21 @@ SELECT cron.schedule_in_database('${job_name}', '15 3 * * *', \$\$SELECT core_da
 SQL
 }
 
+warn_if_config_drift() {
+  if ! compose_has_service "${POSTGRES_SERVICE_NAME}"; then
+    return
+  fi
+  if ! compose_exec bash -lc "[[ -f /var/lib/postgresql/data/.core_data_config_rendered ]]" >/dev/null 2>&1; then
+    return
+  fi
+  if ! config_drift_report >/dev/null 2>&1; then
+    cat <<'WARN' >&2
+[core_data] WARNING: PostgreSQL configs differ from the rendered templates.
+[core_data] Run './scripts/manage.sh config-render' to resync postgresql.conf/pg_hba.conf, then rerun './scripts/manage.sh config-check' to verify.
+WARN
+  fi
+}
+
 usage() {
   cat <<USAGE
 core_data management CLI
@@ -147,6 +162,7 @@ Commands:
   stanza-create               Initialize pgBackRest stanza.
   restore-snapshot [args]     Run pgBackRest restore (pass-through args).
   provision-qa <db>           Provision QA database from latest backup.
+  config-render               Re-render postgresql.conf/pg_hba.conf then reload PostgreSQL.
   config-check                Compare live configs to rendered templates.
   audit-roles [--output PATH] Report on role posture (CSV if output path supplied).
   audit-extensions [--output PATH]
@@ -394,6 +410,7 @@ shift || true
   up)
     ensure_env
     compose up -d
+    warn_if_config_drift
     ;;
   down)
     compose down
@@ -572,6 +589,11 @@ shift || true
     ;;
   provision-qa)
     cmd_provision_qa "$@"
+    ;;
+  config-render)
+    ensure_env
+    ensure_postgres_running
+    compose_exec env FORCE_RENDER_CONFIG=1 /docker-entrypoint-initdb.d/00-render-config.sh
     ;;
   config-check)
     if config_drift_report; then
