@@ -18,6 +18,36 @@ export POSTGRES_HOST=${POSTGRES_HOST:-postgres}
 export POSTGRES_PORT=${POSTGRES_PORT:-5432}
 export PGBOUNCER_AUTH_USER=${PGBOUNCER_AUTH_USER:-pgbouncer_auth}
 
+wait_for_backend() {
+	local attempts=${PGBOUNCER_BACKEND_WAIT_ATTEMPTS:-120}
+	local delay=2
+	local attempt=1
+	while ((attempt <= attempts)); do
+		if command -v pg_isready >/dev/null 2>&1; then
+			if pg_isready -h "${POSTGRES_HOST}" -p "${POSTGRES_PORT}" >/dev/null 2>&1; then
+				return 0
+			fi
+		elif command -v nc >/dev/null 2>&1; then
+			if nc -z "${POSTGRES_HOST}" "${POSTGRES_PORT}" >/dev/null 2>&1; then
+				return 0
+			fi
+		else
+			if bash -c "exec 3<>/dev/tcp/${POSTGRES_HOST}/${POSTGRES_PORT}" >/dev/null 2>&1; then
+				exec 3>&-
+				return 0
+			fi
+		fi
+		echo "[pgbouncer] waiting for PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT} (attempt ${attempt})" >&2
+		sleep "${delay}"
+		if ((attempt % 10 == 0 && delay < 10)); then
+			delay=$((delay + 1))
+		fi
+		attempt=$((attempt + 1))
+	done
+	echo "[pgbouncer] timed out waiting for PostgreSQL at ${POSTGRES_HOST}:${POSTGRES_PORT}" >&2
+	exit 1
+}
+
 NETWORK_ACCESS_DIR=${NETWORK_ACCESS_DIR:-/opt/core_data/network_access}
 NETWORK_ALLOW_FILE=${NETWORK_ALLOW_FILE:-${NETWORK_ACCESS_DIR}/allow.list}
 
@@ -52,6 +82,8 @@ fi
 
 mkdir -p "${log_dir}" "${run_dir}" "$(dirname "${config_path}")" "$(dirname "${userlist_path}")" "$(dirname "${hba_path}")"
 umask 077
+
+wait_for_backend
 
 auth_hba_config=""
 if [[ -r "${NETWORK_ALLOW_FILE}" ]]; then

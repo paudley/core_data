@@ -50,10 +50,22 @@ RUNNING=true
 trap 'RUNNING=false' TERM INT
 
 wait_for_postgres() {
-	until "${PG_ENV[@]}" pg_isready -q; do
-		log "waiting for postgres at ${POSTGRES_HOST}:${POSTGRES_PORT}"
-		sleep 5
+	local attempts=${LOGICAL_BACKUP_WAIT_ATTEMPTS:-120}
+	local delay=2
+	local attempt=1
+	while ((attempt <= attempts)); do
+		if "${PG_ENV[@]}" pg_isready -q >/dev/null 2>&1 && "${PG_ENV[@]}" psql -Atqc "SELECT 1;" >/dev/null 2>&1; then
+			return 0
+		fi
+		log "waiting for postgres at ${POSTGRES_HOST}:${POSTGRES_PORT} (attempt ${attempt})"
+		sleep "${delay}"
+		if ((attempt % 10 == 0 && delay < 10)); then
+			delay=$((delay + 1))
+		fi
+		attempt=$((attempt + 1))
 	done
+	log "postgres never became ready; giving up"
+	return 1
 }
 
 perform_backup() {
@@ -87,7 +99,9 @@ perform_backup() {
 }
 
 main_loop() {
-	wait_for_postgres
+	if ! wait_for_postgres; then
+		exit 1
+	fi
 	while ${RUNNING}; do
 		local cycle_start
 		cycle_start=$(date +%s)
@@ -107,7 +121,9 @@ main_loop() {
 		log "sleeping ${sleep_seconds}s before next backup"
 		sleep "${sleep_seconds}" &
 		wait $! || true
-		wait_for_postgres
+		if ! wait_for_postgres; then
+			exit 1
+		fi
 	done
 }
 

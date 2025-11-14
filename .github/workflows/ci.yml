@@ -47,6 +47,17 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Preflight stack bring-up
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ./scripts/manage.sh build-image
+          ./scripts/manage.sh up
+
       - name: Run core_data smoke workflow
         run: uv run python -m pytest -k full_workflow
 
@@ -55,6 +66,17 @@ jobs:
         run: |
           docker ps -a
           docker compose logs || true
+
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-smoke-${{ matrix.profile_name }}
+          path: diagnostics-smoke-${{ matrix.profile_name }}
 
       - name: Upload generated backups
         if: always()
@@ -102,6 +124,17 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Preflight stack bring-up
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ./scripts/manage.sh build-image
+          ./scripts/manage.sh up
+
       - name: Run marker tests
         run: uv run python -m pytest -m ${{ matrix.marker }}
 
@@ -111,6 +144,16 @@ jobs:
           docker ps -a
           docker compose logs || true
 
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-marker-${{ matrix.marker }}
+          path: diagnostics-marker-${{ matrix.marker }}
   docker-build:
     name: Validate Docker Build
     runs-on: ubuntu-latest
@@ -128,9 +171,51 @@ jobs:
           file: ./postgres/Dockerfile
           platforms: linux/amd64
           push: false
+          load: true
           tags: core-data-postgres:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Smoke-test Docker image
+        env:
+          PGPASSWORD: thinice-test
+        run: |
+          set -euo pipefail
+          cleanup() { docker rm -f postgres-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          docker run -d --name postgres-smoke \
+            -e POSTGRES_USER=thinice-test \
+            -e POSTGRES_PASSWORD=thinice-test \
+            -e POSTGRES_DB=thinice-test \
+            -e CORE_DATA_SKIP_CONFIG_RENDER=1 \
+            core-data-postgres:test
+          tries=0
+          max_tries=150
+          until docker exec postgres-smoke pg_isready -h localhost -U thinice-test >/dev/null 2>&1; do
+            tries=$((tries + 1))
+            if ((tries >= max_tries)); then
+              echo "[smoke] postgres-smoke never became ready; printing logs."
+              docker logs postgres-smoke || true
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec postgres-smoke psql -U thinice-test -d thinice-test -c "SELECT 1" >/dev/null
+
+      - name: Stop Docker smoke container
+        if: always()
+        run: docker rm -f postgres-smoke >/dev/null 2>&1 || true
+
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-docker-build
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-docker-build
+          path: diagnostics-docker-build
 
       - name: Validate Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.1.0
