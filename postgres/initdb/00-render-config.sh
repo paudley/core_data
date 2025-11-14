@@ -81,17 +81,19 @@ export \
 
 mkdir -p "${PGDATA}"
 
+first_render=1
 if [[ -f "${SENTINEL}" ]]; then
-	if [[ "${FORCE_RENDER_CONFIG}" != "1" ]]; then
-		echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
-		apply_network_allow_entries
-		if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
-			echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
-		fi
-		exit 0
-	fi
-	echo "[core_data] FORCE_RENDER_CONFIG=1 set; re-rendering templates." >&2
-	rm -f "${SENTINEL}"
+    first_render=0
+    if [[ "${FORCE_RENDER_CONFIG}" != "1" ]]; then
+        echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
+        apply_network_allow_entries
+        if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
+            echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
+        fi
+        exit 0
+    fi
+    echo "[core_data] FORCE_RENDER_CONFIG=1 set; re-rendering templates." >&2
+    rm -f "${SENTINEL}"
 fi
 
 if [[ "${POSTGRES_SSL_ENABLED}" == "on" ]]; then
@@ -161,8 +163,16 @@ CONF
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
 
-pg_ctl -D "${PGDATA}" -m fast -w restart >/dev/null 2>&1 || {
-	echo "[core_data] WARNING: pg_ctl restart failed during initialization." >&2
-}
+if pg_ctl -D "${PGDATA}" status >/dev/null 2>&1; then
+	if [[ "${first_render}" -eq 1 ]]; then
+		if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
+			echo "[core_data] WARNING: pg_ctl reload failed during initial configuration." >&2
+		fi
+	else
+		if ! pg_ctl -D "${PGDATA}" -m fast -w restart >/dev/null 2>&1; then
+			echo "[core_data] WARNING: pg_ctl restart failed during configuration refresh." >&2
+		fi
+	fi
+fi
 
 touch "${SENTINEL}"

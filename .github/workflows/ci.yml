@@ -132,6 +132,22 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Smoke-test Docker image
+        env:
+          PGPASSWORD: thinice-test
+        run: |
+          docker run -d --name postgres-smoke \
+            -e POSTGRES_USER=thinice-test \
+            -e POSTGRES_PASSWORD=thinice-test \
+            -e POSTGRES_DB=thinice-test \
+            core-data-postgres:test
+          timeout 120 bash -c 'until docker exec postgres-smoke pg_isready -h localhost -U thinice-test >/dev/null 2>&1; do sleep 2; done'
+          docker exec postgres-smoke psql -U thinice-test -d thinice-test -c "SELECT 1" >/dev/null
+
+      - name: Stop Docker smoke container
+        if: always()
+        run: docker rm -f postgres-smoke
+
       - name: Validate Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.1.0
         with:
