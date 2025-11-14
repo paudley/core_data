@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+if [[ "${CORE_DATA_SKIP_CONFIG_RENDER:-0}" == "1" ]]; then
+	exit 0
+fi
+
 TEMPLATE_DIR="/opt/core_data/conf"
 SENTINEL="${PGDATA}/.core_data_config_rendered"
 PGBACKREST_CONF_PATH="${PGDATA}/pgbackrest.conf"

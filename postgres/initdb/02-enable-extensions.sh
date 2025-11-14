@@ -4,6 +4,10 @@
 
 set -euo pipefail
 
+if [[ "${CORE_DATA_SKIP_CONFIG_RENDER:-0}" == "1" ]]; then
+	exit 0
+fi
+
 BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-${PGDATA}/.core_data_bootstrap_complete}
 
 if [[ -z "${POSTGRES_PASSWORD:-}" && -n "${POSTGRES_PASSWORD_FILE:-}" && -r "${POSTGRES_PASSWORD_FILE}" ]]; then

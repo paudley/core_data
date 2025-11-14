@@ -187,6 +187,7 @@ jobs:
             -e POSTGRES_USER=thinice-test \
             -e POSTGRES_PASSWORD=thinice-test \
             -e POSTGRES_DB=thinice-test \
+            -e CORE_DATA_SKIP_CONFIG_RENDER=1 \
             core-data-postgres:test
           tries=0
           max_tries=150
