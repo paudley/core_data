@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+* Default timezone now falls back to UTC when `TZ` is unset, preventing PostgreSQL from rendering `timezone = ''` and failing to start. (#31)
+
 ## [17.2-v1.0.0] - TBD
 
 ### Added
