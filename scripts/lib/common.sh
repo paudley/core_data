@@ -13,6 +13,8 @@ ENV_FILE=${ENV_FILE:-${ROOT_DIR}/.env}
 PGBACKREST_CONF=${PGBACKREST_CONF:-/var/lib/postgresql/data/pgbackrest.conf}
 POSTGRES_HOST=${POSTGRES_HOST:-localhost}
 POSTGRES_EXEC_USER=${POSTGRES_EXEC_USER:-postgres}
+CORE_DATA_BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-/var/lib/postgresql/data/.core_data_bootstrap_complete}
+CORE_DATA_HEALTH_GUARD_SERVICES=${CORE_DATA_HEALTH_GUARD_SERVICES:-"postgres pgbouncer pghero"}
 
 if [[ -f "${ENV_FILE}" ]]; then
 	set -a
@@ -69,6 +71,116 @@ compose_exec_service() {
 compose_has_service() {
 	local service=$1
 	compose config --services 2>/dev/null | grep -Fxq "${service}"
+}
+
+wait_for_service_healthy() {
+	local service=$1
+	local timeout=${2:-180}
+	local poll_interval=${3:-2}
+	local stable_window=${4:-5}
+	if ! compose_has_service "${service}"; then
+		echo "[core_data] Service '${service}' not defined; skipping health wait." >&2
+		return 0
+	fi
+	local elapsed=0
+	local announced=false
+	local healthy_started=-1
+	while ((elapsed <= timeout)); do
+		local container_id
+		container_id=$(compose ps -q "${service}" 2>/dev/null | head -n 1 || true)
+		if [[ -z "${container_id}" ]]; then
+			if [[ "${announced}" == false ]]; then
+				echo "[core_data] Waiting for container '${service}' to start..." >&2
+				announced=true
+			fi
+		else
+			local status
+			status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "${container_id}" 2>/dev/null || echo "missing")
+			case "${status}" in
+			healthy)
+				if ((healthy_started < 0)); then
+					healthy_started=${elapsed}
+				elif (((elapsed - healthy_started) >= stable_window)); then
+					if [[ "${announced}" == true ]]; then
+						echo "[core_data] Service '${service}' is healthy." >&2
+					fi
+					return 0
+				fi
+				;;
+			missing)
+				echo "[core_data] Service '${service}' has no healthcheck; skipping health wait." >&2
+				return 0
+				;;
+			unhealthy)
+				echo "[core_data] Service '${service}' reported unhealthy status; continuing to wait (${elapsed}s elapsed)." >&2
+				announced=true
+				healthy_started=-1
+				;;
+			starting)
+				if [[ "${announced}" == false ]]; then
+					echo "[core_data] Waiting for service '${service}' healthcheck..." >&2
+					announced=true
+				fi
+				healthy_started=-1
+				;;
+			*)
+				echo "[core_data] Service '${service}' health status '${status}'; continuing to wait (${elapsed}s elapsed)." >&2
+				announced=true
+				healthy_started=-1
+				;;
+			esac
+		fi
+		sleep "${poll_interval}"
+		elapsed=$((elapsed + poll_interval))
+	done
+	echo "[core_data] Service '${service}' did not become healthy within ${timeout}s." >&2
+	return 1
+}
+
+ensure_bootstrap_complete() {
+	local sentinel=${CORE_DATA_BOOTSTRAP_SENTINEL}
+	if compose_exec bash -lc "[[ -f '${sentinel}' ]]" >/dev/null 2>&1; then
+		return 0
+	fi
+	echo "[core_data] WARNING: bootstrap sentinel '${sentinel}' missing inside container; verifying cluster state." >&2
+	if compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --host localhost --username "${POSTGRES_SUPERUSER:-postgres}" \
+		--dbname "${POSTGRES_DB:-postgres}" --tuples-only --command "SELECT 1;" >/dev/null 2>&1; then
+		if compose_exec bash -lc "touch '${sentinel}'" >/dev/null 2>&1; then
+			echo "[core_data] Re-created bootstrap sentinel for existing data directory." >&2
+			return 0
+		fi
+	fi
+	echo "[core_data] PostgreSQL initialization appears incomplete; check container logs and rerun './scripts/manage.sh up'." >&2
+	return 1
+}
+
+stabilize_postgres() {
+	local required_stable=${POSTGRES_STABLE_WINDOW_SECONDS:-15}
+	local max_window=${POSTGRES_STABILIZATION_TIMEOUT:-120}
+	local db=${POSTGRES_DB:-postgres}
+	local superuser=${POSTGRES_SUPERUSER:-postgres}
+	local elapsed=0
+	local consecutive=0
+	while ((elapsed < max_window)); do
+		if ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" pg_isready -h localhost -U "${superuser}" >/dev/null 2>&1; then
+			echo "[core_data] PostgreSQL failed readiness check during stabilization window." >&2
+			consecutive=0
+		elif ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --host localhost --username "${superuser}" --dbname "${db}" --command "SELECT 1;" >/dev/null 2>&1; then
+			echo "[core_data] PostgreSQL query probe failed while waiting for stability." >&2
+			consecutive=0
+		else
+			consecutive=$((consecutive + 1))
+			if ((consecutive >= required_stable)); then
+				return 0
+			fi
+		fi
+		sleep 1
+		elapsed=$((elapsed + 1))
+	done
+	echo "[core_data] PostgreSQL did not remain stable for ${required_stable}s within ${max_window}s." >&2
+	return 1
 }
 
 # compose runs docker compose with the arguments provided.

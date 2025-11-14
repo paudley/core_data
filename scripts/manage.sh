@@ -432,6 +432,33 @@ build-image)
 up)
 	ensure_env
 	compose up -d
+	if ! wait_for_service_healthy "${POSTGRES_SERVICE_NAME:-postgres}" "${POSTGRES_HEALTH_TIMEOUT:-180}" 2; then
+		echo "[core_data] PostgreSQL service failed to become healthy." >&2
+		exit 1
+	fi
+	if ! ensure_bootstrap_complete; then
+		echo "[core_data] PostgreSQL bootstrap did not finish successfully." >&2
+		exit 1
+	fi
+	if ! stabilize_postgres; then
+		echo "[core_data] PostgreSQL restarted or became unhealthy during the stabilization window." >&2
+		exit 1
+	fi
+	if [[ -n "${CORE_DATA_HEALTH_GUARD_SERVICES:-}" ]]; then
+		IFS=' ' read -r -a guard_services <<<"${CORE_DATA_HEALTH_GUARD_SERVICES}"
+		for svc in "${guard_services[@]}"; do
+			[[ -z "${svc}" ]] && continue
+			if [[ "${svc}" == "${POSTGRES_SERVICE_NAME:-postgres}" ]]; then
+				continue
+			fi
+			if compose_has_service "${svc}"; then
+				if ! wait_for_service_healthy "${svc}" "${SERVICE_HEALTH_TIMEOUT:-120}" 2; then
+					echo "[core_data] Service '${svc}' failed to become healthy." >&2
+					exit 1
+				fi
+			fi
+		done
+	fi
 	warn_if_config_drift
 	;;
 down)

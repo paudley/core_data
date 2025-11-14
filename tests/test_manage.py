@@ -386,51 +386,60 @@ def manage_env(tmp_path_factory):
             f"service {service} should define a seccomp security option"
         )
 
+    keep_stack = os.environ.get("CORE_DATA_TEST_KEEP_STACK") == "1"
+
     try:
         yield env, project_name
     finally:
-        subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
-        subprocess.run(
-            ["docker", "pull", "busybox"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        if backups_target.exists():
+        if keep_stack:
+            print(
+                f"[core_data tests] CORE_DATA_TEST_KEEP_STACK=1; "
+                f"leaving project '{project_name}' running for debugging. "
+                f"ENV_FILE={env_file}"
+            )
+        else:
+            subprocess.run(["docker", "compose", "down", "-v"], cwd=ROOT, env=env, check=False)
             subprocess.run(
-                [
-                    "docker",
-                    "run",
-                    "--rm",
-                    "-v",
-                    f"{backups_target.resolve()}:/target",
-                    "busybox",
-                    "sh",
-                    "-c",
-                    "rm -rf /target/* /target/.[!.]* /target/..?*",
-                ],
+                ["docker", "pull", "busybox"],
                 check=False,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-        for path, existed, backup in managed_secrets:
-            if existed and backup is not None:
-                path.write_bytes(backup)
+            if backups_target.exists():
+                subprocess.run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "-v",
+                        f"{backups_target.resolve()}:/target",
+                        "busybox",
+                        "sh",
+                        "-c",
+                        "rm -rf /target/* /target/.[!.]* /target/..?*",
+                    ],
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            for path, existed, backup in managed_secrets:
+                if existed and backup is not None:
+                    path.write_bytes(backup)
+                else:
+                    path.unlink(missing_ok=True)
+            env_file.unlink(missing_ok=True)
+            if had_env and backup_env_bytes is not None:
+                repo_env_path.write_bytes(backup_env_bytes)
             else:
-                path.unlink(missing_ok=True)
-        env_file.unlink(missing_ok=True)
-        if had_env and backup_env_bytes is not None:
-            repo_env_path.write_bytes(backup_env_bytes)
-        else:
-            repo_env_path.unlink(missing_ok=True)
+                repo_env_path.unlink(missing_ok=True)
 
-    for data_path, backup_entry in managed_data_dirs:
-        rel = data_path.relative_to(data_root)
-        if data_path.exists():
-            busybox_volume_command(f"rm -rf /data/{rel}")
-        if backup_entry is not None:
-            backup_rel = backup_entry.relative_to(data_root)
-            busybox_volume_command(f"mv /data/{backup_rel} /data/{rel}")
+            for data_path, backup_entry in managed_data_dirs:
+                rel = data_path.relative_to(data_root)
+                if data_path.exists():
+                    busybox_volume_command(f"rm -rf /data/{rel}")
+                if backup_entry is not None:
+                    backup_rel = backup_entry.relative_to(data_root)
+                    busybox_volume_command(f"mv /data/{backup_rel} /data/{rel}")
 
 
 def run_manage(env, *args, check=True):
@@ -1356,6 +1365,25 @@ def test_pgbouncer_concurrency(manage_env):
             results = list(executor.map(worker, range(16)))
 
         assert len(set(results)) == 16
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.pool
+def test_database_recreation_cycles(manage_env):
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        run_manage(env, "create-user", "ci_user", "ci_password")
+        for cycle in range(3):
+            db_name = f"ci_regression_{cycle}"
+            run_manage(env, "create-db", db_name, "ci_user")
+            run_manage(env, "psql", "-d", db_name, "-c", "SELECT current_database();")
+            run_manage(env, "drop-db", db_name)
+            wait_for_ready(env)
     finally:
         run_manage(env, "down")
         compose_down(env, volumes=True)

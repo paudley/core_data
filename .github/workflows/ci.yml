@@ -47,6 +47,14 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Preflight stack bring-up
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ./scripts/manage.sh build-image
+          ./scripts/manage.sh up
+
       - name: Run core_data smoke workflow
         run: uv run python -m pytest -k full_workflow
 
@@ -55,6 +63,17 @@ jobs:
         run: |
           docker ps -a
           docker compose logs || true
+
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-smoke-${{ matrix.profile_name }}
+          path: diagnostics-smoke-${{ matrix.profile_name }}
 
       - name: Upload generated backups
         if: always()
@@ -102,6 +121,14 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
+      - name: Preflight stack bring-up
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          ./scripts/manage.sh build-image
+          ./scripts/manage.sh up
+
       - name: Run marker tests
         run: uv run python -m pytest -m ${{ matrix.marker }}
 
@@ -111,6 +138,16 @@ jobs:
           docker ps -a
           docker compose logs || true
 
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-marker-${{ matrix.marker }}
+          path: diagnostics-marker-${{ matrix.marker }}
   docker-build:
     name: Validate Docker Build
     runs-on: ubuntu-latest
@@ -148,6 +185,17 @@ jobs:
       - name: Stop Docker smoke container
         if: always()
         run: docker rm -f postgres-smoke
+
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-docker-build
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-docker-build
+          path: diagnostics-docker-build
 
       - name: Validate Dockerfile with hadolint
         uses: hadolint/hadolint-action@v3.1.0
