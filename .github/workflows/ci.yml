@@ -47,8 +47,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Prepare environment file
-        run: cp .env.example .env
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
 
       - name: Preflight stack bring-up
         run: |
@@ -124,8 +124,8 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Prepare environment file
-        run: cp .env.example .env
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
 
       - name: Preflight stack bring-up
         run: |
