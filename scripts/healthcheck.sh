@@ -10,7 +10,19 @@ log() {
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-PGUSER=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
+determine_pguser() {
+	if [[ -n "${POSTGRES_SUPERUSER:-}" ]]; then
+		printf '%s' "${POSTGRES_SUPERUSER}"
+		return
+	fi
+	if [[ -n "${POSTGRES_USER:-}" ]]; then
+		printf '%s' "${POSTGRES_USER}"
+		return
+	fi
+	printf 'postgres'
+}
+
+PGUSER=$(determine_pguser)
 PGDATABASE=${POSTGRES_DB:-postgres}
 PGHOST=${POSTGRES_HEALTHCHECK_HOST:-${PGHOST:-/var/run/postgresql}}
 PGPORT=${POSTGRES_PORT:-5432}

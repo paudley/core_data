@@ -309,7 +309,14 @@ cmd_service_urls() {
 	load_secret_from_file RABBITMQ_DEFAULT_PASS
 
 	local db_name=${POSTGRES_DB:-postgres}
-	local db_user=${POSTGRES_SUPERUSER:-${POSTGRES_USER:-postgres}}
+	local db_user
+	if [[ -n "${POSTGRES_SUPERUSER:-}" ]]; then
+		db_user=${POSTGRES_SUPERUSER}
+	elif [[ -n "${POSTGRES_USER:-}" ]]; then
+		db_user=${POSTGRES_USER}
+	else
+		db_user=postgres
+	fi
 	local db_port=${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}
 	local db_password=${POSTGRES_SUPERUSER_PASSWORD:-}
 
