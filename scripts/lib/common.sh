@@ -15,6 +15,15 @@ POSTGRES_HOST=${POSTGRES_HOST:-localhost}
 POSTGRES_EXEC_USER=${POSTGRES_EXEC_USER:-postgres}
 CORE_DATA_BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-/var/lib/postgresql/data/.core_data_bootstrap_complete}
 CORE_DATA_HEALTH_GUARD_SERVICES=${CORE_DATA_HEALTH_GUARD_SERVICES:-"postgres pgbouncer pghero"}
+case "${CORE_DATA_SELECTED_COMMAND:-}" in
+ci-up | ci-down | ci-verify | bootstrap-ci)
+	default_require_env=0
+	;;
+*)
+	default_require_env=1
+	;;
+esac
+CORE_DATA_REQUIRE_ENV_FILE=${CORE_DATA_REQUIRE_ENV_FILE:-${default_require_env}}
 
 if [[ -f "${ENV_FILE}" ]]; then
 	set -a
@@ -22,8 +31,17 @@ if [[ -f "${ENV_FILE}" ]]; then
 	source "${ENV_FILE}"
 	set +a
 else
-	echo "[core_data] WARNING: ${ENV_FILE} not found; using defaults where possible." >&2
+	if [[ "${CORE_DATA_REQUIRE_ENV_FILE}" == "1" ]]; then
+		echo "[core_data] WARNING: ${ENV_FILE} not found; using defaults where possible." >&2
+	fi
 fi
+
+POSTGRES_SUPERUSER_PASSWORD_FILE=${POSTGRES_SUPERUSER_PASSWORD_FILE:-${ROOT_DIR}/secrets/postgres_superuser_password}
+VALKEY_PASSWORD_FILE=${VALKEY_PASSWORD_FILE:-${ROOT_DIR}/secrets/valkey_password}
+PGBOUNCER_AUTH_PASSWORD_FILE=${PGBOUNCER_AUTH_PASSWORD_FILE:-${ROOT_DIR}/secrets/pgbouncer_auth_password}
+PGBOUNCER_STATS_PASSWORD_FILE=${PGBOUNCER_STATS_PASSWORD_FILE:-${ROOT_DIR}/secrets/pgbouncer_stats_password}
+RABBITMQ_DEFAULT_PASS_FILE=${RABBITMQ_DEFAULT_PASS_FILE:-${ROOT_DIR}/secrets/rabbitmq_default_pass}
+RABBITMQ_ERLANG_COOKIE_FILE=${RABBITMQ_ERLANG_COOKIE_FILE:-${ROOT_DIR}/secrets/rabbitmq_erlang_cookie}
 
 HOST_UID=$(id -u)
 HOST_GID=$(id -g)
@@ -179,8 +197,33 @@ stabilize_postgres() {
 		sleep 1
 		elapsed=$((elapsed + 1))
 	done
-	echo "[core_data] PostgreSQL did not remain stable for ${required_stable}s within ${max_window}s." >&2
+echo "[core_data] PostgreSQL did not remain stable for ${required_stable}s within ${max_window}s." >&2
 	return 1
+}
+
+build_postgres_image() {
+	local uid=${POSTGRES_UID:-${HOST_UID}}
+	local gid=${POSTGRES_GID:-${HOST_GID}}
+	local runtime_user=${POSTGRES_RUNTIME_USER:-postgres}
+	local runtime_gecos=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL"}
+	local runtime_home=${POSTGRES_RUNTIME_HOME:-/home/${runtime_user}}
+	local image_name=${POSTGRES_IMAGE_NAME:-core_data/postgres}
+	local image_tag=${POSTGRES_IMAGE_TAG:-latest}
+	local pg_version=${PG_VERSION:-17}
+	local age_version=${AGE_VERSION:-master}
+
+	echo "[core_data] Building PostgreSQL image ${image_name}:${image_tag} (PG ${pg_version}, AGE ${age_version})." >&2
+	docker build \
+		--build-arg CORE_UID="${uid}" \
+		--build-arg CORE_GID="${gid}" \
+		--build-arg CORE_USERNAME="${runtime_user}" \
+		--build-arg CORE_GECOS="${runtime_gecos}" \
+		--build-arg CORE_HOME="${runtime_home}" \
+		--build-arg PG_VERSION="${pg_version}" \
+		--build-arg AGE_VERSION="${age_version}" \
+		-t "${image_name}:${image_tag}" \
+		-f "${ROOT_DIR}/postgres/Dockerfile" \
+		"${ROOT_DIR}"
 }
 
 # compose runs docker compose with the arguments provided.
@@ -214,8 +257,11 @@ ensure_compose() {
 # ensure_env makes sure a populated .env file exists before continuing.
 ensure_env() {
 	if [[ ! -f "${ENV_FILE}" ]]; then
-		echo "[core_data] Missing .env file. Copy .env.example and customize before running commands." >&2
-		exit 1
+		if [[ "${CORE_DATA_REQUIRE_ENV_FILE}" == "1" ]]; then
+			echo "[core_data] Missing .env file. Copy .env.example and customize before running commands." >&2
+			exit 1
+		fi
+		return 0
 	fi
 }
 

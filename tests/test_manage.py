@@ -1717,3 +1717,48 @@ def test_create_env_noninteractive(manage_env, tmp_path):
             pgbouncer_stats_secret,
         ):
             path.unlink(missing_ok=True)
+
+
+def test_ci_verify_dry_run(manage_env):
+    env, _ = manage_env
+    result = run_manage(
+        env,
+        "ci-verify",
+        "--min-disk-mb",
+        "1",
+        "--skip-docker",
+        "--skip-attestation",
+        "--skip-ports",
+    )
+    assert result.returncode == 0
+
+
+def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
+    env, _ = manage_env
+    ci_env = tmp_path / "ci.env"
+    ci_env.write_text(
+        "\n".join(
+            (
+                "POSTGRES_PORT=65432",
+                "COMPOSE_PROFILES=pgbouncer",
+                "POSTGRES_SUPERUSER=postgres",
+            )
+        )
+        + "\n"
+    )
+    output_path = tmp_path / "ci-output.json"
+    result = run_manage(
+        env,
+        "ci-up",
+        "--dry-run",
+        "--skip-attestation",
+        "--skip-bootstrap",
+        "--env-file",
+        str(ci_env),
+        "--output",
+        str(output_path),
+    )
+    assert result.returncode == 0
+    assert output_path.exists()
+    payload = json.loads(output_path.read_text())
+    assert payload["services"]["postgres"]["port"] == 65432

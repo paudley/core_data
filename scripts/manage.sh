@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+CORE_DATA_SELECTED_COMMAND=${1:-help}
+export CORE_DATA_SELECTED_COMMAND
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=scripts/lib/common.sh
 source "${SCRIPT_DIR}/lib/common.sh"
@@ -42,6 +45,10 @@ source "${SCRIPT_DIR}/lib/rabbitmq.sh"
 source "${SCRIPT_DIR}/lib/seccomp.sh"
 # shellcheck source=scripts/lib/test_dataset.sh
 source "${SCRIPT_DIR}/lib/test_dataset.sh"
+# shellcheck source=scripts/lib/bootstrap_ci.sh
+source "${SCRIPT_DIR}/lib/bootstrap_ci.sh"
+# shellcheck source=scripts/lib/ci.sh
+source "${SCRIPT_DIR}/lib/ci.sh"
 
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
@@ -155,6 +162,10 @@ Usage: ${0##*/} <command> [options]
 
 Commands:
   create-env                  Interactive helper to generate a tailored .env file.
+  bootstrap-ci                Prepare secrets/network/data scaffolding for CI.
+  ci-verify                   Run CI preflight checks (docker, ports, attestations).
+  ci-up                       Bring the stack up using env vars only (CI workflow).
+  ci-down                     Tear down CI stack and optionally prune artifacts.
   build-image                 Build the custom PostgreSQL image.
   up                          Start the stack in detached mode.
   down                        Stop the stack (preserving volumes).
@@ -406,28 +417,32 @@ cmd_apparmor_load() {
 
 ensure_compose
 
-COMMAND=${1:-help}
-shift || true
+COMMAND=${CORE_DATA_SELECTED_COMMAND:-help}
 
 case "${COMMAND}" in
 create-env)
 	shift
 	bash "${SCRIPT_DIR}/create_env.sh" "$@"
 	;;
+bootstrap-ci)
+	shift
+	cmd_bootstrap_ci "$@"
+	;;
+ci-verify)
+	shift
+	cmd_ci_verify "$@"
+	;;
+ci-up)
+	shift
+	cmd_ci_up "$@"
+	;;
+ci-down)
+	shift
+	cmd_ci_down "$@"
+	;;
 build-image)
 	ensure_env
-	uid=${POSTGRES_UID:-$(id -u)}
-	gid=${POSTGRES_GID:-$(id -g)}
-	runtime_user=${POSTGRES_RUNTIME_USER:-postgres}
-	runtime_gecos=${POSTGRES_RUNTIME_GECOS:-"Core Data PostgreSQL Administrator"}
-	runtime_home=${POSTGRES_RUNTIME_HOME:-/home/${runtime_user}}
-	compose build \
-		--build-arg CORE_UID="${uid}" \
-		--build-arg CORE_GID="${gid}" \
-		--build-arg CORE_USERNAME="${runtime_user}" \
-		--build-arg CORE_GECOS="${runtime_gecos}" \
-		--build-arg CORE_HOME="${runtime_home}" \
-		postgres
+	build_postgres_image
 	;;
 up)
 	ensure_env

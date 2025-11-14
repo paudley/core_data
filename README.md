@@ -200,6 +200,16 @@ core\_data/
 ```
 If you override the named volumes with host bind mounts, keep those directories out of version control—they contain live cluster state and pgBackRest archives.
 
+## CI Workflow
+
+Use the dedicated CI helpers when you need to spin up the published stack inside automation:
+
+1. `./scripts/manage.sh ci-verify --env-file ci.env.example --require-attestation` confirms Docker is available, checks disk/port prerequisites, and verifies that every referenced image carries a recent attestation.
+2. `./scripts/manage.sh ci-up --env-file ci.env.example --output ./backups/ci-output.json` bootstraps secrets/network allow lists, pulls/warms the prebuilt images, and emits a JSON manifest with connection details for downstream jobs.
+3. `./scripts/manage.sh ci-down --volumes --prune-data --prune-secrets` stops containers and removes ephemeral state when the pipeline finishes.
+
+`ci.env.example` shows the minimal environment required for this workflow, and `docs/examples/ci-workflow.md` includes a ready-to-copy GitHub Actions job that wires everything together.
+
 ## Management CLI
 `./scripts/manage.sh` is the operator entry point. Frequently used commands:
 
