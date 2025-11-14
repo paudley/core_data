@@ -44,6 +44,7 @@ apply_network_allow_entries() {
 	fi
 }
 
+: "${TZ:=UTC}"
 : "${POSTGRES_LISTEN_ADDRESSES:=0.0.0.0}"
 : "${POSTGRES_MAX_CONNECTIONS:=200}"
 : "${PG_SHARED_BUFFERS:=1GB}"
@@ -65,6 +66,7 @@ apply_network_allow_entries() {
 : "${POSTGRES_SSL_SELF_SIGNED_DAYS:=730}"
 
 export \
+	TZ \
 	POSTGRES_LISTEN_ADDRESSES \
 	POSTGRES_MAX_CONNECTIONS \
 	PG_SHARED_BUFFERS \
