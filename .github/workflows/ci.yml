@@ -92,7 +92,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        marker: [security, backup, extensions, pool, lint, config]
+        marker: [security, backup, extensions, pool, lint, config, ci]
     env:
       TEST_COMPOSE_PROFILES: "valkey,pgbouncer,memcached"
     steps:
@@ -128,6 +128,7 @@ jobs:
         run: ./scripts/manage.sh create-env --non-interactive --force
 
       - name: Preflight stack bring-up
+        if: matrix.marker != 'ci'
         run: |
           set -euo pipefail
           cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
