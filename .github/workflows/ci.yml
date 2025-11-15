@@ -11,9 +11,128 @@ on:
   pull_request:
 
 jobs:
+  prepare-env:
+    name: Prepare Environment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Archive env artifacts
+        run: tar -czf env-secrets.tar.gz .env secrets
+
+      - name: Upload env artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: env-secrets
+          path: env-secrets.tar.gz
+
+  docker-build:
+    name: Validate Docker Build
+    runs-on: ubuntu-latest
+    needs: prepare-env
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Download env artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: env-secrets
+          path: env-artifact
+
+      - name: Extract env artifacts
+        run: tar -xzf env-artifact/env-secrets.tar.gz
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./postgres/Dockerfile
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: core-data-postgres:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test Docker image
+        env:
+          PGPASSWORD: thinice-test
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          cleanup() { docker rm -f postgres-smoke >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}"
+          docker run -d --name postgres-smoke \
+            -e POSTGRES_USER=thinice-test \
+            -e POSTGRES_PASSWORD=thinice-test \
+            -e POSTGRES_DB=thinice-test \
+            -e CORE_DATA_SKIP_CONFIG_RENDER=1 \
+            "${image}"
+          tries=0
+          max_tries=150
+          until docker exec postgres-smoke pg_isready -h localhost -U thinice-test >/dev/null 2>&1; do
+            tries=$((tries + 1))
+            if ((tries >= max_tries)); then
+              echo "[smoke] postgres-smoke never became ready; printing logs."
+              docker logs postgres-smoke || true
+              exit 1
+            fi
+            sleep 2
+          done
+          docker exec postgres-smoke psql -U thinice-test -d thinice-test -c "SELECT 1" >/dev/null
+
+      - name: Stop Docker smoke container
+        if: always()
+        run: docker rm -f postgres-smoke >/dev/null 2>&1 || true
+
+      - name: Save Postgres image artifact
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          docker save "${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}" -o postgres-image.tar
+
+      - name: Upload Postgres image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image.tar
+
+      - name: Collect diagnostics bundle
+        if: failure()
+        run: ./scripts/collect_diagnostics.sh --output diagnostics-docker-build
+
+      - name: Upload diagnostics bundle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-docker-build
+          path: diagnostics-docker-build
+
+      - name: Validate Dockerfile with hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: postgres/Dockerfile
+          config: .hadolint.yaml
+
   smoke:
     name: Smoke (${{ matrix.profile_name }})
     runs-on: ubuntu-latest
+    needs:
+      - prepare-env
+      - docker-build
     strategy:
       fail-fast: false
       matrix:
@@ -27,6 +146,24 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Download env artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: env-secrets
+          path: env-artifact
+
+      - name: Extract env artifacts
+        run: tar -xzf env-artifact/env-secrets.tar.gz
+
+      - name: Download Postgres image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image
+
+      - name: Load Postgres image artifact
+        run: docker load --input postgres-image/postgres-image.tar
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -47,15 +184,11 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Generate .env and secrets
-        run: ./scripts/manage.sh create-env --non-interactive --force
-
       - name: Preflight stack bring-up
         run: |
           set -euo pipefail
           cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          ./scripts/manage.sh build-image
           ./scripts/manage.sh up
 
       - name: Run core_data smoke workflow
@@ -89,15 +222,38 @@ jobs:
   markers:
     name: Marker (${{ matrix.marker }})
     runs-on: ubuntu-latest
+    needs:
+      - prepare-env
+      - docker-build
     strategy:
       fail-fast: false
       matrix:
-        marker: [security, backup, extensions, pool, lint, config, ci]
+        marker: [security, backup, extensions, pool, pool_heavy, lint, config, ci]
     env:
       TEST_COMPOSE_PROFILES: "valkey,pgbouncer,memcached"
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Download env artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: env-secrets
+          path: env-artifact
+
+      - name: Extract env artifacts
+        run: tar -xzf env-artifact/env-secrets.tar.gz
+
+      - name: Download Postgres image artifact
+        if: matrix.marker != 'ci'
+        uses: actions/download-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image
+
+      - name: Load Postgres image artifact
+        if: matrix.marker != 'ci'
+        run: docker load --input postgres-image/postgres-image.tar
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -124,16 +280,12 @@ jobs:
       - name: Sync dependencies
         run: uv sync --dev
 
-      - name: Generate .env and secrets
-        run: ./scripts/manage.sh create-env --non-interactive --force
-
       - name: Preflight stack bring-up
         if: matrix.marker != 'ci'
         run: |
           set -euo pipefail
           cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          ./scripts/manage.sh build-image
           ./scripts/manage.sh up
 
       - name: Run marker tests
@@ -155,71 +307,3 @@ jobs:
         with:
           name: diagnostics-marker-${{ matrix.marker }}
           path: diagnostics-marker-${{ matrix.marker }}
-  docker-build:
-    name: Validate Docker Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build Docker image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./postgres/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: core-data-postgres:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Smoke-test Docker image
-        env:
-          PGPASSWORD: thinice-test
-        run: |
-          set -euo pipefail
-          cleanup() { docker rm -f postgres-smoke >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          docker run -d --name postgres-smoke \
-            -e POSTGRES_USER=thinice-test \
-            -e POSTGRES_PASSWORD=thinice-test \
-            -e POSTGRES_DB=thinice-test \
-            -e CORE_DATA_SKIP_CONFIG_RENDER=1 \
-            core-data-postgres:test
-          tries=0
-          max_tries=150
-          until docker exec postgres-smoke pg_isready -h localhost -U thinice-test >/dev/null 2>&1; do
-            tries=$((tries + 1))
-            if ((tries >= max_tries)); then
-              echo "[smoke] postgres-smoke never became ready; printing logs."
-              docker logs postgres-smoke || true
-              exit 1
-            fi
-            sleep 2
-          done
-          docker exec postgres-smoke psql -U thinice-test -d thinice-test -c "SELECT 1" >/dev/null
-
-      - name: Stop Docker smoke container
-        if: always()
-        run: docker rm -f postgres-smoke >/dev/null 2>&1 || true
-
-      - name: Collect diagnostics bundle
-        if: failure()
-        run: ./scripts/collect_diagnostics.sh --output diagnostics-docker-build
-
-      - name: Upload diagnostics bundle
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics-docker-build
-          path: diagnostics-docker-build
-
-      - name: Validate Dockerfile with hadolint
-        uses: hadolint/hadolint-action@v3.1.0
-        with:
-          dockerfile: postgres/Dockerfile
-          config: .hadolint.yaml

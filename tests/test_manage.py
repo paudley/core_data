@@ -1372,7 +1372,7 @@ def test_pgbouncer_concurrency(manage_env):
         compose_down(env, volumes=True)
 
 
-@pytest.mark.pool
+@pytest.mark.pool_heavy
 def test_database_recreation_cycles(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
@@ -1391,7 +1391,7 @@ def test_database_recreation_cycles(manage_env):
         compose_down(env, volumes=True)
 
 
-@pytest.mark.pool
+@pytest.mark.pool_heavy
 def test_test_dataset_bootstrap(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
@@ -1721,6 +1721,7 @@ def test_create_env_noninteractive(manage_env, tmp_path):
             path.unlink(missing_ok=True)
 
 
+@pytest.mark.ci
 def test_ci_verify_dry_run(manage_env):
     env, _ = manage_env
     result = run_manage(
@@ -1735,6 +1736,7 @@ def test_ci_verify_dry_run(manage_env):
     assert result.returncode == 0
 
 
+@pytest.mark.ci
 def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
     env, _ = manage_env
     ci_env = tmp_path / "ci.env"
@@ -1763,4 +1765,8 @@ def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
     assert result.returncode == 0
     assert output_path.exists()
     payload = json.loads(output_path.read_text())
-    assert payload["services"]["postgres"]["port"] == 65432
+    assert payload["composeProfiles"] == "pgbouncer"
+    postgres = payload["services"]["postgres"]
+    assert postgres["port"] == 65432
+    assert postgres["host"] == "127.0.0.1"
+    assert postgres["superuser"] == "postgres"
