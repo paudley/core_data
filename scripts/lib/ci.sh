@@ -87,9 +87,24 @@ ci_verify_attestation_for_image() {
 	tmp_json=$(mktemp)
 	tmp_err=$(mktemp)
 	parse_err=$(mktemp)
-	if ! gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"; then
-		local err_msg
+	local err_msg=""
+	local attempt=1
+	while :; do
+		if [[ "${attempt}" -eq 2 ]]; then
+			GH_TOKEN= GITHUB_TOKEN= gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"
+		else
+			gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"
+		fi
+		if [[ $? -eq 0 ]]; then
+			break
+		fi
 		err_msg=$(<"${tmp_err}")
+		if [[ "${attempt}" -eq 1 && -n "${err_msg}" && "${err_msg}" == *"token was denied access"* && ( -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ) ]]; then
+			ci_log "gh token denied access for ${image_ref}; retrying without GH_TOKEN/GITHUB_TOKEN."
+			attempt=$((attempt + 1))
+			: >"${tmp_err}"
+			continue
+		fi
 		rm -f "${tmp_json}" "${tmp_err}" "${parse_err}"
 		if [[ "${enforce}" == "1" ]]; then
 			echo "[ci] attestation verification failed for ${image_ref}" >&2
@@ -100,7 +115,7 @@ ci_verify_attestation_for_image() {
 		fi
 		ci_log "warning: attestation verification failed for ${image_ref}${err_msg:+: ${err_msg}}; continuing because enforcement disabled."
 		return 0
-	fi
+	done
 	rm -f "${tmp_err}"
 	local parsed
 	if ! parsed=$(

@@ -47,6 +47,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
   ./scripts/manage.sh attestation-verify --env-file ci.env.example
   ```
 - Only GHCR images owned by `${CORE_DATA_ATTESTATION_REPO}` are enforced. Third-party dependencies (e.g., `debian:bookworm-slim` for probes) are logged and skipped because GitHub attestations are unavailable for them.
+- If a runner-scoped `GH_TOKEN`/`GITHUB_TOKEN` lacks access to `paudley/core_data`, the helper automatically retries without credentials once it sees “token was denied access,” so public attestation checks still pass.
 - Images are signed keylessly with cosign during publish. Verify using the Actions OIDC issuer:
   ```bash
   cosign verify \
