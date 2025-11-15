@@ -1763,6 +1763,10 @@ if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" ]]; then
   fi
   name="${subject%%@*}"
   name="${name%%:*}"
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    echo "Error: the provided token was denied access to the requested resource, please check the token's expiration and repository access" >&2
+    exit 1
+  fi
   cat <<JSON
 [{"verificationResult":{"statement":{"predicateType":"https://slsa.dev/provenance/v1","subject":[{"name":"${name}","digest":{"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}],"predicate":{"buildDefinition":{"externalParameters":{"workflow":{"path":".github/workflows/publish-docker.yml","ref":"refs/heads/main","repository":"https://github.com/test/repo"}}},"runDetails":{"builder":{"id":"fake-builder"},"metadata":{"invocationId":"https://github.com/test/repo/actions/runs/1"}}}}}}]
 JSON
@@ -1776,6 +1780,8 @@ exit 1
     gh_script.chmod(0o755)
     env_local = env.copy()
     env_local["PATH"] = f"{str(fake_bin)}:{env_local['PATH']}"
+    env_local["GH_TOKEN"] = "fake-token"
+    env_local["GITHUB_TOKEN"] = "fake-token"
     result = run_manage(
         env_local,
         "attestation-verify",
