@@ -11,8 +11,8 @@ on:
   pull_request:
 
 jobs:
-  prepare-env:
-    name: Prepare Environment
+  docker-build:
+    name: Validate Docker Build
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -20,32 +20,6 @@ jobs:
 
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
-
-      - name: Archive env artifacts
-        run: tar -czf env-secrets.tar.gz .env secrets
-
-      - name: Upload env artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: env-secrets
-          path: env-secrets.tar.gz
-
-  docker-build:
-    name: Validate Docker Build
-    runs-on: ubuntu-latest
-    needs: prepare-env
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Download env artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: env-secrets
-          path: env-artifact
-
-      - name: Extract env artifacts
-        run: tar -xzf env-artifact/env-secrets.tar.gz
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -139,7 +113,6 @@ jobs:
     name: Smoke (${{ matrix.profile_name }})
     runs-on: ubuntu-latest
     needs:
-      - prepare-env
       - docker-build
     strategy:
       fail-fast: false
@@ -155,14 +128,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Download env artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: env-secrets
-          path: env-artifact
-
-      - name: Extract env artifacts
-        run: tar -xzf env-artifact/env-secrets.tar.gz
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
 
       - name: Download Postgres image artifact
         uses: actions/download-artifact@v4
@@ -182,9 +149,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          key: ${{ runner.os }}-uv-3.12-${{ hashFiles('pyproject.toml', 'uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-uv-
+            ${{ runner.os }}-uv-3.12-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v2
@@ -231,7 +198,6 @@ jobs:
     name: Marker (${{ matrix.marker }})
     runs-on: ubuntu-latest
     needs:
-      - prepare-env
       - docker-build
     strategy:
       fail-fast: false
@@ -243,14 +209,8 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Download env artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: env-secrets
-          path: env-artifact
-
-      - name: Extract env artifacts
-        run: tar -xzf env-artifact/env-secrets.tar.gz
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
 
       - name: Download Postgres image artifact
         if: matrix.marker != 'ci'
@@ -272,9 +232,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          key: ${{ runner.os }}-uv-3.12-${{ hashFiles('pyproject.toml', 'uv.lock') }}
           restore-keys: |
-            ${{ runner.os }}-uv-
+            ${{ runner.os }}-uv-3.12-
 
       - name: Install uv
         uses: astral-sh/setup-uv@v2
