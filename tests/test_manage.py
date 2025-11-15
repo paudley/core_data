@@ -1301,26 +1301,28 @@ EXTENSIONS_TO_CHECK = [
 
 
 @pytest.mark.extensions
-@pytest.mark.parametrize("extension", EXTENSIONS_TO_CHECK)
-def test_extension_available(manage_env, extension):
+def test_extensions_available(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
     run_manage(env, "up")
     try:
         wait_for_ready(env)
-        result = run_manage(
-            env,
-            "psql",
-            "-d",
-            "postgres",
-            "-t",
-            "-A",
-            "-c",
-            f"SELECT 1 FROM pg_extension WHERE extname='{extension}';",
-            check=False,
-        )
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "1", f"extension {extension} missing"
+        missing = []
+        for extension in EXTENSIONS_TO_CHECK:
+            result = run_manage(
+                env,
+                "psql",
+                "-d",
+                "postgres",
+                "-t",
+                "-A",
+                "-c",
+                f"SELECT 1 FROM pg_extension WHERE extname='{extension}';",
+                check=False,
+            )
+            if result.returncode != 0 or result.stdout.strip() != "1":
+                missing.append(extension)
+        assert not missing, f"extensions missing: {', '.join(missing)}"
     finally:
         run_manage(env, "down")
         compose_down(env, volumes=True)

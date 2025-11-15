@@ -232,5 +232,21 @@ cmd_bootstrap_ci() {
 		bootstrap_ci_render_networks "${network_dir}" "${allow_values[@]}"
 	fi
 
-	echo "[bootstrap-ci] bootstrap complete (secrets=${skip_secrets:-false}, network=${skip_network:-false}, data=${skip_data:-false})." >&2
+	local secrets_status network_status data_status
+	if [[ "${skip_secrets}" == "true" ]]; then
+		secrets_status="skipped"
+	else
+		secrets_status="created"
+	fi
+	if [[ "${skip_network}" == "true" ]]; then
+		network_status="skipped"
+	else
+		network_status="created"
+	fi
+	if [[ "${skip_data}" == "true" ]]; then
+		data_status="skipped"
+	else
+		data_status="created"
+	fi
+	echo "[bootstrap-ci] bootstrap complete (secrets=${secrets_status}, network=${network_status}, data=${data_status})." >&2
 }
