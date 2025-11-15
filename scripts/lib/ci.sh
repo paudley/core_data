@@ -83,8 +83,10 @@ ci_verify_attestation_for_image() {
 	fi
 	local tmp_json
 	local tmp_err
+	local parse_err
 	tmp_json=$(mktemp)
 	tmp_err=$(mktemp)
+	parse_err=$(mktemp)
 	if ! gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"; then
 		local err_msg
 		err_msg=$(<"${tmp_err}")
