@@ -90,7 +90,7 @@ ci_verify_attestation_for_image() {
 	if ! gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"; then
 		local err_msg
 		err_msg=$(<"${tmp_err}")
-		rm -f "${tmp_json}" "${tmp_err}"
+		rm -f "${tmp_json}" "${tmp_err}" "${parse_err}"
 		if [[ "${enforce}" == "1" ]]; then
 			echo "[ci] attestation verification failed for ${image_ref}" >&2
 			if [[ -n "${err_msg}" ]]; then
