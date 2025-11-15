@@ -187,27 +187,27 @@ import os
 import sys
 
 output = sys.argv[1]
-	root_dir = os.environ.get("ROOT_DIR", os.getcwd())
-	data = {
-	    "composeProfiles": os.environ.get("COMPOSE_PROFILES", ""),
-	    "services": {
-	        "postgres": {
-	            "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-	            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
-	            "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
-	            "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password"), start=root_dir),
-	        },
-	        "pgbouncer": {
-	            "host": os.environ.get("PGBOUNCER_HOST", "127.0.0.1"),
-	            "port": int(os.environ.get("PGBOUNCER_HOST_PORT", os.environ.get("PGBOUNCER_PORT", "6432"))),
-	        },
-	        "valkey": {
-	            "host": os.environ.get("VALKEY_HOST", "127.0.0.1"),
-	            "port": int(os.environ.get("VALKEY_HOST_PORT", os.environ.get("VALKEY_PORT", "6379"))),
-	            "passwordFile": os.path.relpath(os.environ.get("VALKEY_PASSWORD_FILE", "secrets/valkey_password"), start=root_dir),
-	        },
-	    },
-	}
+root_dir = os.environ.get("ROOT_DIR", os.getcwd())
+data = {
+    "composeProfiles": os.environ.get("COMPOSE_PROFILES", ""),
+    "services": {
+        "postgres": {
+            "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
+            "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
+            "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password"), start=root_dir),
+        },
+        "pgbouncer": {
+            "host": os.environ.get("PGBOUNCER_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("PGBOUNCER_HOST_PORT", os.environ.get("PGBOUNCER_PORT", "6432"))),
+        },
+        "valkey": {
+            "host": os.environ.get("VALKEY_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("VALKEY_HOST_PORT", os.environ.get("VALKEY_PORT", "6379"))),
+            "passwordFile": os.path.relpath(os.environ.get("VALKEY_PASSWORD_FILE", "secrets/valkey_password"), start=root_dir),
+        },
+    },
+}
 data["services"]["pghero"] = {
     "enabled": os.environ.get("PGHERO_DISABLED", "0") != "1",
     "port": int(os.environ.get("PGHERO_PORT", "8080")),
