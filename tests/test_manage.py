@@ -1739,6 +1739,7 @@ def test_ci_verify_dry_run(manage_env):
 
 
 @pytest.mark.ci
+<<<<<<< HEAD
 def test_attestation_verify_outputs_details(manage_env, tmp_path):
     env, _ = manage_env
     fake_bin = tmp_path / "fake_bin"
@@ -1790,6 +1791,66 @@ exit 1
 
 
 @pytest.mark.ci
+||||||| 6c87ec2
+=======
+def test_attestation_verify_outputs_details(manage_env, tmp_path):
+    env, _ = manage_env
+    fake_bin = tmp_path / "fake_bin"
+    fake_bin.mkdir()
+    gh_script = fake_bin / "gh"
+    gh_script.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" ]]; then
+  subject=""
+  for arg in "$@"; do
+    case "$arg" in
+      oci://*)
+        subject="${arg#oci://}"
+        ;;
+    esac
+  done
+  if [[ -z "${subject}" ]]; then
+    echo "missing subject" >&2
+    exit 1
+  fi
+  name="${subject%%@*}"
+  name="${name%%:*}"
+  if [[ -n "${GH_TOKEN:-}" ]]; then
+    echo "Error: the provided token was denied access to the requested resource, please check the token's expiration and repository access" >&2
+    exit 1
+  fi
+  cat <<JSON
+[{"verificationResult":{"statement":{"predicateType":"https://slsa.dev/provenance/v1","subject":[{"name":"${name}","digest":{"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}],"predicate":{"buildDefinition":{"externalParameters":{"workflow":{"path":".github/workflows/publish-docker.yml","ref":"refs/heads/main","repository":"https://github.com/test/repo"}}},"runDetails":{"builder":{"id":"fake-builder"},"metadata":{"invocationId":"https://github.com/test/repo/actions/runs/1"}}}}}}]
+JSON
+  exit 0
+fi
+
+echo "unsupported gh invocation" >&2
+exit 1
+"""
+    )
+    gh_script.chmod(0o755)
+    env_local = env.copy()
+    env_local["PATH"] = f"{str(fake_bin)}:{env_local['PATH']}"
+    env_local["GH_TOKEN"] = "fake-token"
+    env_local["GITHUB_TOKEN"] = "fake-token"
+    result = run_manage(
+        env_local,
+        "attestation-verify",
+        "--env-file",
+        env_local["ENV_FILE"],
+        "--image",
+        "ghcr.io/paudley/core_data/postgres:ci-test",
+    )
+    assert result.returncode == 0
+    assert "attestation verified for" in result.stderr
+    assert "subject    :" in result.stderr
+
+
+@pytest.mark.ci
+>>>>>>> pretty_attestations
 def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
     env, _ = manage_env
     ci_env = tmp_path / "ci.env"

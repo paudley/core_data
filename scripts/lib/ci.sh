@@ -81,6 +81,7 @@ ci_verify_attestation_for_image() {
 		ci_log "gh CLI missing; skipping attestation check for ${image_ref}"
 		return 0
 	fi
+<<<<<<< HEAD
 	local tmp_json
 	local tmp_err
 	local parse_err="/dev/null"
@@ -99,8 +100,132 @@ ci_verify_attestation_for_image() {
 			return 1
 		fi
 		ci_log "warning: attestation verification failed for ${image_ref}${err_msg:+: ${err_msg}}; continuing because enforcement disabled."
+||||||| 6c87ec2
+	if gh attestation verify --repo "${repo}" --subject "${image_ref}" >/dev/null 2>&1; then
+		ci_log "attestation verified for ${image_ref}"
+=======
+	local tmp_json
+	local tmp_err
+	local parse_err="/dev/null"
+	tmp_json=$(mktemp)
+	tmp_err=$(mktemp)
+	parse_err=$(mktemp)
+	local err_msg=""
+	local attempt=1
+	while :; do
+		if [[ "${attempt}" -eq 2 ]]; then
+			GH_TOKEN= GITHUB_TOKEN= gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"
+		else
+			gh attestation verify "${subject}" --repo "${repo}" --format json >"${tmp_json}" 2>"${tmp_err}"
+		fi
+		if [[ $? -eq 0 ]]; then
+			break
+		fi
+		err_msg=$(<"${tmp_err}")
+		if [[ "${attempt}" -eq 1 && -n "${err_msg}" && "${err_msg}" == *"token was denied access"* && ( -n "${GH_TOKEN:-}" || -n "${GITHUB_TOKEN:-}" ) ]]; then
+			ci_log "gh token denied access for ${image_ref}; retrying without GH_TOKEN/GITHUB_TOKEN."
+			attempt=$((attempt + 1))
+			: >"${tmp_err}"
+			continue
+		fi
+		rm -f "${tmp_json}" "${tmp_err}" "${parse_err}"
+		if [[ "${enforce}" == "1" ]]; then
+			echo "[ci] attestation verification failed for ${image_ref}" >&2
+			if [[ -n "${err_msg}" ]]; then
+				echo "${err_msg}" >&2
+			fi
+			return 1
+		fi
+		ci_log "warning: attestation verification failed for ${image_ref}${err_msg:+: ${err_msg}}; continuing because enforcement disabled."
+		return 0
+	done
+	rm -f "${tmp_err}"
+	local parsed
+	if ! parsed=$(
+		python3 - "${expected_subject}" "${tmp_json}" <<'PY'
+import json
+import sys
+
+if len(sys.argv) != 3:
+    print("internal usage error: expected subject and json path", file=sys.stderr)
+    sys.exit(1)
+
+expected = sys.argv[1]
+json_path = sys.argv[2]
+
+with open(json_path, "r", encoding="utf-8") as fh:
+    payload = json.load(fh)
+
+match_entry = None
+match_subject = None
+for entry in payload:
+    result = entry.get("verificationResult", {})
+    statement = result.get("statement", {})
+    for subject in statement.get("subject") or []:
+        if subject.get("name") == expected:
+            match_entry = entry
+            match_subject = subject
+            break
+    if match_entry is not None:
+        break
+
+if match_entry is None or match_subject is None:
+    print(f"Subject {expected} not present in attestation payload.", file=sys.stderr)
+    sys.exit(1)
+
+statement = match_entry["verificationResult"]["statement"]
+predicate_type = statement.get("predicateType")
+if predicate_type != "https://slsa.dev/provenance/v1":
+    print(f"Unexpected predicate type: {predicate_type}", file=sys.stderr)
+    sys.exit(1)
+
+subject_digest = match_subject.get("digest", {}).get("sha256")
+if not subject_digest:
+    print("Attestation missing subject digest.", file=sys.stderr)
+    sys.exit(1)
+
+predicate = statement.get("predicate", {})
+build_def = predicate.get("buildDefinition", {})
+external = build_def.get("externalParameters", {}) if build_def else {}
+workflow = external.get("workflow", {}) if isinstance(external, dict) else {}
+run_details = predicate.get("runDetails", {})
+builder_id = (run_details.get("builder", {}) or {}).get("id", "")
+invocation = (run_details.get("metadata", {}) or {}).get("invocationId", "")
+
+workflow_repo = workflow.get("repository", "")
+workflow_path = workflow.get("path", "")
+workflow_ref = workflow.get("ref", "")
+
+print(f"subject_name={match_subject.get('name', '')}")
+print(f"subject_digest=sha256:{subject_digest}")
+print(f"predicate_type={predicate_type}")
+if builder_id:
+    print(f"builder_id={builder_id}")
+if invocation:
+    print(f"invocation={invocation}")
+if workflow_repo:
+    print(f"workflow_repo={workflow_repo}")
+if workflow_path:
+    print(f"workflow_path={workflow_path}")
+if workflow_ref:
+    print(f"workflow_ref={workflow_ref}")
+PY
+	) 2>"${parse_err}"; then
+		local py_err_msg
+		py_err_msg=$(<"${parse_err}")
+		rm -f "${tmp_json}" "${parse_err}"
+		if [[ "${enforce}" == "1" ]]; then
+			echo "[ci] attestation verification failed for ${image_ref}" >&2
+			if [[ -n "${py_err_msg}" ]]; then
+				echo "${py_err_msg}" >&2
+			fi
+			return 1
+		fi
+		ci_log "warning: attestation verification failed for ${image_ref}${py_err_msg:+: ${py_err_msg}}; continuing because enforcement disabled."
+>>>>>>> pretty_attestations
 		return 0
 	fi
+<<<<<<< HEAD
 	rm -f "${tmp_err}"
 	local parsed
 	if ! parsed=$(
@@ -251,6 +376,77 @@ PY
 	fi
 	if [[ -n "${invocation}" ]]; then
 		ci_log "  run        : ${invocation}"
+||||||| 6c87ec2
+	if [[ "${enforce}" == "1" ]]; then
+		echo "[ci] attestation verification failed for ${image_ref}" >&2
+		return 1
+=======
+	rm -f "${parse_err}"
+	rm -f "${tmp_json}"
+	local subject_name=""
+	local subject_digest=""
+	local predicate_type=""
+	local builder_id=""
+	local invocation=""
+	local workflow_repo=""
+	local workflow_path=""
+	local workflow_ref=""
+	while IFS= read -r line; do
+		local key=${line%%=*}
+		local value=${line#"${key}="}
+		case "${key}" in
+		subject_name)
+			subject_name=${value}
+			;;
+		subject_digest)
+			subject_digest=${value}
+			;;
+		predicate_type)
+			predicate_type=${value}
+			;;
+		builder_id)
+			builder_id=${value}
+			;;
+		invocation)
+			invocation=${value}
+			;;
+		workflow_repo)
+			workflow_repo=${value}
+			;;
+		workflow_path)
+			workflow_path=${value}
+			;;
+		workflow_ref)
+			workflow_ref=${value}
+			;;
+		esac
+	done <<<"${parsed}"
+	ci_log "attestation verified for ${image_ref}"
+	if [[ -n "${subject_name}" && -n "${subject_digest}" ]]; then
+		ci_log "  subject    : ${subject_name}@${subject_digest}"
+	fi
+	if [[ -n "${predicate_type}" ]]; then
+		ci_log "  predicate  : ${predicate_type}"
+	fi
+	if [[ -n "${builder_id}" ]]; then
+		ci_log "  builder    : ${builder_id}"
+	fi
+	if [[ -n "${workflow_repo}" || -n "${workflow_path}" || -n "${workflow_ref}" ]]; then
+		local workflow_summary="${workflow_repo}"
+		if [[ -n "${workflow_path}" ]]; then
+			if [[ -n "${workflow_summary}" ]]; then
+				workflow_summary+=" "
+			fi
+			workflow_summary+="${workflow_path}"
+		fi
+		if [[ -n "${workflow_ref}" ]]; then
+			workflow_summary+=" (${workflow_ref})"
+		fi
+		ci_log "  workflow   : ${workflow_summary}"
+	fi
+	if [[ -n "${invocation}" ]]; then
+		ci_log "  run        : ${invocation}"
+>>>>>>> pretty_attestations
 	fi
 	return 0
 }

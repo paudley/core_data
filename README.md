@@ -67,6 +67,8 @@ gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
 ./scripts/manage.sh attestation-verify --env-file ci.env.example
 ```
 
+GitHub-hosted runners often inject job-scoped `GITHUB_TOKEN`/`GH_TOKEN` values that cannot read attestations from other repositories; the helper automatically retries anonymously when GitHub reports “token was denied access,” so no extra flags are required.
+
 Expected verification output:
 
 ```

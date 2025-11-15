@@ -42,11 +42,21 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
   ```bash
   gh attestation verify oci://ghcr.io/paudley/core_data/postgres:<tag> --repo paudley/core_data
   ```
+<<<<<<< HEAD
 - To verify every image referenced by your `.env` (with detailed output), run:
   ```bash
   ./scripts/manage.sh attestation-verify --env-file ci.env.example
   ```
 - Only GHCR images owned by `${CORE_DATA_ATTESTATION_REPO}` are enforced. Third-party dependencies (e.g., `debian:bookworm-slim` for probes) are logged and skipped because GitHub attestations are unavailable for them.
+||||||| 6c87ec2
+=======
+- To verify every image referenced by your `.env` (with detailed output), run:
+  ```bash
+  ./scripts/manage.sh attestation-verify --env-file ci.env.example
+  ```
+- Only GHCR images owned by `${CORE_DATA_ATTESTATION_REPO}` are enforced. Third-party dependencies (e.g., `debian:bookworm-slim` for probes) are logged and skipped because GitHub attestations are unavailable for them.
+- If a runner-scoped `GH_TOKEN`/`GITHUB_TOKEN` lacks access to `paudley/core_data`, the helper automatically retries without credentials once it sees “token was denied access,” so public attestation checks still pass.
+>>>>>>> pretty_attestations
 - Images are signed keylessly with cosign during publish. Verify using the Actions OIDC issuer:
   ```bash
   cosign verify \
