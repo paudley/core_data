@@ -118,12 +118,12 @@ bootstrap_ci_parse_allow_values() {
 	if [[ -z "${raw}" ]]; then
 		return
 	fi
-	printf '%s' "${raw}" | tr ',;' '\n' | while IFS= read -r line; do
+	while IFS= read -r line; do
 		local trimmed
 		trimmed=$(echo "${line}" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
 		[[ -z "${trimmed}" ]] && continue
 		out_ref+=("${trimmed}")
-	done
+	done < <(printf '%s' "${raw}" | tr ',;' '\n')
 }
 
 cmd_bootstrap_ci() {
