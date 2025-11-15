@@ -152,8 +152,8 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
    ./scripts/manage.sh psql -c 'SELECT 1;'
    ```
 
-```
-4. Explore the CLI: `./scripts/manage.sh help`
+4. Explore the CLI: `./scripts/manage.sh help` for grouped commands (lifecycle, CI, backups, audits, extensions, cache/messaging, security).
+5. CI runners: see `CI_USAGE.md` for the pipelines-focused flow (attestations, `ci-up`/`ci-down`, pytest markers).
 
 ## Project Ethos
 We optimize for **data infrastructure as code ➜ automated admin ➜ human-friendly ➜ best-practices by default (including security and performance)**. In practice that means:

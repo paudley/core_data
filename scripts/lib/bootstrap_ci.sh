@@ -55,6 +55,7 @@ bootstrap_ci_write_secret() {
 	local force=$3
 	local mode=${4:-base64}
 	local existing_value="${!env_var-}"
+	local source="generated"
 	if [[ -f "${path}" && "${force}" != "true" && -z "${existing_value}" ]]; then
 		echo "[bootstrap-ci] ${path} exists; keeping current value." >&2
 		return
@@ -62,6 +63,7 @@ bootstrap_ci_write_secret() {
 	local value
 	if [[ -n "${existing_value}" ]]; then
 		value=${existing_value}
+		source="env:${env_var}"
 	else
 		if [[ "${mode}" == "alnum" ]]; then
 			value=$(bootstrap_ci_random_alnum 32) || exit 1
@@ -72,7 +74,7 @@ bootstrap_ci_write_secret() {
 	mkdir -p "$(dirname "${path}")"
 	printf '%s\n' "${value}" >"${path}"
 	chmod 0600 "${path}" || true
-	echo "[bootstrap-ci] wrote ${path} (source: ${env_var:-generated})." >&2
+	echo "[bootstrap-ci] wrote ${path} (source: ${source})." >&2
 }
 
 bootstrap_ci_prepare_directories() {

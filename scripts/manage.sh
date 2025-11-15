@@ -160,107 +160,97 @@ core_data management CLI
 
 Usage: ${0##*/} <command> [options]
 
-Commands:
-  create-env                  Interactive helper to generate a tailored .env file.
-  bootstrap-ci                Prepare secrets/network/data scaffolding for CI.
-  ci-verify                   Run CI preflight checks (docker, ports, attestations).
-  ci-up                       Bring the stack up using env vars only (CI workflow).
-  ci-down                     Tear down CI stack and optionally prune artifacts.
-  build-image                 Build the custom PostgreSQL image.
-  up                          Start the stack in detached mode.
-  down                        Stop the stack (preserving volumes).
-  networks-refresh            Rebuild networks.allow auto list (runs network_probe service).
-  networks-show               Print the currently rendered allow list.
-  psql [args]                 Open psql inside the postgres container.
-  create-user <user> <pass>   Create a role with LOGIN privilege.
-  drop-user <user>            Drop a role.
-  create-db <db> <owner>      Create a database owned by the specified user.
-  drop-db <db>                Drop a database.
-  dump <db> [file]            Logical backup using pg_dump (custom format).
-  dump-sql <db> [file]        Plain-text SQL dump for review/editing.
-  pgtune-config [options]     Generate tuned config include via pgtune (see options below).
-  pgbadger-report [options]   Generate a pgbadger log report (HTML by default).
-  daily-maintenance [options] Run the daily maintenance workflow (dump, logs, pgBadger, retention).
-  restore-dump <file> <db>    Restore a logical backup (drops the db first).
-  backup [--type=full|diff|incr]
-                              Invoke pgBackRest backup.
-                              Add --verify to restore and validate the latest backup.
-  stanza-create               Initialize pgBackRest stanza.
-  restore-snapshot [args]     Run pgBackRest restore (pass-through args).
-  provision-qa <db>           Provision QA database from latest backup.
-  config-render               Re-render postgresql.conf/pg_hba.conf then restart PostgreSQL.
-  config-check                Compare live configs to rendered templates.
-  audit-roles [--output PATH] Report on role posture (CSV if output path supplied).
-  audit-extensions [--output PATH]
-                              Report extension versions across databases.
-  audit-autovacuum [options]  List tables with high dead tuples.
-     --output PATH            Write CSV to container path.
-     --dead-threshold N       Dead tuple count threshold (default 100000).
-     --ratio FLOAT            Dead tuple ratio threshold (default 0.2).
-  audit-replication [--output PATH] [--lag-seconds N]
-                              Summarise follower lag (CSV if output path supplied).
-  audit-security [--output PATH]
-                              Run HBA/password/RLS checks (text report if output set).
-  audit-index-bloat [options] Report index density using pgstattuple.
-     --output PATH            Write CSV to container path.
-     --min-size-mb N          Minimum index size in MB (default 10).
-  audit-buffercache [--output PATH] [--limit N]
-                             Snapshot shared buffer usage by relation.
-  audit-schema [--output PATH]
-                              Snapshot information_schema columns.
-  snapshot-pgstat [--output PATH] [--limit N]
-                              Capture pg_stat_statements baseline (CSV with output).
-  audit-cron [--output PATH]   List pg_cron jobs and next run.
-  audit-squeeze [--output PATH]
-                              Dump pg_squeeze activity table.
-  exercise-extensions [--db DB]
-                              Run smoke queries across the core extension bundle.
-  pgtap-smoke [--db DB]       Execute a pgTap plan validating the bundled extensions.
-  test-dataset bootstrap [options]
-                              Provision a synthetic dataset covering spatial, vector,
-                              graph, and routing extensions.
-  async-queue bootstrap [--db DB] [--schema NAME]
-                             Install the lightweight async queue schema/functions.
-  service-urls               Print connection URLs for local services using external host IP.
-  partman-maintenance [--db DB]
-                             Run partman.run_maintenance_proc() in the target database.
-  partman-show-config [--db DB] [--parent schema.table]
-                             Display entries from partman.part_config.
-  partman-create-parent [--db DB] [--type TYPE]
-                             [--start PARTITION] [--premake N]
-                             [--no-default-table] [--automatic on|off|none]
-                             [--no-jobmon] [--time-encoder FUNC]
-                             [--time-decoder FUNC]
-                             Create a new managed parent (args:
-                             schema.table control_column interval).
-  valkey-cli [args]           Run valkey-cli within the ValKey service (auth handled automatically).
-  valkey-bgsave               Trigger a ValKey background save (RDB written under valkey_data volume).
-  rabbitmq-ctl [args]         Run rabbitmqctl inside the RabbitMQ container.
-  rabbitmq-diagnostics [args] Run rabbitmq-diagnostics inside the RabbitMQ container.
-  rabbitmq-export [--output PATH]
-                             Export RabbitMQ definitions to host (JSON).
-  rabbitmq-overview           Show rabbitmq-diagnostics status summary.
-  pgbouncer-stats             Execute SHOW STATS via PgBouncer admin console.
-  pgbouncer-pools             Execute SHOW POOLS via PgBouncer admin console.
-  memcached-stats             Dump Memcached stats using nc.
-  seccomp-status              Show which profile each service is using.
-  seccomp-trace <service>     Prepare trace directory and show tracing instructions.
-  seccomp-generate <service> [--trace-dir DIR] [--output PATH]
-                             Build a whitelist profile from strace output.
-  seccomp-verify              Ensure docker-compose services define seccomp security_opts.
-  apparmor-load               Load AppArmor profiles under apparmor/ (requires sudo).
-  version-status [--only-outdated] [--output PATH]
-                             Compare installed versions against upstream releases.
+Lifecycle
+  create-env                          Interactive helper to generate a tailored .env file.
+  build-image                         Build the custom PostgreSQL image.
+  up                                  Start the stack in detached mode.
+  down                                Stop the stack (preserving volumes).
+  networks-refresh                    Rebuild networks.allow auto list (runs network_probe).
+  networks-show                       Print the currently rendered allow list.
+  config-render                       Re-render postgresql.conf/pg_hba.conf then restart PostgreSQL.
+  config-check                        Compare live configs to rendered templates.
+  logs                                Tail postgres logs.
+  status                              Show container status and health.
+  service-urls                        Print connection URLs for local services using external host IP.
+
+CI workflows
+  bootstrap-ci                        Prepare secrets/network/data scaffolding for CI.
+  ci-verify                           Run CI preflight (docker, ports, attestations).
+  ci-up                               Bring the stack up using env vars only (CI workflow).
+  ci-down                             Tear down CI stack; optionally prune data/secrets.
+
+Database & backup
+  psql [args]                         Open psql inside the postgres container.
+  create-user <user> <pass>           Create a role with LOGIN privilege.
+  drop-user <user>                    Drop a role.
+  create-db <db> <owner>              Create a database owned by the specified user.
+  drop-db <db>                        Drop a database.
+  dump <db> [file]                    Logical backup using pg_dump (custom format).
+  dump-sql <db> [file]                Plain-text SQL dump.
+  restore-dump <file> <db>            Restore a logical backup (drops the db first).
+  backup [--type=full|diff|incr]      Invoke pgBackRest backup (add --verify to restore+checksum).
+  stanza-create                       Initialize pgBackRest stanza.
+  restore-snapshot [args]             Run pgBackRest restore (pass-through args).
+  provision-qa <db>                   Provision QA database from latest backup.
+  daily-maintenance [options]         Run daily dump/log/pgBadger/retention workflow.
+  pgtune-config [options]             Generate tuned config include via pgtune (see options below).
+  pgbadger-report [options]           Generate a pgbadger log report (HTML by default).
+  compact --level N [...options]      Space-recovery helpers (autovacuum | pg_squeeze | pg_repack | VACUUM FULL).
+  upgrade --new-version <ver>         Automate pg_upgrade using helper container.
+  version-status [--only-outdated]    Compare installed versions against upstream releases.
+
+Audits & diagnostics
+  audit-roles [--output PATH]         Role posture report (CSV if output path supplied).
+  audit-extensions [--output PATH]    Extension versions across databases.
+  audit-autovacuum [options]          Tables with high dead tuples.
+     --output PATH                    Write CSV to container path.
+     --dead-threshold N               Dead tuple count threshold (default 100000).
+     --ratio FLOAT                    Dead tuple ratio threshold (default 0.2).
+  audit-replication [--output PATH]   Summarise follower lag (CSV if output path supplied).
+  audit-security [--output PATH]      HBA/password/RLS checks (text/CSV if output set).
+  audit-index-bloat [options]         Index density using pgstattuple.
+     --output PATH                    Write CSV to container path.
+     --min-size-mb N                  Minimum index size in MB (default 10).
+  audit-buffercache [--output PATH]   Snapshot shared buffer usage by relation.
+  audit-schema [--output PATH]        Snapshot information_schema columns.
+  audit-cron [--output PATH]          List pg_cron jobs and next run.
+  audit-squeeze [--output PATH]       Dump pg_squeeze activity table.
+  snapshot-pgstat [--output PATH]     Capture pg_stat_statements baseline (CSV with output).
   diff-pgstat --base PATH --compare PATH [--limit N]
-                              Compare two pg_stat_statements snapshots.
-  compact --level N [...options]
-                              Level 1: autovacuum audit
-                              Level 2: refresh pg_squeeze
-                              Level 3: pg_repack (requires --tables)
-                              Level 4: VACUUM FULL (requires --yes, optional --scope)
-  upgrade --new-version <ver> Automate pg_upgrade using helper container.
-  logs                        Tail postgres logs.
-  status                      Show container status & health.
+                                        Compare two pg_stat_statements snapshots.
+
+Extensions & datasets
+  exercise-extensions [--db DB]       Smoke queries across the extension bundle.
+  pgtap-smoke [--db DB]               Run pgTap plan validating bundled extensions.
+  test-dataset bootstrap [options]    Provision synthetic spatial/vector/graph/routing dataset.
+  async-queue bootstrap [--db DB] [--schema NAME]
+                                        Install lightweight async queue schema/functions.
+  partman-maintenance [--db DB]       Run partman.run_maintenance_proc() in the target database.
+  partman-show-config [--db DB] [--parent schema.table]
+                                        Display entries from partman.part_config.
+  partman-create-parent [--db DB] [--type TYPE] [--start PARTITION] [--premake N]
+                                        Create managed parent (schema.table control_column interval).
+
+Cache, messaging, pooling
+  valkey-cli [args]                   Run valkey-cli inside ValKey (auth handled automatically).
+  valkey-bgsave                       Trigger a ValKey background save (RDB under valkey_data).
+  rabbitmq-ctl [args]                 Run rabbitmqctl inside the RabbitMQ container.
+  rabbitmq-diagnostics [args]         Run rabbitmq-diagnostics inside RabbitMQ.
+  rabbitmq-export [--output PATH]     Export RabbitMQ definitions to host (JSON).
+  rabbitmq-overview                   Show rabbitmq-diagnostics status summary.
+  pgbouncer-stats                     SHOW STATS via PgBouncer admin console.
+  pgbouncer-pools                     SHOW POOLS via PgBouncer admin console.
+  memcached-stats                     Dump Memcached stats using nc.
+
+Security hardening
+  seccomp-status                      Show which seccomp profile each service is using.
+  seccomp-trace <service>             Prepare trace directory and show tracing instructions.
+  seccomp-generate <service> [--trace-dir DIR] [--output PATH]
+                                        Build a whitelist profile from strace output.
+  seccomp-verify                      Ensure docker-compose services define seccomp security_opts.
+  apparmor-load                       Load AppArmor profiles under apparmor/ (requires sudo).
+  help                                Show this help.
+
   pgtune options:
     --db-type <type>          web|oltp|dw|mixed|desktop (default: ${PGTUNE_DB_TYPE:-oltp})
     --connections <num>       Override max connections (optional)

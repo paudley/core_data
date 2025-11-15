@@ -101,6 +101,26 @@ jobs:
           build-args: |
             PG_VERSION=${{ steps.version.outputs.pg_major || '17' }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.6.0
+
+      - name: Sign image with cosign (keyless)
+        env:
+          COSIGN_YES: "true"
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          cosign sign "${image_ref}"
+
+      - name: Verify cosign signature
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${image_ref}"
+
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
@@ -140,6 +160,14 @@ jobs:
             **Verify attestation:**
             ```bash
             gh attestation verify oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} --owner ${{ github.repository_owner }}
+            ```
+
+            **Verify signature (cosign):**
+            ```bash
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
             ```
 
             **Pull image:**

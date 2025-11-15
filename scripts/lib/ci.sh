@@ -78,9 +78,21 @@ ci_verify_attestations() {
 	local skip=$1
 	local enforce_flag=$2
 	if [[ "${skip}" == "true" ]]; then
+		if [[ "${enforce_flag:-0}" == "1" ]]; then
+			ci_log "attestation skip requested; ignoring --require-attestation to avoid conflicting flags"
+		fi
 		return 0
 	fi
-	local enforce=${enforce_flag:-${CORE_DATA_REQUIRE_ATTESTATION:-0}}
+	local enforce_raw=${enforce_flag:-${CORE_DATA_REQUIRE_ATTESTATION:-0}}
+	local enforce=0
+	case "${enforce_raw}" in
+	1 | true | yes)
+		enforce=1
+		;;
+	*)
+		enforce=0
+		;;
+	esac
 	local -A seen=()
 	while IFS='=' read -r service image_ref; do
 		if [[ -z "${service}" || -z "${image_ref}" ]]; then
@@ -175,26 +187,27 @@ import os
 import sys
 
 output = sys.argv[1]
-data = {
-    "composeProfiles": os.environ.get("COMPOSE_PROFILES", ""),
-    "services": {
-        "postgres": {
-            "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
-            "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
-            "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password")),
-        },
-        "pgbouncer": {
-            "host": os.environ.get("PGBOUNCER_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("PGBOUNCER_HOST_PORT", os.environ.get("PGBOUNCER_PORT", "6432"))),
-        },
-        "valkey": {
-            "host": os.environ.get("VALKEY_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("VALKEY_HOST_PORT", os.environ.get("VALKEY_PORT", "6379"))),
-            "passwordFile": os.path.relpath(os.environ.get("VALKEY_PASSWORD_FILE", "secrets/valkey_password")),
-        },
-    },
-}
+	root_dir = os.environ.get("ROOT_DIR", os.getcwd())
+	data = {
+	    "composeProfiles": os.environ.get("COMPOSE_PROFILES", ""),
+	    "services": {
+	        "postgres": {
+	            "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+	            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
+	            "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
+	            "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password"), start=root_dir),
+	        },
+	        "pgbouncer": {
+	            "host": os.environ.get("PGBOUNCER_HOST", "127.0.0.1"),
+	            "port": int(os.environ.get("PGBOUNCER_HOST_PORT", os.environ.get("PGBOUNCER_PORT", "6432"))),
+	        },
+	        "valkey": {
+	            "host": os.environ.get("VALKEY_HOST", "127.0.0.1"),
+	            "port": int(os.environ.get("VALKEY_HOST_PORT", os.environ.get("VALKEY_PORT", "6379"))),
+	            "passwordFile": os.path.relpath(os.environ.get("VALKEY_PASSWORD_FILE", "secrets/valkey_password"), start=root_dir),
+	        },
+	    },
+	}
 data["services"]["pghero"] = {
     "enabled": os.environ.get("PGHERO_DISABLED", "0") != "1",
     "port": int(os.environ.get("PGHERO_PORT", "8080")),
