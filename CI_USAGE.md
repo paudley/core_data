@@ -47,6 +47,8 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
   - `ghcr.io/paudley/core_data/pgbouncer:<tag>`
   - `ghcr.io/paudley/core_data/rabbitmq:<tag>`
   - `ghcr.io/paudley/core_data/memcached:<tag>`
+  - `ghcr.io/paudley/core_data/network-probe:<tag>`
+  - `ghcr.io/paudley/core_data/network-guard:<tag>`
 - Override `CORE_DATA_STACK_REGISTRY` or `CORE_DATA_STACK_TAG` in your environment to pin a specific release or mirror; otherwise helpers default to the `latest` GHCR tag.
 - To verify every image referenced by your `.env` (with detailed output), run:
   ```bash

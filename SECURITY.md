@@ -1,5 +1,8 @@
 # Security Policy
 
+> **Note**  
+> Every published container image includes this `SECURITY.md` (and `README.md`) at `/SECURITY.md` so auditors can read our policy directly inside the runtime.
+
 ## Supported Versions
 
 We release patches for security vulnerabilities. Currently supported versions:

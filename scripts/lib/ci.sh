@@ -37,13 +37,21 @@ ci_profile_enabled() {
 
 ci_service_images() {
 	local -a entries=()
-	local registry=${CORE_DATA_STACK_REGISTRY:-ghcr.io/paudley/core_data}
-	local release_tag=${CORE_DATA_STACK_TAG:-${POSTGRES_IMAGE_TAG:-latest}}
-	local postgres_image="${POSTGRES_IMAGE_NAME:-${registry}/postgres}:${POSTGRES_IMAGE_TAG:-${release_tag}}"
-	local valkey_default="${registry}/valkey:${release_tag}"
-	local rabbitmq_default="${registry}/rabbitmq:${release_tag}"
-	local pgbouncer_default="${registry}/pgbouncer:${release_tag}"
-	local memcached_default="${registry}/memcached:${release_tag}"
+	local registry=${CORE_DATA_STACK_REGISTRY:-}
+	if [[ -z "${registry}" && -n "${POSTGRES_IMAGE_NAME:-}" ]]; then
+		registry=${POSTGRES_IMAGE_NAME%/*}
+	fi
+	if [[ -z "${registry}" && -n "${CORE_DATA_IMAGE:-}" ]]; then
+		registry=${CORE_DATA_IMAGE%/*}
+	fi
+	local release_tag=${CORE_DATA_STACK_TAG:-${POSTGRES_IMAGE_TAG:-${CORE_DATA_TAG:-latest}}}
+	local registry_default=${registry:-ghcr.io/paudley/core_data}
+	local postgres_image="${POSTGRES_IMAGE_NAME:-${registry_default}/postgres}:${POSTGRES_IMAGE_TAG:-${release_tag}}"
+	local valkey_default="${registry_default}/valkey:${release_tag}"
+	local rabbitmq_default="${registry_default}/rabbitmq:${release_tag}"
+	local pgbouncer_default="${registry_default}/pgbouncer:${release_tag}"
+	local memcached_default="${registry_default}/memcached:${release_tag}"
+	local pghero_default="${registry_default}/pghero:${release_tag}"
 	entries+=("postgres=${postgres_image}")
 	entries+=("logical_backup=${postgres_image}")
 	entries+=("volume_prep=${postgres_image}")
@@ -53,6 +61,7 @@ ci_service_images() {
 	entries+=("rabbitmq=${RABBITMQ_IMAGE:-${rabbitmq_default}}")
 	entries+=("pgbouncer=${PGBOUNCER_IMAGE:-${pgbouncer_default}}")
 	entries+=("memcached=${MEMCACHED_IMAGE:-${memcached_default}}")
+	entries+=("pghero=${PGHERO_IMAGE:-${pghero_default}}")
 	printf '%s\n' "${entries[@]}"
 }
 

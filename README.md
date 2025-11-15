@@ -80,8 +80,12 @@ Every service in the stack is published with the same attested tag:
 | PgBouncer  | `ghcr.io/paudley/core_data/pgbouncer:<stack-tag>`  |
 | RabbitMQ   | `ghcr.io/paudley/core_data/rabbitmq:<stack-tag>`   |
 | Memcached  | `ghcr.io/paudley/core_data/memcached:<stack-tag>`  |
+| Network Probe | `ghcr.io/paudley/core_data/network-probe:<stack-tag>` |
+| Network Guard | `ghcr.io/paudley/core_data/network-guard:<stack-tag>` |
 
 Use the optional `CORE_DATA_STACK_TAG` / `CORE_DATA_STACK_REGISTRY` environment variables (or `.env` entries) to pin a specific release across every helper; otherwise the defaults use the `latest` tag from `ghcr.io/paudley/core_data`.
+
+Every container publishes `/README.md` and `/SECURITY.md` (copies of this repository's documentation) so you can inspect provenance and policy from inside the image with a simple `ls`.
 
 Expected verification output:
 

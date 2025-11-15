@@ -25,6 +25,10 @@ ARG CORE_HOME
 ENV DEBIAN_FRONTEND=noninteractive \
     AGE_VERSION=${AGE_VERSION}
 
+RUN mkdir -p /opt/core_data/docs
+COPY README.md SECURITY.md /opt/core_data/docs/
+RUN cp /opt/core_data/docs/README.md /README.md && cp /opt/core_data/docs/SECURITY.md /SECURITY.md
+
 # Install dependencies, extensions, and tooling required by the platform
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
