@@ -67,6 +67,8 @@ gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
 ./scripts/manage.sh attestation-verify --env-file ci.env.example
 ```
 
+GitHub invariably injects a repository-scoped `GITHUB_TOKEN` when workflows run. If that token cannot read `paudley/core_data`, the helper automatically retries the same verification anonymously (clearing `GH_TOKEN`/`GITHUB_TOKEN`) so public attestations still succeed without extra flags.
+
 Expected verification output:
 
 ```
