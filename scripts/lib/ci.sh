@@ -105,6 +105,10 @@ ci_verify_attestation_for_image() {
 			: >"${tmp_err}"
 			continue
 		fi
+		# If we've already retried once, break to error handling.
+		if [[ "${attempt}" -ge 2 ]]; then
+			break
+		fi
 		rm -f "${tmp_json}" "${tmp_err}" "${parse_err}"
 		if [[ "${enforce}" == "1" ]]; then
 			echo "[ci] attestation verification failed for ${image_ref}" >&2
