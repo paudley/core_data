@@ -37,16 +37,22 @@ ci_profile_enabled() {
 
 ci_service_images() {
 	local -a entries=()
-	local postgres_image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}"
+	local registry=${CORE_DATA_STACK_REGISTRY:-ghcr.io/paudley/core_data}
+	local release_tag=${CORE_DATA_STACK_TAG:-${POSTGRES_IMAGE_TAG:-latest}}
+	local postgres_image="${POSTGRES_IMAGE_NAME:-${registry}/postgres}:${POSTGRES_IMAGE_TAG:-${release_tag}}"
+	local valkey_default="${registry}/valkey:${release_tag}"
+	local rabbitmq_default="${registry}/rabbitmq:${release_tag}"
+	local pgbouncer_default="${registry}/pgbouncer:${release_tag}"
+	local memcached_default="${registry}/memcached:${release_tag}"
 	entries+=("postgres=${postgres_image}")
 	entries+=("logical_backup=${postgres_image}")
 	entries+=("volume_prep=${postgres_image}")
 	entries+=("network_probe=${NETWORK_PROBE_IMAGE:-debian:bookworm-slim}")
 	entries+=("network_guard=${NETWORK_GUARD_IMAGE:-debian:bookworm-slim}")
-	entries+=("valkey=${VALKEY_IMAGE:-valkey/valkey:9-alpine}")
-	entries+=("rabbitmq=${RABBITMQ_IMAGE:-rabbitmq:4.2-management-alpine}")
-	entries+=("pgbouncer=${PGBOUNCER_IMAGE:-bitnamilegacy/pgbouncer:1.24.1}")
-	entries+=("memcached=${MEMCACHED_IMAGE:-memcached:1.6-alpine}")
+	entries+=("valkey=${VALKEY_IMAGE:-${valkey_default}}")
+	entries+=("rabbitmq=${RABBITMQ_IMAGE:-${rabbitmq_default}}")
+	entries+=("pgbouncer=${PGBOUNCER_IMAGE:-${pgbouncer_default}}")
+	entries+=("memcached=${MEMCACHED_IMAGE:-${memcached_default}}")
 	printf '%s\n' "${entries[@]}"
 }
 
@@ -121,6 +127,17 @@ ci_verify_attestation_for_image() {
 		return 0
 	done
 	rm -f "${tmp_err}"
+	if [[ ! -s "${tmp_json}" ]]; then
+		local empty_msg="gh attestation verify returned no payload for ${image_ref}"
+		rm -f "${tmp_json}" "${parse_err}"
+		if [[ "${enforce}" == "1" ]]; then
+			echo "[ci] attestation verification failed for ${image_ref}" >&2
+			echo "${empty_msg}" >&2
+			return 1
+		fi
+		ci_log "warning: ${empty_msg}; continuing because enforcement disabled."
+		return 0
+	fi
 	local parsed
 	if ! parsed=$(
 		python3 - "${expected_subject}" "${tmp_json}" <<'PY'
@@ -134,8 +151,23 @@ if len(sys.argv) != 3:
 expected = sys.argv[1]
 json_path = sys.argv[2]
 
-with open(json_path, "r", encoding="utf-8") as fh:
-    payload = json.load(fh)
+try:
+    with open(json_path, "r", encoding="utf-8") as fh:
+        raw = fh.read()
+except OSError as exc:
+    print(f"unable to read attestation payload: {exc}", file=sys.stderr)
+    sys.exit(1)
+
+raw = raw.strip()
+if not raw:
+    print("attestation payload empty", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    payload = json.loads(raw)
+except json.JSONDecodeError as exc:
+    print(f"failed to parse attestation payload: {exc}", file=sys.stderr)
+    sys.exit(1)
 
 match_entry = None
 match_subject = None

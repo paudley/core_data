@@ -1767,6 +1767,9 @@ if [[ "${1:-}" == "attestation" && "${2:-}" == "verify" ]]; then
     echo "Error: the provided token was denied access to the requested resource, please check the token's expiration and repository access" >&2
     exit 1
   fi
+  if [[ "${name}" == *"no-attest"* ]]; then
+    exit 0
+  fi
   cat <<JSON
 [{"verificationResult":{"statement":{"predicateType":"https://slsa.dev/provenance/v1","subject":[{"name":"${name}","digest":{"sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}],"predicate":{"buildDefinition":{"externalParameters":{"workflow":{"path":".github/workflows/publish-docker.yml","ref":"refs/heads/main","repository":"https://github.com/test/repo"}}},"runDetails":{"builder":{"id":"fake-builder"},"metadata":{"invocationId":"https://github.com/test/repo/actions/runs/1"}}}}}}]
 JSON
@@ -1793,6 +1796,17 @@ exit 1
     assert result.returncode == 0
     assert "attestation verified for" in result.stderr
     assert "subject    :" in result.stderr
+    failed = run_manage(
+        env_local,
+        "attestation-verify",
+        "--env-file",
+        env_local["ENV_FILE"],
+        "--image",
+        "ghcr.io/paudley/core_data/no-attest:ci-test",
+        check=False,
+    )
+    assert failed.returncode != 0
+    assert "returned no payload" in failed.stderr
 
 
 @pytest.mark.ci

@@ -69,6 +69,20 @@ gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
 
 GitHub invariably injects a repository-scoped `GITHUB_TOKEN` when workflows run. If that token cannot read `paudley/core_data`, the helper automatically retries the same verification anonymously (clearing `GH_TOKEN`/`GITHUB_TOKEN`) so public attestations still succeed without extra flags.
 
+### Published GHCR images
+
+Every service in the stack is published with the same attested tag:
+
+| Service    | Image reference                                   |
+|------------|----------------------------------------------------|
+| PostgreSQL | `ghcr.io/paudley/core_data/postgres:<stack-tag>`   |
+| ValKey     | `ghcr.io/paudley/core_data/valkey:<stack-tag>`     |
+| PgBouncer  | `ghcr.io/paudley/core_data/pgbouncer:<stack-tag>`  |
+| RabbitMQ   | `ghcr.io/paudley/core_data/rabbitmq:<stack-tag>`   |
+| Memcached  | `ghcr.io/paudley/core_data/memcached:<stack-tag>`  |
+
+Use the optional `CORE_DATA_STACK_TAG` / `CORE_DATA_STACK_REGISTRY` environment variables (or `.env` entries) to pin a specific release across every helper; otherwise the defaults use the `latest` tag from `ghcr.io/paudley/core_data`.
+
 Expected verification output:
 
 ```
