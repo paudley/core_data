@@ -62,6 +62,9 @@ gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
 docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
 gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
   --owner paudley
+
+# Verify every referenced image from your .env (pretty console output)
+./scripts/manage.sh attestation-verify --env-file ci.env.example
 ```
 
 Expected verification output:

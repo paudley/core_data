@@ -178,6 +178,7 @@ CI workflows
   ci-verify                           Run CI preflight (docker, ports, attestations).
   ci-up                               Bring the stack up using env vars only (CI workflow).
   ci-down                             Tear down CI stack; optionally prune data/secrets.
+  attestation-verify                  Verify published image attestations (manual helper).
 
 Database & backup
   psql [args]                         Open psql inside the postgres container.
@@ -419,6 +420,9 @@ bootstrap-ci)
 	;;
 ci-verify)
 	cmd_ci_verify "$@"
+	;;
+attestation-verify)
+	cmd_attestation_verify "$@"
 	;;
 ci-up)
 	cmd_ci_up "$@"

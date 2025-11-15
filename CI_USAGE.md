@@ -40,8 +40,13 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
 ## Published images and attestations
 - Postgres image tag is `${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}`. CI builds/publishes to GHCR; attestations can be checked with:
   ```bash
-  gh attestation verify --repo paudley/core_data --subject ghcr.io/paudley/core_data/postgres:<tag>
+  gh attestation verify oci://ghcr.io/paudley/core_data/postgres:<tag> --repo paudley/core_data
   ```
+- To verify every image referenced by your `.env` (with detailed output), run:
+  ```bash
+  ./scripts/manage.sh attestation-verify --env-file ci.env.example
+  ```
+- Only GHCR images owned by `${CORE_DATA_ATTESTATION_REPO}` are enforced. Third-party dependencies (e.g., `debian:bookworm-slim` for probes) are logged and skipped because GitHub attestations are unavailable for them.
 - Images are signed keylessly with cosign during publish. Verify using the Actions OIDC issuer:
   ```bash
   cosign verify \
