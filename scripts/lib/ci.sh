@@ -1,0 +1,497 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
+# SPDX-License-Identifier: MIT
+
+# shellcheck shell=bash
+
+ci_log() {
+	printf '[ci] %s\n' "$*" >&2
+}
+
+ci_load_env_file() {
+	local file=$1
+	if [[ ! -f "${file}" ]]; then
+		echo "[ci] env file ${file} not found." >&2
+		exit 1
+	fi
+	set -a
+	# shellcheck disable=SC1090
+	source "${file}"
+	set +a
+	ci_log "sourced ${file}"
+}
+
+ci_profile_enabled() {
+	local profile=$1
+	local profiles=${COMPOSE_PROFILES:-}
+	if [[ -z "${profiles}" ]]; then
+		return 1
+	fi
+	IFS=',' read -r -a profile_arr <<<"${profiles}"
+	for item in "${profile_arr[@]}"; do
+		if [[ "${item}" == "${profile}" ]]; then
+			return 0
+		fi
+	done
+	return 1
+}
+
+ci_service_images() {
+	local -a entries=()
+	local postgres_image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}"
+	entries+=("postgres=${postgres_image}")
+	entries+=("logical_backup=${postgres_image}")
+	entries+=("volume_prep=${postgres_image}")
+	entries+=("network_probe=${NETWORK_PROBE_IMAGE:-debian:bookworm-slim}")
+	entries+=("network_guard=${NETWORK_GUARD_IMAGE:-debian:bookworm-slim}")
+	entries+=("valkey=${VALKEY_IMAGE:-valkey/valkey:9-alpine}")
+	entries+=("rabbitmq=${RABBITMQ_IMAGE:-rabbitmq:4.2-management-alpine}")
+	entries+=("pgbouncer=${PGBOUNCER_IMAGE:-bitnamilegacy/pgbouncer:1.24.1}")
+	entries+=("memcached=${MEMCACHED_IMAGE:-memcached:1.6-alpine}")
+	printf '%s\n' "${entries[@]}"
+}
+
+ci_verify_attestation_for_image() {
+	local image_ref=$1
+	local enforce=$2
+	local repo=${CORE_DATA_ATTESTATION_REPO:-paudley/core_data}
+	if ! command -v gh >/dev/null 2>&1; then
+		if [[ "${enforce}" == "1" ]]; then
+			echo "[ci] gh CLI missing; cannot verify attestation for ${image_ref}" >&2
+			return 1
+		fi
+		ci_log "gh CLI missing; skipping attestation check for ${image_ref}"
+		return 0
+	fi
+	if gh attestation verify --repo "${repo}" --subject "${image_ref}" >/dev/null 2>&1; then
+		ci_log "attestation verified for ${image_ref}"
+		return 0
+	fi
+	if [[ "${enforce}" == "1" ]]; then
+		echo "[ci] attestation verification failed for ${image_ref}" >&2
+		return 1
+	fi
+	ci_log "warning: attestation verification failed for ${image_ref}; continuing because enforcement disabled."
+	return 0
+}
+
+ci_verify_attestations() {
+	local skip=$1
+	local enforce_flag=$2
+	if [[ "${skip}" == "true" ]]; then
+		if [[ "${enforce_flag:-0}" == "1" ]]; then
+			ci_log "attestation skip requested; ignoring --require-attestation to avoid conflicting flags"
+		fi
+		return 0
+	fi
+	local enforce_raw=${enforce_flag:-${CORE_DATA_REQUIRE_ATTESTATION:-0}}
+	local enforce=0
+	case "${enforce_raw}" in
+	1 | true | yes)
+		enforce=1
+		;;
+	*)
+		enforce=0
+		;;
+	esac
+	local -A seen=()
+	while IFS='=' read -r service image_ref; do
+		if [[ -z "${service}" || -z "${image_ref}" ]]; then
+			continue
+		fi
+		if [[ "${service}" == "valkey" ]] && ! ci_profile_enabled "valkey"; then
+			continue
+		fi
+		if [[ "${service}" == "rabbitmq" ]] && ! ci_profile_enabled "rabbitmq"; then
+			continue
+		fi
+		if [[ "${service}" == "pgbouncer" ]] && ! ci_profile_enabled "pgbouncer"; then
+			continue
+		fi
+		if [[ "${service}" == "memcached" ]] && ! ci_profile_enabled "memcached"; then
+			continue
+		fi
+		if [[ -n "${seen[${image_ref}]:-}" ]]; then
+			continue
+		fi
+		seen["${image_ref}"]=1
+		if ! ci_verify_attestation_for_image "${image_ref}" "${enforce}"; then
+			return 1
+		fi
+	done < <(ci_service_images)
+	return 0
+}
+
+ci_check_disk_space() {
+	local min_mb=${1:-4096}
+	local available
+	available=$(df -Pm "${ROOT_DIR}" | awk 'NR==2 {print $4}')
+	if [[ -z "${available}" ]]; then
+		ci_log "unable to determine disk space; skipping check"
+		return 0
+	fi
+	if ((available < min_mb)); then
+		echo "[ci] insufficient disk space in ${ROOT_DIR}: ${available}MB available, ${min_mb}MB required." >&2
+		return 1
+	fi
+	ci_log "disk space check OK (${available}MB available)."
+}
+
+ci_port_available() {
+	local port=$1
+	python3 - "$port" <<'PY' >/dev/null 2>&1
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("127.0.0.1", port))
+    except OSError:
+        sys.exit(1)
+sys.exit(0)
+PY
+}
+
+ci_check_ports() {
+	local skip=$1
+	shift
+	if [[ "${skip}" == "true" ]]; then
+		return 0
+	fi
+	local failures=0
+	for mapping in "$@"; do
+		local name=${mapping%%:*}
+		local port=${mapping##*:}
+		if [[ -z "${port}" ]]; then
+			continue
+		fi
+		if ! ci_port_available "${port}"; then
+			echo "[ci] port ${port} for ${name} appears to be in use." >&2
+			failures=$((failures + 1))
+		else
+			ci_log "port ${port} for ${name} available."
+		fi
+	done
+	if ((failures > 0)); then
+		return 1
+	fi
+	return 0
+}
+
+ci_emit_outputs() {
+	local output_path=$1
+	python3 - "$output_path" <<'PY'
+import json
+import os
+import sys
+
+output = sys.argv[1]
+root_dir = os.environ.get("ROOT_DIR", os.getcwd())
+data = {
+    "composeProfiles": os.environ.get("COMPOSE_PROFILES", ""),
+    "services": {
+        "postgres": {
+            "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
+            "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
+            "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password"), start=root_dir),
+        },
+        "pgbouncer": {
+            "host": os.environ.get("PGBOUNCER_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("PGBOUNCER_HOST_PORT", os.environ.get("PGBOUNCER_PORT", "6432"))),
+        },
+        "valkey": {
+            "host": os.environ.get("VALKEY_HOST", "127.0.0.1"),
+            "port": int(os.environ.get("VALKEY_HOST_PORT", os.environ.get("VALKEY_PORT", "6379"))),
+            "passwordFile": os.path.relpath(os.environ.get("VALKEY_PASSWORD_FILE", "secrets/valkey_password"), start=root_dir),
+        },
+    },
+}
+data["services"]["pghero"] = {
+    "enabled": os.environ.get("PGHERO_DISABLED", "0") != "1",
+    "port": int(os.environ.get("PGHERO_PORT", "8080")),
+}
+out_dir = os.path.dirname(output) or "."
+os.makedirs(out_dir, exist_ok=True)
+with open(output, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2)
+print(output)
+PY
+}
+
+ci_run_bootstrap() {
+	if [[ "${1:-}" == "true" ]]; then
+		ci_log "bootstrap skipped (per flag)."
+		return 0
+	fi
+	cmd_bootstrap_ci
+}
+
+cmd_ci_verify() {
+	local min_disk_mb=${CORE_DATA_CI_MIN_DISK_MB:-4096}
+	local skip_attestation=false
+	local skip_docker=false
+	local skip_ports=false
+	local require_attestation=false
+	local env_files=()
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--min-disk-mb)
+			min_disk_mb=$2
+			shift 2
+			;;
+		--min-disk-mb=*)
+			min_disk_mb=${1#*=}
+			shift
+			;;
+		--skip-attestation)
+			skip_attestation=true
+			shift
+			;;
+		--require-attestation)
+			require_attestation=true
+			shift
+			;;
+		--skip-docker)
+			skip_docker=true
+			shift
+			;;
+		--skip-ports)
+			skip_ports=true
+			shift
+			;;
+		--env-file)
+			env_files+=("$2")
+			shift 2
+			;;
+		--env-file=*)
+			env_files+=("${1#*=}")
+			shift
+			;;
+		-h | --help)
+			cat <<'USAGE'
+Usage: manage.sh ci-verify [options]
+  --env-file PATH        Source environment variables before checks.
+  --min-disk-mb N        Minimum free space required (default 4096).
+  --skip-docker          Skip docker availability check.
+  --skip-attestation     Skip image attestation verification.
+  --require-attestation  Fail if attestations cannot be verified.
+  --skip-ports           Do not check host port availability.
+USAGE
+			return 0
+			;;
+		*)
+			echo "[ci] Unknown option: $1" >&2
+			return 1
+			;;
+		esac
+	done
+	for file in "${env_files[@]}"; do
+		ci_load_env_file "${file}"
+	done
+	if [[ "${skip_docker}" != "true" ]]; then
+		ensure_compose
+	fi
+	if ! ci_check_disk_space "${min_disk_mb}"; then
+		return 1
+	fi
+	if ! ci_check_ports "${skip_ports}" \
+		"postgres:${POSTGRES_PORT:-5432}" \
+		"pgbouncer:${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}" \
+		"valkey:${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}" \
+		"rabbitmq:${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}" \
+		"pghero:${PGHERO_PORT:-8080}"; then
+		return 1
+	fi
+	if ! ci_verify_attestations "${skip_attestation}" "${require_attestation}"; then
+		return 1
+	fi
+	ci_log "ci-verify checks passed."
+}
+
+cmd_ci_up() {
+	local dry_run=false
+	local skip_bootstrap=false
+	local skip_attestation=false
+	local require_attestation=false
+	local output_path=${CORE_DATA_CI_OUTPUT_PATH:-${ROOT_DIR}/backups/ci-output.json}
+	local env_files=()
+	local compose_profiles=${CI_COMPOSE_PROFILES:-}
+
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--dry-run)
+			dry_run=true
+			shift
+			;;
+		--skip-bootstrap)
+			skip_bootstrap=true
+			shift
+			;;
+		--skip-attestation)
+			skip_attestation=true
+			shift
+			;;
+		--require-attestation)
+			require_attestation=true
+			shift
+			;;
+		--output)
+			output_path=$2
+			shift 2
+			;;
+		--output=*)
+			output_path=${1#*=}
+			shift
+			;;
+		--profiles)
+			compose_profiles=$2
+			shift 2
+			;;
+		--profiles=*)
+			compose_profiles=${1#*=}
+			shift
+			;;
+		--env-file)
+			env_files+=("$2")
+			shift 2
+			;;
+		--env-file=*)
+			env_files+=("${1#*=}")
+			shift
+			;;
+		-h | --help)
+			cat <<'USAGE'
+Usage: manage.sh ci-up [options]
+  --env-file PATH        Source environment variables before running.
+  --profiles list        Override COMPOSE_PROFILES for this invocation.
+  --dry-run              Print actions without touching Docker.
+  --skip-bootstrap       Skip secret/directory generation.
+  --skip-attestation     Do not verify image attestations.
+  --require-attestation  Fail if attestation verification fails.
+  --output PATH          Write JSON summary to PATH (default backups/ci-output.json).
+USAGE
+			return 0
+			;;
+		*)
+			echo "[ci] Unknown option: $1" >&2
+			return 1
+			;;
+		esac
+	done
+
+	for file in "${env_files[@]}"; do
+		ci_load_env_file "${file}"
+	done
+
+	if [[ -n "${compose_profiles}" ]]; then
+		export COMPOSE_PROFILES="${compose_profiles}"
+	fi
+
+	if ! ci_verify_attestations "${skip_attestation}" "${require_attestation}"; then
+		return 1
+	fi
+
+	if [[ "${dry_run}" == "true" ]]; then
+		ci_log "dry-run: bootstrap, compose up, and health checks skipped."
+		ci_emit_outputs "${output_path}" >/dev/null
+		return 0
+	fi
+
+	ensure_compose
+	if ! ci_run_bootstrap "${skip_bootstrap}"; then
+		return 1
+	fi
+
+	if [[ "${CORE_DATA_BUILD_IMAGE:-0}" == "1" ]]; then
+		build_postgres_image
+	fi
+
+	ci_log "bringing stack online via docker compose up -d"
+	if ! compose up -d; then
+		return 1
+	fi
+	if ! wait_for_service_healthy "${POSTGRES_SERVICE_NAME:-postgres}" "${POSTGRES_HEALTH_TIMEOUT:-180}" 2; then
+		echo "[ci] postgres failed to pass health check." >&2
+		return 1
+	fi
+	if ! ensure_bootstrap_complete; then
+		return 1
+	fi
+	if ! stabilize_postgres; then
+		return 1
+	fi
+
+	ci_emit_outputs "${output_path}" >/dev/null
+	ci_log "ci-up complete. Connection metadata written to ${output_path}"
+}
+
+cmd_ci_down() {
+	local prune_data=false
+	local prune_secrets=false
+	local remove_volumes=false
+	local env_files=()
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--prune-data)
+			prune_data=true
+			shift
+			;;
+		--prune-secrets)
+			prune_secrets=true
+			shift
+			;;
+		--volumes | -v)
+			remove_volumes=true
+			shift
+			;;
+		--env-file)
+			env_files+=("$2")
+			shift 2
+			;;
+		--env-file=*)
+			env_files+=("${1#*=}")
+			shift
+			;;
+		-h | --help)
+			cat <<'USAGE'
+Usage: manage.sh ci-down [options]
+  --volumes              Pass -v to docker compose down.
+  --prune-data           Remove data/* directories (dangerous; CI use only).
+  --prune-secrets        Remove secrets/* files.
+  --env-file PATH        Source env file before running.
+USAGE
+			return 0
+			;;
+		*)
+			echo "[ci] Unknown option: $1" >&2
+			return 1
+			;;
+		esac
+	done
+
+	for file in "${env_files[@]}"; do
+		ci_load_env_file "${file}"
+	done
+
+	if ! command -v docker >/dev/null 2>&1; then
+		ci_log "docker CLI not available; skipping compose down."
+	else
+		local args=(down)
+		if [[ "${remove_volumes}" == "true" ]]; then
+			args+=("-v")
+		fi
+		compose "${args[@]}" || true
+	fi
+
+	if [[ "${prune_data}" == "true" ]]; then
+		rm -rf "${ROOT_DIR}/data/"*
+		ci_log "pruned data directory."
+	fi
+	if [[ "${prune_secrets}" == "true" ]]; then
+		rm -f "${ROOT_DIR}/secrets/"*
+		ci_log "pruned secrets directory."
+	fi
+	ci_log "ci-down complete."
+}

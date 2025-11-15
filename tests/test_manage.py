@@ -229,6 +229,7 @@ def manage_env(tmp_path_factory):
     workdir = tmp_path_factory.mktemp("core_data_ci")
     env_file = ROOT / ".env.test"
 
+    postgres_port = _find_free_port()
     pghero_port = _find_free_port()
     valkey_host_port = _find_free_port()
     pgbouncer_host_port = _find_free_port()
@@ -244,6 +245,7 @@ def manage_env(tmp_path_factory):
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
+        "POSTGRES_PORT": str(postgres_port),
         "PGHERO_PORT": str(pghero_port),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
@@ -1299,26 +1301,28 @@ EXTENSIONS_TO_CHECK = [
 
 
 @pytest.mark.extensions
-@pytest.mark.parametrize("extension", EXTENSIONS_TO_CHECK)
-def test_extension_available(manage_env, extension):
+def test_extensions_available(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
     run_manage(env, "up")
     try:
         wait_for_ready(env)
-        result = run_manage(
-            env,
-            "psql",
-            "-d",
-            "postgres",
-            "-t",
-            "-A",
-            "-c",
-            f"SELECT 1 FROM pg_extension WHERE extname='{extension}';",
-            check=False,
-        )
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() == "1", f"extension {extension} missing"
+        missing = []
+        for extension in EXTENSIONS_TO_CHECK:
+            result = run_manage(
+                env,
+                "psql",
+                "-d",
+                "postgres",
+                "-t",
+                "-A",
+                "-c",
+                f"SELECT 1 FROM pg_extension WHERE extname='{extension}';",
+                check=False,
+            )
+            if result.returncode != 0 or result.stdout.strip() != "1":
+                missing.append(extension)
+        assert not missing, f"extensions missing: {', '.join(missing)}"
     finally:
         run_manage(env, "down")
         compose_down(env, volumes=True)
@@ -1370,7 +1374,7 @@ def test_pgbouncer_concurrency(manage_env):
         compose_down(env, volumes=True)
 
 
-@pytest.mark.pool
+@pytest.mark.pool_heavy
 def test_database_recreation_cycles(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
@@ -1389,7 +1393,7 @@ def test_database_recreation_cycles(manage_env):
         compose_down(env, volumes=True)
 
 
-@pytest.mark.pool
+@pytest.mark.pool_heavy
 def test_test_dataset_bootstrap(manage_env):
     env, _ = manage_env
     run_manage(env, "build-image")
@@ -1717,3 +1721,54 @@ def test_create_env_noninteractive(manage_env, tmp_path):
             pgbouncer_stats_secret,
         ):
             path.unlink(missing_ok=True)
+
+
+@pytest.mark.ci
+def test_ci_verify_dry_run(manage_env):
+    env, _ = manage_env
+    result = run_manage(
+        env,
+        "ci-verify",
+        "--min-disk-mb",
+        "1",
+        "--skip-docker",
+        "--skip-attestation",
+        "--skip-ports",
+    )
+    assert result.returncode == 0
+
+
+@pytest.mark.ci
+def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
+    env, _ = manage_env
+    ci_env = tmp_path / "ci.env"
+    ci_env.write_text(
+        "\n".join(
+            (
+                "POSTGRES_PORT=65432",
+                "COMPOSE_PROFILES=pgbouncer",
+                "POSTGRES_SUPERUSER=postgres",
+            )
+        )
+        + "\n"
+    )
+    output_path = tmp_path / "ci-output.json"
+    result = run_manage(
+        env,
+        "ci-up",
+        "--dry-run",
+        "--skip-attestation",
+        "--skip-bootstrap",
+        "--env-file",
+        str(ci_env),
+        "--output",
+        str(output_path),
+    )
+    assert result.returncode == 0
+    assert output_path.exists()
+    payload = json.loads(output_path.read_text())
+    assert payload["composeProfiles"] == "pgbouncer"
+    postgres = payload["services"]["postgres"]
+    assert postgres["port"] == 65432
+    assert postgres["host"] == "127.0.0.1"
+    assert postgres["superuser"] == "postgres"

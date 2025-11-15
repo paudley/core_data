@@ -16,7 +16,7 @@ x-security-defaults: &security_defaults
 
 services:
   network_probe:
-    image: debian:bookworm-slim
+    image: ${NETWORK_PROBE_IMAGE:-debian:bookworm-slim}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_probe
     restart: "no"
     network_mode: host
@@ -44,23 +44,25 @@ services:
       RABBITMQ_DATA_MOUNT: ${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
       RABBITMQ_UID: ${RABBITMQ_UID:-999}
       RABBITMQ_GID: ${RABBITMQ_GID:-999}
+      SECRETS_MOUNT: /opt/core_data/secrets
     command:
       [
         "/bin/sh",
         "-c",
-        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT} && chown -R ${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999} $${RABBITMQ_DATA_MOUNT}"
+        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT} $${SECRETS_MOUNT} && chown -R ${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999} $${RABBITMQ_DATA_MOUNT}"
       ]
     volumes:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./secrets:/opt/core_data/secrets
     networks:
       - core_data
     logging: *logging_defaults
 
   network_guard:
-    image: debian:bookworm-slim
+    image: ${NETWORK_GUARD_IMAGE:-debian:bookworm-slim}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_guard
     restart: unless-stopped
     network_mode: host
@@ -84,17 +86,9 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_POSTGRES:-seccomp:./seccomp/postgres.json}"
       - "${CORE_DATA_APPARMOR_POSTGRES:-apparmor:unconfined}"
-    build:
-      context: .
-      dockerfile: postgres/Dockerfile
-      args:
-        PG_VERSION: ${PG_VERSION}
-        AGE_VERSION: ${AGE_VERSION:-master}
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
-    env_file:
-      - .env
     environment:
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
@@ -234,11 +228,12 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
       - "${CORE_DATA_APPARMOR_VALKEY:-apparmor:unconfined}"
-    image: valkey/valkey:9-alpine
+    image: ${VALKEY_IMAGE:-valkey/valkey:9-alpine}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
     profiles:
       - valkey
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     environment:
       VALKEY_PORT: ${VALKEY_PORT}
       VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}
@@ -268,7 +263,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_RABBITMQ:-seccomp:./seccomp/docker-default.json}"
       - "${CORE_DATA_APPARMOR_RABBITMQ:-apparmor:unconfined}"
-    image: rabbitmq:4.2-management-alpine
+    image: ${RABBITMQ_IMAGE:-rabbitmq:4.2-management-alpine}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
     profiles:
@@ -310,11 +305,12 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
       - "${CORE_DATA_APPARMOR_PGBOUNCER:-apparmor:unconfined}"
-    image: bitnamilegacy/pgbouncer:1.24.1
+    image: ${PGBOUNCER_IMAGE:-bitnamilegacy/pgbouncer:1.24.1}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
     profiles:
       - pgbouncer
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     depends_on:
       network_probe:
         condition: service_completed_successfully
@@ -362,7 +358,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_MEMCACHED:-seccomp:./seccomp/memcached.json}"
       - "${CORE_DATA_APPARMOR_MEMCACHED:-apparmor:unconfined}"
-    image: memcached:1.6-alpine
+    image: ${MEMCACHED_IMAGE:-memcached:1.6-alpine}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped
     profiles:

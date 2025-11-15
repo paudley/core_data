@@ -26,7 +26,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     AGE_VERSION=${AGE_VERSION}
 
 # Install dependencies, extensions, and tooling required by the platform
-RUN set -eux; \
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN set -euxo pipefail; \
     apt-get update; \
     apt-get install -y --no-install-recommends ca-certificates curl gnupg openssl; \
     echo "deb http://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
@@ -43,21 +45,21 @@ RUN set -eux; \
       libxml2-dev \
       libxslt1-dev \
       libreadline-dev \
-      postgresql-server-dev-${PG_MAJOR} \
-      postgresql-${PG_MAJOR}-pgaudit \
-      postgresql-${PG_MAJOR}-pgvector \
-      postgresql-${PG_MAJOR}-postgis-3 \
-      postgresql-${PG_MAJOR}-postgis-3-scripts \
-      postgresql-${PG_MAJOR}-cron \
-      postgresql-${PG_MAJOR}-pgrouting \
-      postgresql-${PG_MAJOR}-partman \
-      postgresql-${PG_MAJOR}-repack \
-      postgresql-${PG_MAJOR}-hypopg \
-      postgresql-${PG_MAJOR}-pgtap \
+      "postgresql-server-dev-${PG_MAJOR}" \
+      "postgresql-${PG_MAJOR}-pgaudit" \
+      "postgresql-${PG_MAJOR}-pgvector" \
+      "postgresql-${PG_MAJOR}-postgis-3" \
+      "postgresql-${PG_MAJOR}-postgis-3-scripts" \
+      "postgresql-${PG_MAJOR}-cron" \
+      "postgresql-${PG_MAJOR}-pgrouting" \
+      "postgresql-${PG_MAJOR}-partman" \
+      "postgresql-${PG_MAJOR}-repack" \
+      "postgresql-${PG_MAJOR}-hypopg" \
+      "postgresql-${PG_MAJOR}-pgtap" \
       postgresql-contrib \
       pgbadger \
       strace \
-    pgbackrest; \
+      pgbackrest; \
     rm -rf /var/lib/apt/lists/*;
 
 # Recreate postgres system user with operator-selected UID/GID and home

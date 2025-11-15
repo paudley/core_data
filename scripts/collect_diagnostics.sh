@@ -83,4 +83,23 @@ for name in ${containers}; do
 	collect_container_artifacts "${name}"
 done
 
+echo "[diagnostics] Capturing docker compose status" >&2
+docker compose ps --all >"${output_dir}/docker-compose-ps.txt" 2>/dev/null || true
+docker compose logs >"${output_dir}/docker-compose.log" 2>/dev/null || true
+docker ps -a >"${output_dir}/docker-ps-all.txt" 2>/dev/null || true
+docker stats --no-stream >"${output_dir}/docker-stats.txt" 2>/dev/null || true
+
+echo "[diagnostics] Capturing Postgres runtime details" >&2
+{
+	set -euo pipefail
+	echo "=== postmaster.pid ==="
+	docker compose exec -T postgres cat /var/lib/postgresql/data/postmaster.pid 2>/dev/null || echo "missing postmaster.pid"
+	echo
+	echo "=== pg_ctl status ==="
+	docker compose exec -T postgres pg_ctl -D /var/lib/postgresql/data status 2>&1 || true
+	echo
+	echo "=== recent postgres logs ==="
+	docker compose exec -T postgres bash -lc 'ls /var/lib/postgresql/data/log/*postgresql*.log | tail -n 1 | xargs tail -n 200' 2>/dev/null || true
+} >"${output_dir}/postgres-runtime.txt" 2>/dev/null || true
+
 echo "[diagnostics] Wrote troubleshooting bundle to ${output_dir} (${timestamp})."

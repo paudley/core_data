@@ -485,6 +485,7 @@ config_drift_report() {
 	local drift=0
 	compose_exec bash -lc "envsubst < /opt/core_data/conf/postgresql.conf.tpl > /tmp/core_data_expected_postgresql.conf"
 	compose_exec bash -lc "envsubst < /opt/core_data/conf/pg_hba.conf.tpl > /tmp/core_data_expected_pg_hba.conf"
+	# shellcheck disable=SC2016
 	compose_exec bash -lc '
     if [[ -d /opt/core_data/conf/pg_hba.d ]]; then
       shopt -s nullglob

@@ -152,8 +152,8 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
    ./scripts/manage.sh psql -c 'SELECT 1;'
    ```
 
-```
-4. Explore the CLI: `./scripts/manage.sh help`
+4. Explore the CLI: `./scripts/manage.sh help` for grouped commands (lifecycle, CI, backups, audits, extensions, cache/messaging, security).
+5. CI runners: see `CI_USAGE.md` for the pipelines-focused flow (attestations, `ci-up`/`ci-down`, pytest markers).
 
 ## Project Ethos
 We optimize for **data infrastructure as code ➜ automated admin ➜ human-friendly ➜ best-practices by default (including security and performance)**. In practice that means:
@@ -199,6 +199,16 @@ core\_data/
 
 ```
 If you override the named volumes with host bind mounts, keep those directories out of version control—they contain live cluster state and pgBackRest archives.
+
+## CI Workflow
+
+Use the dedicated CI helpers when you need to spin up the published stack inside automation:
+
+1. `./scripts/manage.sh ci-verify --env-file ci.env.example --require-attestation` confirms Docker is available, checks disk/port prerequisites, and verifies that every referenced image carries a recent attestation.
+2. `./scripts/manage.sh ci-up --env-file ci.env.example --output ./backups/ci-output.json` bootstraps secrets/network allow lists, pulls/warms the prebuilt images, and emits a JSON manifest with connection details for downstream jobs.
+3. `./scripts/manage.sh ci-down --volumes --prune-data --prune-secrets` stops containers and removes ephemeral state when the pipeline finishes.
+
+`ci.env.example` shows the minimal environment required for this workflow, and `docs/examples/ci-workflow.md` includes a ready-to-copy GitHub Actions job that wires everything together.
 
 ## Management CLI
 `./scripts/manage.sh` is the operator entry point. Frequently used commands:

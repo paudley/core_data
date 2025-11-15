@@ -59,8 +59,8 @@ configure_database() {
 		fi
 	done
 
-	psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" <<SQL
-CREATE SCHEMA IF NOT EXISTS core_data_admin AUTHORIZATION ${POSTGRES_USER};
+psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" <<SQL
+CREATE SCHEMA IF NOT EXISTS core_data_admin AUTHORIZATION "${POSTGRES_USER}";
 
 CREATE OR REPLACE FUNCTION core_data_admin.refresh_pg_squeeze_targets()
 RETURNS void

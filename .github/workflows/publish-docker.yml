@@ -39,12 +39,11 @@ jobs:
       - name: Extract version information
         id: version
         run: |
-          # Get the tag name
-          TAG_NAME=${GITHUB_REF#refs/tags/}
-          echo "tag=${TAG_NAME}" >> $GITHUB_OUTPUT
+          TAG_NAME="${GITHUB_REF#refs/tags/}"
+          {
+            echo "tag=${TAG_NAME}"
+          } >>"$GITHUB_OUTPUT"
 
-          # Extract PostgreSQL version and semantic version from hybrid tag
-          # Example: 17.2-v1.0.0 -> PG_VERSION=17.2, SEM_VERSION=1.0.0
           if [[ $TAG_NAME =~ ^([0-9]+\.[0-9]+)-v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             PG_VERSION="${BASH_REMATCH[1]}"
             SEM_VERSION="${BASH_REMATCH[2]}"
@@ -52,14 +51,16 @@ jobs:
             SEM_MAJOR="${SEM_VERSION%%.*}"
             SEM_MINOR="${SEM_VERSION%.*}"
 
-            echo "pg_version=${PG_VERSION}" >> $GITHUB_OUTPUT
-            echo "pg_major=${PG_MAJOR}" >> $GITHUB_OUTPUT
-            echo "sem_version=${SEM_VERSION}" >> $GITHUB_OUTPUT
-            echo "sem_major=${SEM_MAJOR}" >> $GITHUB_OUTPUT
-            echo "sem_minor=${SEM_MINOR}" >> $GITHUB_OUTPUT
-            echo "is_hybrid=true" >> $GITHUB_OUTPUT
+            {
+              echo "pg_version=${PG_VERSION}"
+              echo "pg_major=${PG_MAJOR}"
+              echo "sem_version=${SEM_VERSION}"
+              echo "sem_major=${SEM_MAJOR}"
+              echo "sem_minor=${SEM_MINOR}"
+              echo "is_hybrid=true"
+            } >>"$GITHUB_OUTPUT"
           else
-            echo "is_hybrid=false" >> $GITHUB_OUTPUT
+            echo "is_hybrid=false" >>"$GITHUB_OUTPUT"
           fi
 
       - name: Extract Docker metadata
@@ -100,6 +101,27 @@ jobs:
           build-args: |
             PG_VERSION=${{ steps.version.outputs.pg_major || '17' }}
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.6.0
+
+      - name: Sign image with cosign (keyless)
+        env:
+          COSIGN_YES: "true"
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          cosign sign "${image_ref}"
+
+      - name: Verify cosign signature
+        env:
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "${image_ref}"
+
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
@@ -124,23 +146,33 @@ jobs:
 
       - name: Output image information
         run: |
-          echo "### 🐳 Docker Image Published" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Image:** \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Digest:** \`${{ steps.push.outputs.digest }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Verify attestation:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "gh attestation verify oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} --owner ${{ github.repository_owner }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Pull image:**" >> $GITHUB_STEP_SUMMARY
-          echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat <<'EOF' | sed 's/^[[:space:]]\{1,\}//' >>"$GITHUB_STEP_SUMMARY"
+            ### 🐳 Docker Image Published
+
+            **Image:** `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}`
+
+            **Digest:** `${{ steps.push.outputs.digest }}`
+
+            **Tags:**
+            ```
+            ${{ steps.meta.outputs.tags }}
+            ```
+
+            **Verify attestation:**
+            ```bash
+            gh attestation verify oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} --owner ${{ github.repository_owner }}
+            ```
+
+            **Verify signature (cosign):**
+            ```bash
+            cosign verify \
+              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+            ```
+
+            **Pull image:**
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            ```
+          EOF

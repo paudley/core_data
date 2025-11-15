@@ -11,155 +11,33 @@ on:
   pull_request:
 
 jobs:
-  smoke:
-    name: Smoke (${{ matrix.profile_name }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - profile_name: full
-            compose_profiles: "valkey,pgbouncer,memcached"
-          - profile_name: minimal
-            compose_profiles: ""
-    env:
-      TEST_COMPOSE_PROFILES: ${{ matrix.compose_profiles }}
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache uv
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v2
-
-      - name: Sync dependencies
-        run: uv sync --dev
-
-      - name: Generate .env and secrets
-        run: ./scripts/manage.sh create-env --non-interactive --force
-
-      - name: Preflight stack bring-up
-        run: |
-          set -euo pipefail
-          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          ./scripts/manage.sh build-image
-          ./scripts/manage.sh up
-
-      - name: Run core_data smoke workflow
-        run: uv run python -m pytest -k full_workflow
-
-      - name: Docker diagnostics
-        if: failure()
-        run: |
-          docker ps -a
-          docker compose logs || true
-
-      - name: Collect diagnostics bundle
-        if: failure()
-        run: ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}
-
-      - name: Upload diagnostics bundle
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics-smoke-${{ matrix.profile_name }}
-          path: diagnostics-smoke-${{ matrix.profile_name }}
-
-      - name: Upload generated backups
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backups-${{ matrix.profile_name }}
-          path: backups
-          if-no-files-found: ignore
-
-  markers:
-    name: Marker (${{ matrix.marker }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        marker: [security, backup, extensions, pool, lint, config]
-    env:
-      TEST_COMPOSE_PROFILES: "valkey,pgbouncer,memcached"
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Cache uv
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml', 'uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v2
-
-      - name: Install shellcheck
-        if: matrix.marker == 'lint'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y shellcheck
-
-      - name: Sync dependencies
-        run: uv sync --dev
-
-      - name: Generate .env and secrets
-        run: ./scripts/manage.sh create-env --non-interactive --force
-
-      - name: Preflight stack bring-up
-        run: |
-          set -euo pipefail
-          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
-          trap cleanup EXIT
-          ./scripts/manage.sh build-image
-          ./scripts/manage.sh up
-
-      - name: Run marker tests
-        run: uv run python -m pytest -m ${{ matrix.marker }}
-
-      - name: Docker diagnostics
-        if: failure()
-        run: |
-          docker ps -a
-          docker compose logs || true
-
-      - name: Collect diagnostics bundle
-        if: failure()
-        run: ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}
-
-      - name: Upload diagnostics bundle
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: diagnostics-marker-${{ matrix.marker }}
-          path: diagnostics-marker-${{ matrix.marker }}
   docker-build:
     name: Validate Docker Build
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
+
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Export build env
+        run: |
+          set -a
+          source .env
+          set +a
+          {
+            echo "POSTGRES_UID=${POSTGRES_UID:-$(id -u)}"
+            echo "POSTGRES_GID=${POSTGRES_GID:-$(id -g)}"
+            echo "POSTGRES_RUNTIME_USER=${POSTGRES_RUNTIME_USER:-postgres}"
+            echo "POSTGRES_RUNTIME_GECOS=${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}"
+            echo "POSTGRES_RUNTIME_HOME=${POSTGRES_RUNTIME_HOME:-/home/postgres}"
+            echo "PG_VERSION=${PG_VERSION:-17}"
+            echo "AGE_VERSION=${AGE_VERSION:-master}"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -175,20 +53,40 @@ jobs:
           tags: core-data-postgres:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            CORE_UID=${{ env.POSTGRES_UID }}
+            CORE_GID=${{ env.POSTGRES_GID }}
+            CORE_USERNAME=${{ env.POSTGRES_RUNTIME_USER }}
+            CORE_GECOS=${{ env.POSTGRES_RUNTIME_GECOS }}
+            CORE_HOME=${{ env.POSTGRES_RUNTIME_HOME }}
+            PG_VERSION=${{ env.PG_VERSION }}
+            AGE_VERSION=${{ env.AGE_VERSION }}
+
+      - name: Tag built image for compose
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          docker tag core-data-postgres:test "${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}"
 
       - name: Smoke-test Docker image
         env:
           PGPASSWORD: thinice-test
         run: |
           set -euo pipefail
+          set -a
+          source .env
+          set +a
           cleanup() { docker rm -f postgres-smoke >/dev/null 2>&1 || true; }
           trap cleanup EXIT
+          image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}"
           docker run -d --name postgres-smoke \
             -e POSTGRES_USER=thinice-test \
             -e POSTGRES_PASSWORD=thinice-test \
             -e POSTGRES_DB=thinice-test \
             -e CORE_DATA_SKIP_CONFIG_RENDER=1 \
-            core-data-postgres:test
+            "${image}"
           tries=0
           max_tries=150
           until docker exec postgres-smoke pg_isready -h localhost -U thinice-test >/dev/null 2>&1; do
@@ -206,6 +104,20 @@ jobs:
         if: always()
         run: docker rm -f postgres-smoke >/dev/null 2>&1 || true
 
+      - name: Save Postgres image artifact
+        run: |
+          set -euo pipefail
+          set -a
+          source .env
+          set +a
+          docker save "${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}" -o postgres-image.tar
+
+      - name: Upload Postgres image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image.tar
+
       - name: Collect diagnostics bundle
         if: failure()
         run: ./scripts/collect_diagnostics.sh --output diagnostics-docker-build
@@ -222,3 +134,254 @@ jobs:
         with:
           dockerfile: postgres/Dockerfile
           config: .hadolint.yaml
+
+  smoke:
+    name: Smoke (${{ matrix.profile_name }})
+    runs-on: ubuntu-latest
+    needs:
+      - docker-build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile_name: full
+            compose_profiles: "valkey,pgbouncer,memcached"
+          - profile_name: minimal
+            compose_profiles: ""
+    env:
+      TEST_COMPOSE_PROFILES: ${{ matrix.compose_profiles }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
+
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Download Postgres image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image
+
+      - name: Load Postgres image artifact
+        run: docker load --input postgres-image/postgres-image.tar
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-3.12-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-3.12-
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Preflight stack bring-up
+        id: bringup-smoke
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          if ! ./scripts/manage.sh up; then
+            mkdir -p bringup-logs
+            docker compose logs postgres | tee bringup-logs/postgres.log || true
+            docker compose logs pgbouncer | tee bringup-logs/pgbouncer.log || true
+            docker compose logs valkey | tee bringup-logs/valkey.log || true
+            docker compose logs rabbitmq | tee bringup-logs/rabbitmq.log || true
+            exit 1
+          fi
+
+      - name: Run core_data smoke workflow
+        run: uv run python -m pytest -k full_workflow --junitxml=report-smoke-${{ matrix.profile_name }}.xml
+
+      - name: Collect docker diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics-smoke-${{ matrix.profile_name }}
+          docker ps -a > diagnostics-smoke-${{ matrix.profile_name }}/docker-ps.txt
+          docker compose logs > diagnostics-smoke-${{ matrix.profile_name }}/docker-compose.log || true
+          ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}/bundle || true
+
+      - name: Upload diagnostics bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-smoke-${{ matrix.profile_name }}
+          path: diagnostics-smoke-${{ matrix.profile_name }}
+
+      - name: Upload generated backups
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backups-${{ matrix.profile_name }}
+          path: backups
+          if-no-files-found: ignore
+
+      - name: Upload smoke JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-smoke-${{ matrix.profile_name }}
+          path: report-smoke-${{ matrix.profile_name }}.xml
+      - name: Publish smoke summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const profile = process.env.MATRIX_PROFILE;
+            const reportPath = `report-smoke-${profile}.xml`;
+            if (!fs.existsSync(reportPath)) {
+              core.warning(`JUnit report not found at ${reportPath}`);
+            } else {
+              const report = fs.readFileSync(reportPath, 'utf8');
+              core.summary
+                .addHeading(`Smoke (${profile})`)
+                .addCodeBlock(report, 'xml')
+                .write();
+            }
+        env:
+          MATRIX_PROFILE: ${{ matrix.profile_name }}
+
+      - name: Upload bring-up logs
+        if: failure() && steps.bringup-smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bringup-logs-${{ matrix.profile_name }}
+          path: bringup-logs
+
+  markers:
+    name: Marker (${{ matrix.marker }})
+    runs-on: ubuntu-latest
+    needs:
+      - docker-build
+    strategy:
+      fail-fast: false
+      matrix:
+        marker: [security, backup, extensions, pool, pool_heavy, lint, config, ci]
+    env:
+      TEST_COMPOSE_PROFILES: "valkey,pgbouncer,memcached"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
+
+      - name: Generate .env and secrets
+        run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Download Postgres image artifact
+        if: matrix.marker != 'ci'
+        uses: actions/download-artifact@v4
+        with:
+          name: postgres-image
+          path: postgres-image
+
+      - name: Load Postgres image artifact
+        if: matrix.marker != 'ci'
+        run: docker load --input postgres-image/postgres-image.tar
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-3.12-${{ hashFiles('pyproject.toml', 'uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-3.12-
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Install shellcheck
+        if: matrix.marker == 'lint'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Sync dependencies
+        run: uv sync --dev
+
+      - name: Preflight stack bring-up
+        if: matrix.marker != 'ci'
+        id: bringup-marker
+        run: |
+          set -euo pipefail
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+          if ! ./scripts/manage.sh up; then
+            mkdir -p bringup-logs
+            docker compose logs postgres | tee bringup-logs/postgres.log || true
+            docker compose logs pgbouncer | tee bringup-logs/pgbouncer.log || true
+            docker compose logs valkey | tee bringup-logs/valkey.log || true
+            docker compose logs rabbitmq | tee bringup-logs/rabbitmq.log || true
+            exit 1
+          fi
+
+      - name: Run marker tests
+        run: uv run python -m pytest -m ${{ matrix.marker }} --junitxml=report-marker-${{ matrix.marker }}.xml
+
+      - name: Collect docker diagnostics
+        if: matrix.marker != 'ci'
+        run: |
+          mkdir -p diagnostics-marker-${{ matrix.marker }}
+          docker ps -a > diagnostics-marker-${{ matrix.marker }}/docker-ps.txt
+          docker compose logs > diagnostics-marker-${{ matrix.marker }}/docker-compose.log || true
+          ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}/bundle || true
+
+      - name: Upload diagnostics bundle
+        if: matrix.marker != 'ci'
+        uses: actions/upload-artifact@v4
+        with:
+          name: diagnostics-marker-${{ matrix.marker }}
+          path: diagnostics-marker-${{ matrix.marker }}
+
+      - name: Upload bring-up logs
+        if: matrix.marker != 'ci' && failure() && steps.bringup-marker.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bringup-logs-${{ matrix.marker }}
+          path: bringup-logs
+
+      - name: Upload marker JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-marker-${{ matrix.marker }}
+          path: report-marker-${{ matrix.marker }}.xml
+
+      - name: Publish marker summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const reportPath = `report-marker-${process.env.MATRIX_MARKER}.xml`;
+            if (!fs.existsSync(reportPath)) {
+              core.warning(`JUnit report not found at ${reportPath}`);
+            } else {
+              const report = fs.readFileSync(reportPath, 'utf8');
+              core.summary
+                .addHeading(`Marker (${process.env.MATRIX_MARKER})`)
+                .addCodeBlock(report, 'xml')
+                .write();
+            }
+        env:
+          MATRIX_MARKER: ${{ matrix.marker }}

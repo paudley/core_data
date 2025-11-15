@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 * Default timezone now falls back to UTC when `TZ` is unset, preventing PostgreSQL from rendering `timezone = ''` and failing to start. (#31)
+* Allow PostgreSQL superuser names with hyphens by quoting the role in init scripts when creating the `core_data_admin` schema.
+* Fixed `./scripts/manage.sh backup` so it no longer treats the command name as an argument, restoring pgBackRest backup/verify flows.
 
 ## [17.2-v1.0.0] - TBD
 
