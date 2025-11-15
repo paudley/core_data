@@ -161,9 +161,22 @@ ensure_bootstrap_complete() {
 		return 0
 	fi
 	echo "[core_data] WARNING: bootstrap sentinel '${sentinel}' missing inside container; verifying cluster state." >&2
-	if compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-		psql --host localhost --username "${POSTGRES_SUPERUSER:-postgres}" \
-		--dbname "${POSTGRES_DB:-postgres}" --tuples-only --command "SELECT 1;" >/dev/null 2>&1; then
+	local verify_cmd
+	verify_cmd=$(
+		cat <<'EOF'
+set -euo pipefail
+PASSWORD_SOURCE="${POSTGRES_SUPERUSER_PASSWORD:-}"
+if [[ -z "${PASSWORD_SOURCE}" && -r "/run/secrets/postgres_superuser_password" ]]; then
+	PASSWORD_SOURCE=$(<"/run/secrets/postgres_superuser_password")
+fi
+if [[ -z "${PASSWORD_SOURCE}" ]]; then
+	exit 2
+fi
+PGPASSWORD="${PASSWORD_SOURCE}" psql --host localhost --username "${POSTGRES_SUPERUSER:-postgres}" \
+	--dbname "${POSTGRES_DB:-postgres}" --tuples-only --command "SELECT 1;"
+EOF
+	)
+	if compose_exec bash -lc "${verify_cmd}" >/dev/null 2>&1; then
 		if compose_exec bash -lc "touch '${sentinel}'" >/dev/null 2>&1; then
 			echo "[core_data] Re-created bootstrap sentinel for existing data directory." >&2
 			return 0

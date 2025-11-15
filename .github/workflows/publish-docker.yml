@@ -107,6 +107,7 @@ jobs:
       - name: Sign image with cosign (keyless)
         env:
           COSIGN_YES: "true"
+          COSIGN_EXPERIMENTAL: "1"
         run: |
           image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
           cosign sign "${image_ref}"
