@@ -45,7 +45,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
 - Images are signed keylessly with cosign during publish. Verify using the Actions OIDC issuer:
   ```bash
   cosign verify \
-    --certificate-identity-regexp '^https://github.com/paudley/core_data/actions/runs/[0-9]+$' \
+    --certificate-identity "https://github.com/paudley/core_data/.github/workflows/publish-docker.yml@refs/tags/<tag>" \
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     ghcr.io/paudley/core_data/postgres@<digest>
   ```
