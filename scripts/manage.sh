@@ -418,26 +418,22 @@ cmd_apparmor_load() {
 ensure_compose
 
 COMMAND=${CORE_DATA_SELECTED_COMMAND:-help}
+shift || true
 
 case "${COMMAND}" in
 create-env)
-	shift
 	bash "${SCRIPT_DIR}/create_env.sh" "$@"
 	;;
 bootstrap-ci)
-	shift
 	cmd_bootstrap_ci "$@"
 	;;
 ci-verify)
-	shift
 	cmd_ci_verify "$@"
 	;;
 ci-up)
-	shift
 	cmd_ci_up "$@"
 	;;
 ci-down)
-	shift
 	cmd_ci_down "$@"
 	;;
 build-image)

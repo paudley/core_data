@@ -229,6 +229,7 @@ def manage_env(tmp_path_factory):
     workdir = tmp_path_factory.mktemp("core_data_ci")
     env_file = ROOT / ".env.test"
 
+    postgres_port = _find_free_port()
     pghero_port = _find_free_port()
     valkey_host_port = _find_free_port()
     pgbouncer_host_port = _find_free_port()
@@ -244,6 +245,7 @@ def manage_env(tmp_path_factory):
     subnet_a = int(uuid.uuid4().hex[:2], 16)
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
+        "POSTGRES_PORT": str(postgres_port),
         "PGHERO_PORT": str(pghero_port),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
