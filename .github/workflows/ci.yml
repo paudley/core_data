@@ -266,9 +266,9 @@ jobs:
         id: bringup-marker
         run: |
           set -euo pipefail
-          cleanup() { ./scripts.manage.sh down >/dev/null 2>&1 || true; }
+          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          if ! ./scripts.manage.sh up; then
+          if ! ./scripts/manage.sh up; then
             mkdir -p bringup-logs
             docker compose logs postgres | tee bringup-logs/postgres.log || true
             docker compose logs pgbouncer | tee bringup-logs/pgbouncer.log || true
