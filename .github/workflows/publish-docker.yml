@@ -118,7 +118,7 @@ jobs:
         run: |
           image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
           cosign verify \
-            --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+            --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/publish-docker.yml@${{ github.ref }}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
             "${image_ref}"
 
@@ -166,7 +166,7 @@ jobs:
             **Verify signature (cosign):**
             ```bash
             cosign verify \
-              --certificate-identity-regexp "^https://github.com/${{ github.repository }}/actions/runs/[0-9]+$" \
+              --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/publish-docker.yml@${{ github.ref }}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
               oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
             ```
