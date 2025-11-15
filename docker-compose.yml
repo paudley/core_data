@@ -44,17 +44,19 @@ services:
       RABBITMQ_DATA_MOUNT: ${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
       RABBITMQ_UID: ${RABBITMQ_UID:-999}
       RABBITMQ_GID: ${RABBITMQ_GID:-999}
+      SECRETS_MOUNT: /opt/core_data/secrets
     command:
       [
         "/bin/sh",
         "-c",
-        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT} && chown -R ${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999} $${RABBITMQ_DATA_MOUNT}"
+        "chown -R ${POSTGRES_UID:-999}:${POSTGRES_GID:-999} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT} $${SECRETS_MOUNT} && chown -R ${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999} $${RABBITMQ_DATA_MOUNT}"
       ]
     volumes:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./secrets:/opt/core_data/secrets
     networks:
       - core_data
     logging: *logging_defaults

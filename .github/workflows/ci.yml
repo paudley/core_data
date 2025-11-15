@@ -18,8 +18,26 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
+
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
+
+      - name: Export build env
+        run: |
+          set -a
+          source .env
+          set +a
+          {
+            echo "POSTGRES_UID=${POSTGRES_UID:-$(id -u)}"
+            echo "POSTGRES_GID=${POSTGRES_GID:-$(id -g)}"
+            echo "POSTGRES_RUNTIME_USER=${POSTGRES_RUNTIME_USER:-postgres}"
+            echo "POSTGRES_RUNTIME_GECOS=${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}"
+            echo "POSTGRES_RUNTIME_HOME=${POSTGRES_RUNTIME_HOME:-/home/postgres}"
+            echo "PG_VERSION=${PG_VERSION:-17}"
+            echo "AGE_VERSION=${AGE_VERSION:-master}"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -35,6 +53,14 @@ jobs:
           tags: core-data-postgres:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          build-args: |
+            CORE_UID=${{ env.POSTGRES_UID }}
+            CORE_GID=${{ env.POSTGRES_GID }}
+            CORE_USERNAME=${{ env.POSTGRES_RUNTIME_USER }}
+            CORE_GECOS=${{ env.POSTGRES_RUNTIME_GECOS }}
+            CORE_HOME=${{ env.POSTGRES_RUNTIME_HOME }}
+            PG_VERSION=${{ env.PG_VERSION }}
+            AGE_VERSION=${{ env.AGE_VERSION }}
 
       - name: Tag built image for compose
         run: |
@@ -127,6 +153,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
 
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
@@ -221,6 +250,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Reset secrets directory
+        run: rm -rf ./secrets && mkdir -p ./secrets
 
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
