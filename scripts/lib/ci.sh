@@ -170,15 +170,21 @@ if workflow_path:
 if workflow_ref:
     print(f"workflow_ref={workflow_ref}")
 PY
-	); then
-		rm -f "${tmp_json}"
+	) 2>"${parse_err}"; then
+		local py_err_msg
+		py_err_msg=$(<"${parse_err}")
+		rm -f "${tmp_json}" "${parse_err}"
 		if [[ "${enforce}" == "1" ]]; then
 			echo "[ci] attestation verification failed for ${image_ref}" >&2
+			if [[ -n "${py_err_msg}" ]]; then
+				echo "${py_err_msg}" >&2
+			fi
 			return 1
 		fi
-		ci_log "warning: attestation verification failed for ${image_ref}; continuing because enforcement disabled."
+		ci_log "warning: attestation verification failed for ${image_ref}${py_err_msg:+: ${py_err_msg}}; continuing because enforcement disabled."
 		return 0
 	fi
+	rm -f "${parse_err}"
 	rm -f "${tmp_json}"
 	local subject_name=""
 	local subject_digest=""
@@ -190,7 +196,7 @@ PY
 	local workflow_ref=""
 	while IFS= read -r line; do
 		local key=${line%%=*}
-		local value=${line#*=}
+		local value=${line#"${key}="}
 		case "${key}" in
 		subject_name)
 			subject_name=${value}
