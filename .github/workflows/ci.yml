@@ -235,6 +235,31 @@ jobs:
         with:
           name: report-smoke-${{ matrix.profile_name }}
           path: report-smoke-${{ matrix.profile_name }}.xml
+      - name: Publish smoke summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const profile = process.env.MATRIX_PROFILE;
+            const reportPath = `report-smoke-${profile}.xml`;
+            if (!fs.existsSync(reportPath)) {
+              core.warning(`JUnit report not found at ${reportPath}`);
+            } else {
+              const report = fs.readFileSync(reportPath, 'utf8');
+              core.summary
+                .addHeading(`Smoke (${profile})`)
+                .addCodeBlock(report, 'xml')
+                .write();
+            }
+        env:
+          MATRIX_PROFILE: ${{ matrix.profile_name }}
+      - name: Upload bring-up logs
+        if: failure() && steps.bringup-smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bringup-logs-${{ matrix.profile_name }}
+          path: bringup-logs
 
   markers:
     name: Marker (${{ matrix.marker }})
@@ -340,35 +365,21 @@ jobs:
         with:
           name: report-marker-${{ matrix.marker }}
           path: report-marker-${{ matrix.marker }}.xml
-      - name: Publish smoke summary
-        if: always()
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const report = fs.readFileSync(`report-smoke-${process.env.MATRIX_PROFILE}.xml`, 'utf8');
-            core.summary
-              .addHeading(`Smoke (${process.env.MATRIX_PROFILE})`)
-              .addCodeBlock(report, 'xml')
-              .write();
-        env:
-          MATRIX_PROFILE: ${{ matrix.profile_name }}
       - name: Publish marker summary
         if: always()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const report = fs.readFileSync(`report-marker-${process.env.MATRIX_MARKER}.xml`, 'utf8');
-            core.summary
-              .addHeading(`Marker (${process.env.MATRIX_MARKER})`)
-              .addCodeBlock(report, 'xml')
-              .write();
+            const reportPath = `report-marker-${process.env.MATRIX_MARKER}.xml`;
+            if (!fs.existsSync(reportPath)) {
+              core.warning(`JUnit report not found at ${reportPath}`);
+            } else {
+              const report = fs.readFileSync(reportPath, 'utf8');
+              core.summary
+                .addHeading(`Marker (${process.env.MATRIX_MARKER})`)
+                .addCodeBlock(report, 'xml')
+                .write();
+            }
         env:
           MATRIX_MARKER: ${{ matrix.marker }}
-      - name: Upload bring-up logs
-        if: failure() && steps.bringup-smoke.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: bringup-logs-${{ matrix.profile_name }}
-          path: bringup-logs

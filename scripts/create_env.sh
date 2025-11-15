@@ -213,6 +213,8 @@ uid_choice=$(prompt_default "Container runtime UID" "${user_uid}")
 gid_choice=$(prompt_default "Container runtime GID" "${user_gid}")
 set_env_value POSTGRES_UID "${uid_choice}"
 set_env_value POSTGRES_GID "${gid_choice}"
+set_env_value RABBITMQ_UID "${uid_choice}"
+set_env_value RABBITMQ_GID "${gid_choice}"
 
 runtime_user_default="postgres"
 runtime_user=$(prompt_default "Container runtime username" "${runtime_user_default}")

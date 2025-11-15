@@ -233,6 +233,7 @@ services:
     restart: unless-stopped
     profiles:
       - valkey
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     environment:
       VALKEY_PORT: ${VALKEY_PORT}
       VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}
@@ -309,6 +310,7 @@ services:
     restart: unless-stopped
     profiles:
       - pgbouncer
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     depends_on:
       network_probe:
         condition: service_completed_successfully
