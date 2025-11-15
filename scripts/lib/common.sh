@@ -197,7 +197,7 @@ stabilize_postgres() {
 		sleep 1
 		elapsed=$((elapsed + 1))
 	done
-echo "[core_data] PostgreSQL did not remain stable for ${required_stable}s within ${max_window}s." >&2
+	echo "[core_data] PostgreSQL did not remain stable for ${required_stable}s within ${max_window}s." >&2
 	return 1
 }
 
