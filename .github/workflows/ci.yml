@@ -160,27 +160,33 @@ jobs:
         run: uv sync --dev
 
       - name: Preflight stack bring-up
+        id: bringup-smoke
         run: |
           set -euo pipefail
           cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          ./scripts/manage.sh up
+          if ! ./scripts/manage.sh up; then
+            mkdir -p bringup-logs
+            docker compose logs postgres | tee bringup-logs/postgres.log || true
+            docker compose logs pgbouncer | tee bringup-logs/pgbouncer.log || true
+            docker compose logs valkey | tee bringup-logs/valkey.log || true
+            docker compose logs rabbitmq | tee bringup-logs/rabbitmq.log || true
+            exit 1
+          fi
 
       - name: Run core_data smoke workflow
-        run: uv run python -m pytest -k full_workflow
+        run: uv run python -m pytest -k full_workflow --junitxml=report-smoke-${{ matrix.profile_name }}.xml
 
-      - name: Docker diagnostics
-        if: failure()
+      - name: Collect docker diagnostics
+        if: always()
         run: |
-          docker ps -a
-          docker compose logs || true
-
-      - name: Collect diagnostics bundle
-        if: failure()
-        run: ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}
+          mkdir -p diagnostics-smoke-${{ matrix.profile_name }}
+          docker ps -a > diagnostics-smoke-${{ matrix.profile_name }}/docker-ps.txt
+          docker compose logs > diagnostics-smoke-${{ matrix.profile_name }}/docker-compose.log || true
+          ./scripts/collect_diagnostics.sh --output diagnostics-smoke-${{ matrix.profile_name }}/bundle || true
 
       - name: Upload diagnostics bundle
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: diagnostics-smoke-${{ matrix.profile_name }}
@@ -193,6 +199,13 @@ jobs:
           name: backups-${{ matrix.profile_name }}
           path: backups
           if-no-files-found: ignore
+
+      - name: Upload smoke JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-smoke-${{ matrix.profile_name }}
+          path: report-smoke-${{ matrix.profile_name }}.xml
 
   markers:
     name: Marker (${{ matrix.marker }})
@@ -250,28 +263,80 @@ jobs:
 
       - name: Preflight stack bring-up
         if: matrix.marker != 'ci'
+        id: bringup-marker
         run: |
           set -euo pipefail
-          cleanup() { ./scripts/manage.sh down >/dev/null 2>&1 || true; }
+          cleanup() { ./scripts.manage.sh down >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          ./scripts/manage.sh up
+          if ! ./scripts.manage.sh up; then
+            mkdir -p bringup-logs
+            docker compose logs postgres | tee bringup-logs/postgres.log || true
+            docker compose logs pgbouncer | tee bringup-logs/pgbouncer.log || true
+            docker compose logs valkey | tee bringup-logs/valkey.log || true
+            docker compose logs rabbitmq | tee bringup-logs/rabbitmq.log || true
+            exit 1
+          fi
 
       - name: Run marker tests
-        run: uv run python -m pytest -m ${{ matrix.marker }}
+        run: uv run python -m pytest -m ${{ matrix.marker }} --junitxml=report-marker-${{ matrix.marker }}.xml
 
-      - name: Docker diagnostics
-        if: failure()
+      - name: Collect docker diagnostics
+        if: matrix.marker != 'ci'
         run: |
-          docker ps -a
-          docker compose logs || true
-
-      - name: Collect diagnostics bundle
-        if: failure()
-        run: ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}
+          mkdir -p diagnostics-marker-${{ matrix.marker }}
+          docker ps -a > diagnostics-marker-${{ matrix.marker }}/docker-ps.txt
+          docker compose logs > diagnostics-marker-${{ matrix.marker }}/docker-compose.log || true
+          ./scripts/collect_diagnostics.sh --output diagnostics-marker-${{ matrix.marker }}/bundle || true
 
       - name: Upload diagnostics bundle
-        if: failure()
+        if: matrix.marker != 'ci'
         uses: actions/upload-artifact@v4
         with:
           name: diagnostics-marker-${{ matrix.marker }}
           path: diagnostics-marker-${{ matrix.marker }}
+
+      - name: Upload bring-up logs
+        if: matrix.marker != 'ci' && failure() && steps.bringup-marker.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bringup-logs-${{ matrix.marker }}
+          path: bringup-logs
+
+      - name: Upload marker JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-marker-${{ matrix.marker }}
+          path: report-marker-${{ matrix.marker }}.xml
+      - name: Publish smoke summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync(`report-smoke-${process.env.MATRIX_PROFILE}.xml`, 'utf8');
+            core.summary
+              .addHeading(`Smoke (${process.env.MATRIX_PROFILE})`)
+              .addCodeBlock(report, 'xml')
+              .write();
+        env:
+          MATRIX_PROFILE: ${{ matrix.profile_name }}
+      - name: Publish marker summary
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync(`report-marker-${process.env.MATRIX_MARKER}.xml`, 'utf8');
+            core.summary
+              .addHeading(`Marker (${process.env.MATRIX_MARKER})`)
+              .addCodeBlock(report, 'xml')
+              .write();
+        env:
+          MATRIX_MARKER: ${{ matrix.marker }}
+      - name: Upload bring-up logs
+        if: failure() && steps.bringup-smoke.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bringup-logs-${{ matrix.profile_name }}
+          path: bringup-logs
