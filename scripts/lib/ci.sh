@@ -83,7 +83,7 @@ ci_verify_attestation_for_image() {
 	fi
 	local tmp_json
 	local tmp_err
-	local parse_err
+	local parse_err="/dev/null"
 	tmp_json=$(mktemp)
 	tmp_err=$(mktemp)
 	parse_err=$(mktemp)
