@@ -1,11 +1,16 @@
 # syntax=docker/dockerfile:1.7
-FROM bitnamilegacy/pgbouncer:1.24.1
+FROM debian:bookworm-slim
 
 LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
       org.opencontainers.image.description="Core Data PgBouncer with hardened entrypoint"
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends bash netcat-openbsd postgresql-client && \
+    apt-get install -y --no-install-recommends \
+      pgbouncer \
+      bash \
+      netcat-openbsd \
+      postgresql-client \
+      ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /opt/core_data/bin /opt/core_data/docs && chmod 755 /opt/core_data
 COPY README.md SECURITY.md /opt/core_data/docs/
