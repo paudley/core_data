@@ -4,6 +4,8 @@ FROM debian:bookworm-slim
 LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
       org.opencontainers.image.description="Core Data PgBouncer with hardened entrypoint"
 
+ENV DEBIAN_FRONTEND=noninteractive
+
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       pgbouncer \
