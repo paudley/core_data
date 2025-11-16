@@ -8,8 +8,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-      pgbouncer \
       bash \
+      pgbouncer \
       netcat-openbsd \
       postgresql-client \
       ca-certificates && \
