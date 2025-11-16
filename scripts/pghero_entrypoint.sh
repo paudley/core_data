@@ -43,6 +43,7 @@ EOF
 	export NSS_WRAPPER_PASSWD="${tmp_passwd}"
 	export NSS_WRAPPER_GROUP="${tmp_group}"
 	trap 'rm -f "${NSS_WRAPPER_PASSWD:-}" "${NSS_WRAPPER_GROUP:-}"' EXIT
+	echo "[pghero] initialized nss_wrapper (user $(id -u))" >&2
 }
 
 if ! wait_for_password_file; then
@@ -54,6 +55,7 @@ export DATABASE_URL="postgres://${POSTGRES_SUPERUSER}:${PASSWORD}@${POSTGRES_HOS
 export PGHERO_DATABASE_URL="${DATABASE_URL}"
 
 ensure_passwd_entry
+echo "[pghero] LD_PRELOAD target=${LD_PRELOAD:-unset}" >&2
 
 wait_for_database() {
 		attempts=${PGHERO_DB_WAIT_ATTEMPTS:-90}

@@ -19,7 +19,8 @@ RUN apt-get update && \
       git \
       nodejs \
       tzdata \
-      libreadline-dev && \
+      libreadline-dev \
+      libyaml-dev && \
     rm -rf /var/lib/apt/lists/*
 
 RUN gem install bundler pg puma
