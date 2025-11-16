@@ -1,5 +1,6 @@
 # syntax=docker/dockerfile:1.7
-FROM ankane/pghero:4.4.2
+ARG PGHERO_BASE_TAG=latest
+FROM ankane/pghero:${PGHERO_BASE_TAG}
 
 LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
       org.opencontainers.image.description="Core Data PgHero with hardened entrypoint"
