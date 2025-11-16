@@ -11,6 +11,7 @@ RUN apt-get update && \
       bash \
       pgbouncer \
       netcat-openbsd \
+      procps \
       postgresql-client \
       ca-certificates && \
     rm -rf /var/lib/apt/lists/* && \
