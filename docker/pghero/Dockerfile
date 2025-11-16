@@ -5,7 +5,9 @@ LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
       org.opencontainers.image.description="Core Data PgHero with hardened entrypoint"
 
 ENV DEBIAN_FRONTEND=noninteractive \
-    APP_ROOT=/opt/core_data/pghero
+    APP_ROOT=/opt/core_data/pghero \
+    RAILS_ENV=production \
+    RACK_ENV=production
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
@@ -29,9 +31,14 @@ RUN mkdir -p ${APP_ROOT}
 
 WORKDIR ${APP_ROOT}
 
-RUN git clone --depth 1 https://github.com/ankane/pghero.git ${APP_ROOT} && \
-    bundle config set without 'development test' && \
+COPY docker/pghero/app/Gemfile docker/pghero/app/Gemfile.lock ${APP_ROOT}/
+
+RUN bundle config set without 'development test' && \
     bundle install --jobs=4 --retry=3
+
+COPY docker/pghero/app/ ${APP_ROOT}/
+
+RUN DATABASE_URL=nulldb:/// bundle exec rake assets:precompile
 
 RUN mkdir -p /opt/core_data/scripts /opt/core_data/docs && chmod 755 /opt/core_data
 COPY README.md SECURITY.md /opt/core_data/docs/

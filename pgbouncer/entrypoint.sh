@@ -130,6 +130,7 @@ admin_users = ${PGBOUNCER_ADMIN_USERS}
 stats_users = ${PGBOUNCER_STATS_USERS}
 logfile = ${log_dir}/pgbouncer.log
 pidfile = ${run_dir}/pgbouncer.pid
+server_tls_sslmode = ${PGBOUNCER_SERVER_TLS_MODE:-require}
 EOF
 
 cat >"${userlist_path}" <<EOF

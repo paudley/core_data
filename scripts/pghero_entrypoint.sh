@@ -4,6 +4,8 @@
 
 set -eu
 
+APP_ROOT=${APP_ROOT:-/opt/core_data/pghero}
+
 POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
 POSTGRES_DB=${POSTGRES_DB:-postgres}
 POSTGRES_HOST=${POSTGRES_HOST:-postgres}
@@ -78,4 +80,4 @@ wait_for_database() {
 
 wait_for_database
 
-exec bundle exec puma -C /app/config/puma.rb
+exec bundle exec puma -C "${APP_ROOT}/config/puma.rb"
