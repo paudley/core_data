@@ -127,7 +127,7 @@ jobs:
               desc="Firewall enforcement helper for Core Data service ports."
               ;;
             *)
-              title="Core Data ${ { matrix.service } }"
+              title="Core Data ${{ matrix.service }}"
               desc="Core Data stack image."
               ;;
           esac
@@ -142,17 +142,17 @@ jobs:
           PG_VERSION: ${{ steps.version.outputs.pg_major || '17' }}
         run: |
           if [ "${{ matrix.service }}" = "postgres" ]; then
-            cat <<EOF >>"$GITHUB_OUTPUT"
-args<<EOT
-CORE_UID=999
-CORE_GID=999
-CORE_USERNAME=postgres
-CORE_GECOS=Core Data PostgreSQL Administrator
-CORE_HOME=/home/postgres
-PG_VERSION=${PG_VERSION}
-AGE_VERSION=master
-EOT
-EOF
+            {
+              echo "args<<'EOT'"
+              echo "CORE_UID=999"
+              echo "CORE_GID=999"
+              echo "CORE_USERNAME=postgres"
+              echo "CORE_GECOS=Core Data PostgreSQL Administrator"
+              echo "CORE_HOME=/home/postgres"
+              echo "PG_VERSION=${PG_VERSION}"
+              echo "AGE_VERSION=master"
+              echo "EOT"
+            } >>"$GITHUB_OUTPUT"
           else
             echo "args=" >>"$GITHUB_OUTPUT"
           fi
