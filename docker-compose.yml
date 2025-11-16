@@ -170,6 +170,7 @@ services:
       dockerfile: docker/pghero/Dockerfile
     image: ${PGHERO_IMAGE:-ghcr.io/paudley/core_data/pghero:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     restart: unless-stopped
     depends_on:
       postgres:
