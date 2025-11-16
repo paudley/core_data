@@ -1,19 +1,36 @@
 # syntax=docker/dockerfile:1.7
-ARG PGHERO_BASE_TAG=latest
-FROM ankane/pghero:${PGHERO_BASE_TAG}
+FROM ruby:3.3-slim
 
 LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
       org.opencontainers.image.description="Core Data PgHero with hardened entrypoint"
 
-RUN apk add --no-cache curl build-base cmake && \
-    curl -fsSL https://ftp.samba.org/pub/cwrap/nss_wrapper-1.1.16.tar.gz -o /tmp/nss_wrapper.tar.gz && \
-    tar -xzf /tmp/nss_wrapper.tar.gz -C /tmp && \
-    mkdir -p /tmp/nss_wrapper-build && \
-    cd /tmp/nss_wrapper-build && \
-    cmake /tmp/nss_wrapper-* && \
-    make && make install && \
-    cd / && rm -rf /tmp/nss_wrapper* /tmp/nss_wrapper-build /tmp/nss_wrapper.tar.gz && \
-    apk del build-base cmake curl
+ENV DEBIAN_FRONTEND=noninteractive \
+    APP_ROOT=/opt/core_data/pghero
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+      curl \
+      ca-certificates \
+      build-essential \
+      pkg-config \
+      libssl-dev \
+      libpq-dev \
+      libnss-wrapper \
+      git \
+      nodejs \
+      tzdata \
+      libreadline-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN gem install bundler pg puma
+
+RUN mkdir -p ${APP_ROOT}
+
+WORKDIR ${APP_ROOT}
+
+RUN git clone --depth 1 https://github.com/ankane/pghero.git ${APP_ROOT} && \
+    bundle config set without 'development test' && \
+    bundle install --jobs=4 --retry=3
 
 RUN mkdir -p /opt/core_data/scripts /opt/core_data/docs && chmod 755 /opt/core_data
 COPY README.md SECURITY.md /opt/core_data/docs/

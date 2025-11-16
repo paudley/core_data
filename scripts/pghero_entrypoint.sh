@@ -39,7 +39,7 @@ EOF
 	cat <<EOF >>"${tmp_group}"
 pghero:x:$(id -g):
 EOF
-	export LD_PRELOAD=libnss_wrapper.so
+	export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libnss_wrapper.so
 	export NSS_WRAPPER_PASSWD="${tmp_passwd}"
 	export NSS_WRAPPER_GROUP="${tmp_group}"
 	trap 'rm -f "${NSS_WRAPPER_PASSWD:-}" "${NSS_WRAPPER_GROUP:-}"' EXIT
