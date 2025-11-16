@@ -14,6 +14,8 @@ jobs:
   docker-build:
     name: Validate Docker Build
     runs-on: ubuntu-latest
+    outputs:
+      stack_tag: ${{ steps.stack-build.outputs.stack_tag }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -42,33 +44,99 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker image (no push)
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./postgres/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: core-data-postgres:test
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            CORE_UID=${{ env.POSTGRES_UID }}
-            CORE_GID=${{ env.POSTGRES_GID }}
-            CORE_USERNAME=${{ env.POSTGRES_RUNTIME_USER }}
-            CORE_GECOS=${{ env.POSTGRES_RUNTIME_GECOS }}
-            CORE_HOME=${{ env.POSTGRES_RUNTIME_HOME }}
-            PG_VERSION=${{ env.PG_VERSION }}
-            AGE_VERSION=${{ env.AGE_VERSION }}
-
-      - name: Tag built image for compose
+      - name: Build stack images
+        id: stack-build
+        env:
+          STACK_REGISTRY: ghcr.io/${{ github.repository }}
         run: |
           set -euo pipefail
-          set -a
-          source .env
-          set +a
-          docker tag core-data-postgres:test "${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}"
+          STACK_TAG="${GITHUB_SHA}"
+          echo "stack_tag=${STACK_TAG}" >>"$GITHUB_OUTPUT"
+          SERVICES=("postgres" "valkey" "pgbouncer" "rabbitmq" "memcached" "pghero" "network-probe" "network-guard")
+          mkdir -p stack-images
+          for service in "${SERVICES[@]}"; do
+            case "${service}" in
+              postgres)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file postgres/Dockerfile \
+                  --build-arg CORE_UID="${POSTGRES_UID:-$(id -u)}" \
+                  --build-arg CORE_GID="${POSTGRES_GID:-$(id -g)}" \
+                  --build-arg CORE_USERNAME="${POSTGRES_RUNTIME_USER:-postgres}" \
+                  --build-arg CORE_GECOS="${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}" \
+                  --build-arg CORE_HOME="${POSTGRES_RUNTIME_HOME:-/home/postgres}" \
+                  --build-arg PG_VERSION="${PG_VERSION:-17}" \
+                  --build-arg AGE_VERSION="${AGE_VERSION:-master}" \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              valkey)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/valkey/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              pgbouncer)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/pgbouncer/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              rabbitmq)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/rabbitmq/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              memcached)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/memcached/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              pghero)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/pghero/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              network-probe)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/network-probe/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+              network-guard)
+                docker buildx build --load \
+                  --platform linux/amd64 \
+                  --file docker/network-guard/Dockerfile \
+                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
+                  .
+                ;;
+            esac
+            docker save "${STACK_REGISTRY}/${service}:${STACK_TAG}" -o "stack-images/${service}.tar"
+          done
+          {
+            echo "CORE_DATA_STACK_TAG=${STACK_TAG}"
+            echo "CORE_DATA_STACK_REGISTRY=${STACK_REGISTRY}"
+            echo "POSTGRES_IMAGE_NAME=${STACK_REGISTRY}/postgres"
+            echo "POSTGRES_IMAGE_TAG=${STACK_TAG}"
+            echo "CORE_DATA_IMAGE=${STACK_REGISTRY}/postgres"
+            echo "CORE_DATA_TAG=${STACK_TAG}"
+            echo "VALKEY_IMAGE=${STACK_REGISTRY}/valkey:${STACK_TAG}"
+            echo "PGBOUNCER_IMAGE=${STACK_REGISTRY}/pgbouncer:${STACK_TAG}"
+            echo "RABBITMQ_IMAGE=${STACK_REGISTRY}/rabbitmq:${STACK_TAG}"
+            echo "MEMCACHED_IMAGE=${STACK_REGISTRY}/memcached:${STACK_TAG}"
+            echo "PGHERO_IMAGE=${STACK_REGISTRY}/pghero:${STACK_TAG}"
+            echo "NETWORK_PROBE_IMAGE=${STACK_REGISTRY}/network-probe:${STACK_TAG}"
+            echo "NETWORK_GUARD_IMAGE=${STACK_REGISTRY}/network-guard:${STACK_TAG}"
+          } >>"$GITHUB_ENV"
 
       - name: Smoke-test Docker image
         env:
@@ -80,7 +148,7 @@ jobs:
           set +a
           cleanup() { docker rm -f postgres-smoke >/dev/null 2>&1 || true; }
           trap cleanup EXIT
-          image="${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}"
+          image="${POSTGRES_IMAGE_NAME}:${POSTGRES_IMAGE_TAG}"
           docker run -d --name postgres-smoke \
             -e POSTGRES_USER=thinice-test \
             -e POSTGRES_PASSWORD=thinice-test \
@@ -104,19 +172,11 @@ jobs:
         if: always()
         run: docker rm -f postgres-smoke >/dev/null 2>&1 || true
 
-      - name: Save Postgres image artifact
-        run: |
-          set -euo pipefail
-          set -a
-          source .env
-          set +a
-          docker save "${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}" -o postgres-image.tar
-
-      - name: Upload Postgres image artifact
+      - name: Upload stack image artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: postgres-image
-          path: postgres-image.tar
+          name: stack-images
+          path: stack-images
 
       - name: Collect diagnostics bundle
         if: failure()
@@ -160,14 +220,32 @@ jobs:
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
 
-      - name: Download Postgres image artifact
+      - name: Download stack images
         uses: actions/download-artifact@v4
         with:
-          name: postgres-image
-          path: postgres-image
+          name: stack-images
+          path: stack-images
 
-      - name: Load Postgres image artifact
-        run: docker load --input postgres-image/postgres-image.tar
+      - name: Load stack images
+        run: for image_tar in stack-images/*.tar; do docker load --input "$image_tar"; done
+
+      - name: Pin stack images
+        run: |
+          cat <<'EOF' >> .env
+          CORE_DATA_STACK_REGISTRY=ghcr.io/${{ github.repository }}
+          CORE_DATA_STACK_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          POSTGRES_IMAGE_NAME=ghcr.io/${{ github.repository }}/postgres
+          POSTGRES_IMAGE_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          CORE_DATA_IMAGE=ghcr.io/${{ github.repository }}/postgres
+          CORE_DATA_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          VALKEY_IMAGE=ghcr.io/${{ github.repository }}/valkey:${{ needs.docker-build.outputs.stack_tag }}
+          PGBOUNCER_IMAGE=ghcr.io/${{ github.repository }}/pgbouncer:${{ needs.docker-build.outputs.stack_tag }}
+          RABBITMQ_IMAGE=ghcr.io/${{ github.repository }}/rabbitmq:${{ needs.docker-build.outputs.stack_tag }}
+          MEMCACHED_IMAGE=ghcr.io/${{ github.repository }}/memcached:${{ needs.docker-build.outputs.stack_tag }}
+          PGHERO_IMAGE=ghcr.io/${{ github.repository }}/pghero:${{ needs.docker-build.outputs.stack_tag }}
+          NETWORK_PROBE_IMAGE=ghcr.io/${{ github.repository }}/network-probe:${{ needs.docker-build.outputs.stack_tag }}
+          NETWORK_GUARD_IMAGE=ghcr.io/${{ github.repository }}/network-guard:${{ needs.docker-build.outputs.stack_tag }}
+          EOF
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -283,16 +361,32 @@ jobs:
       - name: Generate .env and secrets
         run: ./scripts/manage.sh create-env --non-interactive --force
 
-      - name: Download Postgres image artifact
-        if: matrix.marker != 'ci'
+      - name: Download stack images
         uses: actions/download-artifact@v4
         with:
-          name: postgres-image
-          path: postgres-image
+          name: stack-images
+          path: stack-images
 
-      - name: Load Postgres image artifact
-        if: matrix.marker != 'ci'
-        run: docker load --input postgres-image/postgres-image.tar
+      - name: Load stack images
+        run: for image_tar in stack-images/*.tar; do docker load --input "$image_tar"; done
+
+      - name: Pin stack images
+        run: |
+          cat <<'EOF' >> .env
+          CORE_DATA_STACK_REGISTRY=ghcr.io/${{ github.repository }}
+          CORE_DATA_STACK_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          POSTGRES_IMAGE_NAME=ghcr.io/${{ github.repository }}/postgres
+          POSTGRES_IMAGE_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          CORE_DATA_IMAGE=ghcr.io/${{ github.repository }}/postgres
+          CORE_DATA_TAG=${{ needs.docker-build.outputs.stack_tag }}
+          VALKEY_IMAGE=ghcr.io/${{ github.repository }}/valkey:${{ needs.docker-build.outputs.stack_tag }}
+          PGBOUNCER_IMAGE=ghcr.io/${{ github.repository }}/pgbouncer:${{ needs.docker-build.outputs.stack_tag }}
+          RABBITMQ_IMAGE=ghcr.io/${{ github.repository }}/rabbitmq:${{ needs.docker-build.outputs.stack_tag }}
+          MEMCACHED_IMAGE=ghcr.io/${{ github.repository }}/memcached:${{ needs.docker-build.outputs.stack_tag }}
+          PGHERO_IMAGE=ghcr.io/${{ github.repository }}/pghero:${{ needs.docker-build.outputs.stack_tag }}
+          NETWORK_PROBE_IMAGE=ghcr.io/${{ github.repository }}/network-probe:${{ needs.docker-build.outputs.stack_tag }}
+          NETWORK_GUARD_IMAGE=ghcr.io/${{ github.repository }}/network-guard:${{ needs.docker-build.outputs.stack_tag }}
+          EOF
 
       - name: Set up Python
         uses: actions/setup-python@v5

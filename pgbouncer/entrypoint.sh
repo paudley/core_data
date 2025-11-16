@@ -17,6 +17,7 @@ export PGBOUNCER_STATS_USERS=${PGBOUNCER_STATS_USERS:-${PGBOUNCER_STATS_USER}}
 export POSTGRES_HOST=${POSTGRES_HOST:-postgres}
 export POSTGRES_PORT=${POSTGRES_PORT:-5432}
 export PGBOUNCER_AUTH_USER=${PGBOUNCER_AUTH_USER:-pgbouncer_auth}
+export POSTGRES_DB=${POSTGRES_DB:-postgres}
 
 wait_for_backend() {
 	local attempts=${PGBOUNCER_BACKEND_WAIT_ATTEMPTS:-120}
@@ -71,6 +72,9 @@ if [[ ! -r "${PASSWORD_FILE}" ]]; then
 fi
 pgbouncer_auth_secret=$(<"${PASSWORD_FILE}")
 export PGBOUNCER_AUTH_PASSWORD="${pgbouncer_auth_secret}"
+export PGUSER="${PGBOUNCER_AUTH_USER}"
+export PGDATABASE="${POSTGRES_DB}"
+export PGPASSWORD="${pgbouncer_auth_secret}"
 
 STATS_PASSWORD_FILE=${PGBOUNCER_STATS_PASSWORD_FILE:-/run/secrets/pgbouncer_stats_password}
 if [[ -r "${STATS_PASSWORD_FILE}" ]]; then
@@ -84,6 +88,7 @@ mkdir -p "${log_dir}" "${run_dir}" "$(dirname "${config_path}")" "$(dirname "${u
 umask 077
 
 wait_for_backend
+unset PGUSER PGDATABASE PGPASSWORD
 
 auth_hba_config=""
 if [[ -r "${NETWORK_ALLOW_FILE}" ]]; then
@@ -125,6 +130,7 @@ admin_users = ${PGBOUNCER_ADMIN_USERS}
 stats_users = ${PGBOUNCER_STATS_USERS}
 logfile = ${log_dir}/pgbouncer.log
 pidfile = ${run_dir}/pgbouncer.pid
+server_tls_sslmode = ${PGBOUNCER_SERVER_TLS_MODE:-require}
 EOF
 
 cat >"${userlist_path}" <<EOF

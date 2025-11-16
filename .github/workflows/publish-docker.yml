@@ -8,7 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}/postgres
 
 permissions:
   contents: write
@@ -19,6 +18,34 @@ permissions:
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: postgres
+            dockerfile: postgres/Dockerfile
+            context: .
+          - service: valkey
+            dockerfile: docker/valkey/Dockerfile
+            context: .
+          - service: pgbouncer
+            dockerfile: docker/pgbouncer/Dockerfile
+            context: .
+          - service: rabbitmq
+            dockerfile: docker/rabbitmq/Dockerfile
+            context: .
+          - service: memcached
+            dockerfile: docker/memcached/Dockerfile
+            context: .
+          - service: pghero
+            dockerfile: docker/pghero/Dockerfile
+            context: .
+          - service: network-probe
+            dockerfile: docker/network-probe/Dockerfile
+            context: .
+          - service: network-guard
+            dockerfile: docker/network-guard/Dockerfile
+            context: .
 
     steps:
       - name: Checkout repository
@@ -63,11 +90,78 @@ jobs:
             echo "is_hybrid=false" >>"$GITHUB_OUTPUT"
           fi
 
+      - name: Derive image metadata
+        id: image-meta
+        run: |
+          case "${{ matrix.service }}" in
+            postgres)
+              title="Core Data PostgreSQL"
+              desc="Hardened PostgreSQL 17 image with spatial/vector/graph extensions."
+              ;;
+            valkey)
+              title="Core Data ValKey"
+              desc="Managed ValKey cache tuned for the Core Data stack."
+              ;;
+            pgbouncer)
+              title="Core Data PgBouncer"
+              desc="PgBouncer pooler with Core Data authentication/allowlist wiring."
+              ;;
+            rabbitmq)
+              title="Core Data RabbitMQ"
+              desc="RabbitMQ broker + management console configured for Core Data."
+              ;;
+            memcached)
+              title="Core Data Memcached"
+              desc="Memcached cache sidecar aligned with Core Data defaults."
+              ;;
+            pghero)
+              title="Core Data PgHero"
+              desc="PgHero observability container pre-wired for Core Data Postgres."
+              ;;
+            network-probe)
+              title="Core Data Network Probe"
+              desc="Host network discovery helper for Core Data allow lists."
+              ;;
+            network-guard)
+              title="Core Data Network Guard"
+              desc="Firewall enforcement helper for Core Data service ports."
+              ;;
+            *)
+              title="Core Data ${ { matrix.service } }"
+              desc="Core Data stack image."
+              ;;
+          esac
+          {
+            echo "title=${title}"
+            echo "description=${desc}"
+          } >>"$GITHUB_OUTPUT"
+
+      - name: Prepare build args
+        id: build-args
+        env:
+          PG_VERSION: ${{ steps.version.outputs.pg_major || '17' }}
+        run: |
+          if [ "${{ matrix.service }}" = "postgres" ]; then
+            cat <<EOF >>"$GITHUB_OUTPUT"
+args<<EOT
+CORE_UID=999
+CORE_GID=999
+CORE_USERNAME=postgres
+CORE_GECOS=Core Data PostgreSQL Administrator
+CORE_HOME=/home/postgres
+PG_VERSION=${PG_VERSION}
+AGE_VERSION=master
+EOT
+EOF
+          else
+            echo "args=" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
           tags: |
             # For hybrid tags (17.2-v1.0.0), create multiple tags
             type=raw,value=${{ steps.version.outputs.tag }},enable=${{ steps.version.outputs.is_hybrid == 'true' }}
@@ -82,24 +176,28 @@ jobs:
             type=semver,pattern={{major}},enable=${{ steps.version.outputs.is_hybrid == 'false' }}
             type=raw,value=latest,enable=${{ steps.version.outputs.is_hybrid == 'false' }}
           labels: |
-            org.opencontainers.image.title=Core Data PostgreSQL
-            org.opencontainers.image.description=PostgreSQL 17 with extensive extensions for spatial, vector, and graph data
+            org.opencontainers.image.title=${{ steps.image-meta.outputs.title }}
+            org.opencontainers.image.description=${{ steps.image-meta.outputs.description }}
             org.opencontainers.image.vendor=${{ github.repository_owner }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ steps.meta.outputs.created }}
+            org.opencontainers.image.url=https://github.com/${{ github.repository }}
+            org.opencontainers.image.documentation=https://github.com/${{ github.repository }}#published-docker-images
 
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@v6
         with:
-          context: .
-          file: ./postgres/Dockerfile
+          context: ${{ matrix.context }}
+          file: ./${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            PG_VERSION=${{ steps.version.outputs.pg_major || '17' }}
+          build-args: ${{ steps.build-args.outputs.args }}
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3.6.0
@@ -109,14 +207,14 @@ jobs:
           COSIGN_YES: "true"
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }}"
           cosign sign "${image_ref}"
 
       - name: Verify cosign signature
         env:
           COSIGN_EXPERIMENTAL: "1"
         run: |
-          image_ref="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}"
+          image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }}"
           cosign verify \
             --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/publish-docker.yml@${{ github.ref }}" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com \
@@ -125,31 +223,42 @@ jobs:
       - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
       - name: Generate SBOM
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+          image: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }}
           format: cyclonedx-json
           output-file: sbom.cyclonedx.json
 
       - name: Attest SBOM
         uses: actions/attest-sbom@v1
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
           subject-digest: ${{ steps.push.outputs.digest }}
           sbom-path: sbom.cyclonedx.json
           push-to-registry: true
+
+      - name: Sign SBOM with cosign
+        env:
+          COSIGN_YES: "true"
+          COSIGN_EXPERIMENTAL: "1"
+        run: |
+          image_ref="${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }}"
+          cosign attest \
+            --predicate sbom.cyclonedx.json \
+            --type cyclonedx \
+            "${image_ref}"
 
       - name: Output image information
         run: |
           cat <<'EOF' | sed 's/^[[:space:]]\{1,\}//' >>"$GITHUB_STEP_SUMMARY"
             ### 🐳 Docker Image Published
 
-            **Image:** `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}`
+            **Image:** `${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}`
 
             **Digest:** `${{ steps.push.outputs.digest }}`
 
@@ -160,7 +269,7 @@ jobs:
 
             **Verify attestation:**
             ```bash
-            gh attestation verify oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }} --owner ${{ github.repository_owner }}
+            gh attestation verify oci://${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }} --owner ${{ github.repository_owner }}
             ```
 
             **Verify signature (cosign):**
@@ -168,11 +277,11 @@ jobs:
             cosign verify \
               --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/publish-docker.yml@${{ github.ref }}" \
               --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-              oci://${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
+              oci://${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}@${{ steps.push.outputs.digest }}
             ```
 
             **Pull image:**
             ```bash
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.tag }}
+            docker pull ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}:${{ steps.version.outputs.tag }}
             ```
           EOF

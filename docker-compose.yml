@@ -16,7 +16,10 @@ x-security-defaults: &security_defaults
 
 services:
   network_probe:
-    image: ${NETWORK_PROBE_IMAGE:-debian:bookworm-slim}
+    build:
+      context: .
+      dockerfile: docker/network-probe/Dockerfile
+    image: ${NETWORK_PROBE_IMAGE:-ghcr.io/paudley/core_data/network-probe:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_probe
     restart: "no"
     network_mode: host
@@ -62,7 +65,10 @@ services:
     logging: *logging_defaults
 
   network_guard:
-    image: ${NETWORK_GUARD_IMAGE:-debian:bookworm-slim}
+    build:
+      context: .
+      dockerfile: docker/network-guard/Dockerfile
+    image: ${NETWORK_GUARD_IMAGE:-ghcr.io/paudley/core_data/network-guard:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_network_guard
     restart: unless-stopped
     network_mode: host
@@ -159,8 +165,12 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGHERO:-seccomp:./seccomp/pghero.json}"
       - "${CORE_DATA_APPARMOR_PGHERO:-apparmor:unconfined}"
-    image: ankane/pghero:latest
+    build:
+      context: .
+      dockerfile: docker/pghero/Dockerfile
+    image: ${PGHERO_IMAGE:-ghcr.io/paudley/core_data/pghero:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
+    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -169,6 +179,7 @@ services:
     environment:
       PGHERO_USERNAME: ${PGHERO_USER}
       PGHERO_PASSWORD: ${PGHERO_PASSWORD}
+      PORT: "8080"
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
@@ -179,7 +190,6 @@ services:
     networks:
       - core_data
     volumes:
-      - ./scripts/pghero_entrypoint.sh:/opt/core_data/scripts/pghero_entrypoint.sh:ro
       - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
     logging: *logging_defaults
 
@@ -228,7 +238,10 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_VALKEY:-seccomp:./seccomp/valkey.json}"
       - "${CORE_DATA_APPARMOR_VALKEY:-apparmor:unconfined}"
-    image: ${VALKEY_IMAGE:-valkey/valkey:9-alpine}
+    build:
+      context: .
+      dockerfile: docker/valkey/Dockerfile
+    image: ${VALKEY_IMAGE:-ghcr.io/paudley/core_data/valkey:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
     profiles:
@@ -241,10 +254,9 @@ services:
       VALKEY_MAXMEMORY_POLICY: ${VALKEY_MAXMEMORY_POLICY}
       VALKEY_DATABASES: ${VALKEY_DATABASES}
       VALKEY_PASSWORD_FILE: /run/secrets/valkey_password
-    command: ["/opt/core_data/valkey-entrypoint.sh"]
+    entrypoint: ["/opt/core_data/bin/valkey-entrypoint.sh"]
     volumes:
       - ./data/valkey_data:/data
-      - ./valkey/entrypoint.sh:/opt/core_data/valkey-entrypoint.sh:ro
       - ./secrets/valkey_password:/run/secrets/valkey_password:ro
     networks:
       - core_data
@@ -263,7 +275,10 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_RABBITMQ:-seccomp:./seccomp/docker-default.json}"
       - "${CORE_DATA_APPARMOR_RABBITMQ:-apparmor:unconfined}"
-    image: ${RABBITMQ_IMAGE:-rabbitmq:4.2-management-alpine}
+    build:
+      context: .
+      dockerfile: docker/rabbitmq/Dockerfile
+    image: ${RABBITMQ_IMAGE:-ghcr.io/paudley/core_data/rabbitmq:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
     profiles:
@@ -278,12 +293,10 @@ services:
       RABBITMQ_ERLANG_COOKIE_FILE: /run/secrets/rabbitmq_erlang_cookie
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS:-}
       TZ: ${TZ}
-    entrypoint: ["/opt/core_data/rabbitmq-entrypoint.sh"]
+    entrypoint: ["/opt/core_data/bin/rabbitmq-entrypoint.sh"]
     command: ["rabbitmq-server"]
     volumes:
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
-      - ./rabbitmq/entrypoint.sh:/opt/core_data/rabbitmq-entrypoint.sh:ro
-      - ./rabbitmq/healthcheck.sh:/opt/core_data/rabbitmq-healthcheck.sh:ro
       - ./secrets/rabbitmq_default_pass:/run/secrets/rabbitmq_default_pass:ro
       - ./secrets/rabbitmq_erlang_cookie:/run/secrets/rabbitmq_erlang_cookie:ro
     networks:
@@ -292,7 +305,7 @@ services:
       - "${RABBITMQ_HOST_PORT}:${RABBITMQ_PORT}"
       - "${RABBITMQ_MANAGEMENT_HOST_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
     healthcheck:
-      test: ["CMD-SHELL", "/opt/core_data/rabbitmq-healthcheck.sh"]
+      test: ["CMD-SHELL", "/opt/core_data/bin/rabbitmq-healthcheck.sh"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -305,7 +318,10 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_PGBOUNCER:-seccomp:./seccomp/pgbouncer.json}"
       - "${CORE_DATA_APPARMOR_PGBOUNCER:-apparmor:unconfined}"
-    image: ${PGBOUNCER_IMAGE:-bitnamilegacy/pgbouncer:1.24.1}
+    build:
+      context: .
+      dockerfile: docker/pgbouncer/Dockerfile
+    image: ${PGBOUNCER_IMAGE:-ghcr.io/paudley/core_data/pgbouncer:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
     profiles:
@@ -333,11 +349,8 @@ services:
       PGBOUNCER_STATS_USER: ${PGBOUNCER_STATS_USER}
       PGBOUNCER_AUTH_USER: ${PGBOUNCER_AUTH_USER}
       PGBOUNCER_AUTH_PASSWORD_FILE: /run/secrets/pgbouncer_auth_password
-    entrypoint: ["/opt/core_data/pgbouncer-entrypoint.sh"]
+    entrypoint: ["/opt/core_data/bin/pgbouncer-entrypoint.sh"]
     volumes:
-      - ./pgbouncer/pgbouncer.ini.tpl:/opt/core_data/pgbouncer.ini.tpl:ro
-      - ./pgbouncer/entrypoint.sh:/opt/core_data/pgbouncer-entrypoint.sh:ro
-      - ./pgbouncer/userlist.txt.tpl:/opt/core_data/userlist.txt.tpl:ro
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
       - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
       - ./network_access:/opt/core_data/network_access:ro
@@ -358,7 +371,10 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_MEMCACHED:-seccomp:./seccomp/memcached.json}"
       - "${CORE_DATA_APPARMOR_MEMCACHED:-apparmor:unconfined}"
-    image: ${MEMCACHED_IMAGE:-memcached:1.6-alpine}
+    build:
+      context: .
+      dockerfile: docker/memcached/Dockerfile
+    image: ${MEMCACHED_IMAGE:-ghcr.io/paudley/core_data/memcached:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped
     profiles:
