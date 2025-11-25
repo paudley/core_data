@@ -434,7 +434,7 @@ data = {
     "services": {
         "postgres": {
             "host": os.environ.get("POSTGRES_HOST", "127.0.0.1"),
-            "port": int(os.environ.get("POSTGRES_PORT", "5432")),
+            "port": int(os.environ.get("POSTGRES_PORT", "5433")),
             "superuser": os.environ.get("POSTGRES_SUPERUSER", "postgres"),
             "passwordFile": os.path.relpath(os.environ.get("POSTGRES_SUPERUSER_PASSWORD_FILE", "secrets/postgres_superuser_password"), start=root_dir),
         },
@@ -538,7 +538,7 @@ USAGE
 		return 1
 	fi
 	if ! ci_check_ports "${skip_ports}" \
-		"postgres:${POSTGRES_PORT:-5432}" \
+		"postgres:${POSTGRES_PORT:-5433}" \
 		"pgbouncer:${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}" \
 		"valkey:${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}" \
 		"rabbitmq:${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}" \

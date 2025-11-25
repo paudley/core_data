@@ -80,7 +80,7 @@ services:
     environment:
       NETWORK_DIR: /opt/core_data/network_access
       CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
-      SERVICES: "${POSTGRES_PORT:-5432} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
+      SERVICES: "${POSTGRES_PORT:-5433} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
     entrypoint: ["/opt/core_data/scripts/network_guard.sh"]
     volumes:
       - ./network_access:/opt/core_data/network_access:ro
@@ -157,7 +157,7 @@ services:
     cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5433"
 
   pghero:
     <<: *security_defaults
@@ -336,8 +336,9 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
+      POSTGRES_PORT: "5433"
       PGBOUNCER_PORT: ${PGBOUNCER_PORT}
+      PGBOUNCER_EXTRA_PORT: ${PGBOUNCER_EXTRA_PORT:-5432}
       PGBOUNCER_POOL_MODE: ${PGBOUNCER_POOL_MODE}
       PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN}
       PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE}
@@ -357,7 +358,8 @@ services:
     networks:
       - core_data
     ports:
-      - "${PGBOUNCER_HOST_PORT}:${PGBOUNCER_PORT}"
+      - "${PGBOUNCER_HOST_PORT:-6432}:${PGBOUNCER_PORT}"
+      - "${PGBOUNCER_EXTRA_HOST_PORT:-5432}:${PGBOUNCER_EXTRA_PORT:-5432}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep pgbouncer >/dev/null"]
       interval: 10s

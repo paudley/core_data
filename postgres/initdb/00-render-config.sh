@@ -173,7 +173,7 @@ archive-check=n
 
 [main]
 pg1-path=${PGDATA}
-pg1-port=5432
+pg1-port=5433
 CONF
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
