@@ -183,8 +183,8 @@ USAGE
 
 	echo "[upgrade] verifying server version" >&2
 	local reported
-	reported=$(compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-		psql --username "${POSTGRES_SUPERUSER:-postgres}" --tuples-only --no-align --command 'SHOW server_version;')
+	reported=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --host "${POSTGRES_HOST}" --username "${POSTGRES_SUPERUSER:-postgres}" --tuples-only --no-align --command 'SHOW server_version;')
 	echo "[upgrade] server now reporting version ${reported}" >&2
 
 	local snapshot_path

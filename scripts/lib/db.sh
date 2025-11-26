@@ -13,7 +13,7 @@ cmd_create_user() {
 	fi
 	local user=$1
 	local pass=$2
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 DO
 \$\$
@@ -34,7 +34,7 @@ cmd_drop_user() {
 		exit 1
 	fi
 	local user=$1
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 DO
 \$\$
@@ -74,7 +74,7 @@ cmd_create_db() {
 	fi
 	local db=$1
 	local owner=$2
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 DO
 \$\$
@@ -108,7 +108,7 @@ cmd_drop_db() {
 	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname postgres \
 		--command "SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_pgsqueeze_${db}';" >/dev/null
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS "${db}";

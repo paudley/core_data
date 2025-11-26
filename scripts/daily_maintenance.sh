@@ -29,7 +29,7 @@ if [[ -z "${POSTGRES_SUPERUSER_PASSWORD:-}" ]]; then
 fi
 
 postgres_exec_with_auth() {
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" "$@"
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" "$@"
 }
 
 echo "[daily] starting"
