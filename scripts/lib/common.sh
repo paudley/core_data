@@ -198,12 +198,14 @@ stabilize_postgres() {
 	local elapsed=0
 	local consecutive=0
 	while ((elapsed < max_window)); do
-		if ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			pg_isready -h "${host}" -p "${port}" -U "${superuser}" >/dev/null 2>&1; then
+		# Use exported PGHOST/PGPORT/PGUSER/PGPASSWORD without explicit flags, matching healthcheck.sh pattern.
+		# pg_isready and psql will read environment variables when no explicit flags are provided.
+		if ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGUSER="${superuser}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			pg_isready -q >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL failed readiness check during stabilization window." >&2
 			consecutive=0
-		elif ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --host "${host}" --port "${port}" --username "${superuser}" --dbname "${db}" --command "SELECT 1;" >/dev/null 2>&1; then
+		elif ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGUSER="${superuser}" PGDATABASE="${db}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql -Atqc "SELECT 1;" >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL query probe failed while waiting for stability." >&2
 			consecutive=0
 		else
