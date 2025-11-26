@@ -5,7 +5,6 @@
 set -euo pipefail
 
 export PGBOUNCER_PORT=${PGBOUNCER_PORT:-6432}
-export PGBOUNCER_EXTRA_PORT=${PGBOUNCER_EXTRA_PORT:-5432}
 export PGBOUNCER_POOL_MODE=${PGBOUNCER_POOL_MODE:-transaction}
 export PGBOUNCER_MAX_CLIENT_CONN=${PGBOUNCER_MAX_CLIENT_CONN:-200}
 export PGBOUNCER_DEFAULT_POOL_SIZE=${PGBOUNCER_DEFAULT_POOL_SIZE:-20}
@@ -113,7 +112,7 @@ cat >"${config_path}" <<EOF
 
 [pgbouncer]
 listen_addr = 0.0.0.0
-listen_port = ${PGBOUNCER_PORT}, ${PGBOUNCER_EXTRA_PORT}
+listen_port = ${PGBOUNCER_PORT}
 auth_type = scram-sha-256
 auth_user = ${PGBOUNCER_AUTH_USER}
 auth_file = ${userlist_path}

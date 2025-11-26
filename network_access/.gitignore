@@ -1,3 +1,4 @@
 # Generated allow-list artifacts
 allow.list
 networks.auto
+networks.allow
