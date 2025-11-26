@@ -191,14 +191,15 @@ stabilize_postgres() {
 	local max_window=${POSTGRES_STABILIZATION_TIMEOUT:-120}
 	local db=${POSTGRES_DB:-postgres}
 	local superuser=${POSTGRES_SUPERUSER:-postgres}
+	local port=${POSTGRES_PORT:-5433}
 	local elapsed=0
 	local consecutive=0
 	while ((elapsed < max_window)); do
-		if ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" pg_isready -h localhost -U "${superuser}" >/dev/null 2>&1; then
+		if ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" pg_isready -h localhost -p "${port}" -U "${superuser}" >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL failed readiness check during stabilization window." >&2
 			consecutive=0
 		elif ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --host localhost --username "${superuser}" --dbname "${db}" --command "SELECT 1;" >/dev/null 2>&1; then
+			psql --host localhost --port "${port}" --username "${superuser}" --dbname "${db}" --command "SELECT 1;" >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL query probe failed while waiting for stability." >&2
 			consecutive=0
 		else
