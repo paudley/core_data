@@ -62,6 +62,10 @@ configure_database() {
 psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "${db}" <<SQL
 CREATE SCHEMA IF NOT EXISTS core_data_admin AUTHORIZATION "${POSTGRES_USER}";
 
+-- Create pg_squeeze helper function. Note: We don't call it here because
+-- during Docker init, shared_preload_libraries hasn't been loaded yet,
+-- so the 'squeeze' schema won't exist. The cron job will call this after
+-- postgres restarts with the proper configuration.
 CREATE OR REPLACE FUNCTION core_data_admin.refresh_pg_squeeze_targets()
 RETURNS void
 LANGUAGE plpgsql
@@ -69,6 +73,11 @@ AS ${DOLLAR}${DOLLAR}
 DECLARE
   rec RECORD;
 BEGIN
+  -- Only run if pg_squeeze extension is properly loaded
+  IF NOT EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'squeeze') THEN
+    RAISE NOTICE 'pg_squeeze not loaded yet, skipping';
+    RETURN;
+  END IF;
   FOR rec IN
     SELECT n.nspname AS schema_name,
            c.relname AS table_name
@@ -94,17 +103,25 @@ BEGIN
   END LOOP;
 END;
 ${DOLLAR}${DOLLAR};
-
-SELECT core_data_admin.refresh_pg_squeeze_targets();
 SQL
 }
 
 schedule_pg_squeeze_job() {
 	local db="$1"
 	local job_name="core_data_pgsqueeze_${db}"
+	# pg_cron requires shared_preload_libraries, so it won't be available during Docker init.
+	# Skip scheduling if pg_cron isn't loaded yet - it will be available after restart.
 	psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "postgres" <<SQL
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = '${job_name}';
-SELECT cron.schedule_in_database('${job_name}', '15 3 * * *', \$\$SELECT core_data_admin.refresh_pg_squeeze_targets();\$\$, '${db}');
+DO \$\$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN
+    PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = '${job_name}';
+    PERFORM cron.schedule_in_database('${job_name}', '15 3 * * *', \$q\$SELECT core_data_admin.refresh_pg_squeeze_targets();\$q\$, '${db}');
+  ELSE
+    RAISE NOTICE 'pg_cron not loaded yet, skipping job scheduling for %', '${job_name}';
+  END IF;
+END;
+\$\$;
 SQL
 }
 
@@ -114,15 +131,32 @@ for db in "${target_dbs[@]}"; do
 done
 
 # Reset pg_stat_statements nightly to preserve meaningful comparisons.
+# pg_cron requires shared_preload_libraries, so it won't be available during Docker init.
 psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "postgres" <<'SQL'
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_pgstat_reset';
-SELECT cron.schedule('core_data_pgstat_reset', '0 4 * * *', $$SELECT pg_stat_statements_reset();$$);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN
+    PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_pgstat_reset';
+    PERFORM cron.schedule('core_data_pgstat_reset', '0 4 * * *', $q$SELECT pg_stat_statements_reset();$q$);
+  ELSE
+    RAISE NOTICE 'pg_cron not loaded yet, skipping core_data_pgstat_reset scheduling';
+  END IF;
+END;
+$$;
 SQL
 
 # Nightly vacuum analyze with SKIP_LOCKED and parallel workers to keep stats fresh safely.
 psql --set ON_ERROR_STOP=on --username "${POSTGRES_USER}" --dbname "postgres" <<'SQL'
-SELECT cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_vacuum_analyze';
-SELECT cron.schedule('core_data_vacuum_analyze', '30 2 * * *', $$VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4);$$);
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'cron') THEN
+    PERFORM cron.unschedule(jobid) FROM cron.job WHERE jobname = 'core_data_vacuum_analyze';
+    PERFORM cron.schedule('core_data_vacuum_analyze', '30 2 * * *', $q$VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4);$q$);
+  ELSE
+    RAISE NOTICE 'pg_cron not loaded yet, skipping core_data_vacuum_analyze scheduling';
+  END IF;
+END;
+$$;
 SQL
 
 # Ensure template1 ships with extensions and helper functions so new databases inherit them.
