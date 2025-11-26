@@ -97,8 +97,9 @@ services:
     restart: unless-stopped
     environment:
       # PGPORT ensures Docker's init-time postgres starts on 5433 so init scripts
-      # can connect on the same port as the final production configuration
-      PGPORT: ${POSTGRES_PORT:-5433}
+      # can connect on the same port as the final production configuration.
+      # Container port is always 5433; host port can vary via POSTGRES_PORT.
+      PGPORT: "5433"
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
@@ -159,13 +160,14 @@ services:
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
     cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
-    # Override port at runtime to ensure PostgreSQL listens on POSTGRES_PORT
+    # Override port at runtime to ensure PostgreSQL listens on 5433
     # regardless of what's in postgresql.conf (which only gets set during initdb).
     # Note: The official postgres docker-entrypoint.sh already invokes `exec postgres "$@"`,
     # so we pass only the arguments, not the command itself.
-    command: ["-c", "port=${POSTGRES_PORT:-5433}"]
+    # The container port is FIXED at 5433; the host port can vary (POSTGRES_PORT) for CI tests.
+    command: ["-c", "port=5433"]
     ports:
-      - "${POSTGRES_PORT:-5433}:${POSTGRES_PORT:-5433}"
+      - "${POSTGRES_PORT:-5433}:5433"
 
   pghero:
     <<: *security_defaults

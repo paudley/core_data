@@ -25,7 +25,8 @@ determine_pguser() {
 PGUSER=$(determine_pguser)
 PGDATABASE=${POSTGRES_DB:-postgres}
 PGHOST=${POSTGRES_HEALTHCHECK_HOST:-${PGHOST:-/var/run/postgresql}}
-PGPORT=${POSTGRES_PORT:-5433}
+# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+PGPORT=5433
 PGSSLMODE=${POSTGRES_HEALTHCHECK_SSLMODE:-require}
 
 export PGUSER PGDATABASE PGHOST PGPORT PGSSLMODE

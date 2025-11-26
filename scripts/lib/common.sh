@@ -191,7 +191,8 @@ stabilize_postgres() {
 	local max_window=${POSTGRES_STABILIZATION_TIMEOUT:-120}
 	local db=${POSTGRES_DB:-postgres}
 	local superuser=${POSTGRES_SUPERUSER:-postgres}
-	local port=${POSTGRES_PORT:-5433}
+	# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+	local port=5433
 	# Use Unix socket by default for in-container checks (matches healthcheck.sh behavior).
 	# TCP localhost connections can fail during initialization even when Unix socket works.
 	local host=${POSTGRES_STABILIZE_HOST:-/var/run/postgresql}
@@ -297,7 +298,8 @@ ensure_postgres_running() {
 		exit 1
 	fi
 	# Wait for PostgreSQL to be ready to accept connections
-	local port=${POSTGRES_PORT:-5433}
+	# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+	local port=5433
 	local max_attempts=30
 	local attempt=1
 	while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -h localhost -p "${port}" -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
