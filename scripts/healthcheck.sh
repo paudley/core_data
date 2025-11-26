@@ -54,6 +54,10 @@ fi
 # the final init script (02-enable-extensions.sh) after all extensions are enabled
 # and scheduled jobs are configured. Without this check, the container may report
 # healthy before initialization is complete, causing race conditions in CI/CD.
+#
+# The healthcheck timing in docker-compose.yml (start_period + retries * interval)
+# must be sufficient for init scripts to complete. For fresh database init with
+# extension compilation, this can take 3-5 minutes in CI environments.
 BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-${PGDATA:-/var/lib/postgresql/data}/.core_data_bootstrap_complete}
 if [[ ! -f "${BOOTSTRAP_SENTINEL}" ]]; then
 	log "bootstrap sentinel not found: ${BOOTSTRAP_SENTINEL}"
