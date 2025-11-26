@@ -96,6 +96,9 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
     environment:
+      # PGPORT ensures Docker's init-time postgres starts on 5433 so init scripts
+      # can connect on the same port as the final production configuration
+      PGPORT: ${POSTGRES_PORT:-5433}
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
