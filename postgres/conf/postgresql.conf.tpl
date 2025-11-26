@@ -4,7 +4,7 @@
 # PostgreSQL configuration template rendered during init
 
 listen_addresses = '${POSTGRES_LISTEN_ADDRESSES}'
-port = 5432
+port = 5433
 max_connections = ${POSTGRES_MAX_CONNECTIONS}
 shared_buffers = ${PG_SHARED_BUFFERS}
 work_mem = ${PG_WORK_MEM}

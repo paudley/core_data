@@ -80,7 +80,7 @@ services:
     environment:
       NETWORK_DIR: /opt/core_data/network_access
       CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
-      SERVICES: "${POSTGRES_PORT:-5432} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
+      SERVICES: "${POSTGRES_PORT:-5433} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
     entrypoint: ["/opt/core_data/scripts/network_guard.sh"]
     volumes:
       - ./network_access:/opt/core_data/network_access:ro
@@ -96,6 +96,10 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
     environment:
+      # PGPORT ensures Docker's init-time postgres starts on 5433 so init scripts
+      # can connect on the same port as the final production configuration.
+      # Container port is always 5433; host port can vary via POSTGRES_PORT.
+      PGPORT: "5433"
       POSTGRES_USER: ${POSTGRES_SUPERUSER}
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
@@ -149,15 +153,21 @@ services:
       test: ["CMD-SHELL", "/opt/core_data/scripts/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 30s
+      retries: 6
+      start_period: 60s
     stop_grace_period: 1m
     shm_size: ${POSTGRES_SHM_SIZE:-0}
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
     cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
+    # Override port at runtime to ensure PostgreSQL listens on 5433
+    # regardless of what's in postgresql.conf (which only gets set during initdb).
+    # Note: The official postgres docker-entrypoint.sh already invokes `exec postgres "$@"`,
+    # so we pass only the arguments, not the command itself.
+    # The container port is FIXED at 5433; the host port can vary (POSTGRES_PORT) for CI tests.
+    command: ["-c", "port=5433"]
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5433"
 
   pghero:
     <<: *security_defaults
@@ -183,6 +193,8 @@ services:
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
+      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
+      POSTGRES_PORT: "5433"
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       TZ: ${TZ}
     ports:
@@ -208,6 +220,8 @@ services:
     command: ["/opt/core_data/scripts/logical_backup_runner.sh"]
     environment:
       POSTGRES_HOST: postgres
+      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
+      POSTGRES_PORT: "5433"
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       LOGICAL_BACKUP_INTERVAL_SECONDS: ${LOGICAL_BACKUP_INTERVAL_SECONDS}
@@ -224,7 +238,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null) pg_isready -h $${POSTGRES_HOST:-postgres} -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-postgres}",
+          "PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null) pg_isready -h $${POSTGRES_HOST:-postgres} -p $${POSTGRES_PORT:-5433} -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-postgres}",
         ]
       interval: 30s
       timeout: 5s
@@ -336,8 +350,8 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_HOST: postgres
-      POSTGRES_PORT: "5432"
-      PGBOUNCER_PORT: ${PGBOUNCER_PORT}
+      POSTGRES_PORT: "5433"
+      PGBOUNCER_PORT: ${PGBOUNCER_PORT:-6432}
       PGBOUNCER_POOL_MODE: ${PGBOUNCER_POOL_MODE}
       PGBOUNCER_MAX_CLIENT_CONN: ${PGBOUNCER_MAX_CLIENT_CONN}
       PGBOUNCER_DEFAULT_POOL_SIZE: ${PGBOUNCER_DEFAULT_POOL_SIZE}
@@ -357,7 +371,10 @@ services:
     networks:
       - core_data
     ports:
-      - "${PGBOUNCER_HOST_PORT}:${PGBOUNCER_PORT}"
+      # Both host ports map to the same container port - PgBouncer listens once,
+      # Docker handles the multi-port exposure
+      - "${PGBOUNCER_HOST_PORT:-6432}:${PGBOUNCER_PORT:-6432}"
+      - "${PGBOUNCER_EXTRA_HOST_PORT:-5432}:${PGBOUNCER_PORT:-6432}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep pgbouncer >/dev/null"]
       interval: 10s

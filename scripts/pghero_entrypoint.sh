@@ -9,7 +9,7 @@ APP_ROOT=${APP_ROOT:-/opt/core_data/pghero}
 POSTGRES_SUPERUSER=${POSTGRES_SUPERUSER:-postgres}
 POSTGRES_DB=${POSTGRES_DB:-postgres}
 POSTGRES_HOST=${POSTGRES_HOST:-postgres}
-POSTGRES_PORT=${POSTGRES_PORT:-5432}
+POSTGRES_PORT=${POSTGRES_PORT:-5433}
 PASSWORD_FILE=${POSTGRES_SUPERUSER_PASSWORD_FILE:-/run/secrets/postgres_superuser_password}
 
 wait_for_password_file() {

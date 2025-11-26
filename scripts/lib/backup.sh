@@ -13,7 +13,7 @@ cmd_dump() {
 	fi
 	local db=$1
 	local outfile=${2:-"/backups/${db}-$(date +%Y%m%d%H%M%S).sql.gz"}
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		bash -lc "pg_dump --format=custom --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' | gzip > '${outfile}'"
 	echo "Dump written to ${outfile}" >&2
 }
@@ -27,7 +27,7 @@ cmd_dump_sql() {
 	fi
 	local db=$1
 	local outfile=${2:-"/backups/${db}-$(date +%Y%m%d%H%M%S).sql"}
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		bash -lc "pg_dump --format=plain --create --clean --if-exists --no-owner --no-acl --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}' > '${outfile}'"
 	echo "Plain SQL dump written to ${outfile}" >&2
 }
@@ -41,13 +41,13 @@ cmd_restore_dump() {
 	fi
 	local infile=$1
 	local db=$2
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS "${db}";
 CREATE DATABASE "${db}" OWNER "${POSTGRES_SUPERUSER:-postgres}";
 SQL
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 		bash -lc "gunzip -c '${infile}' | pg_restore --dbname='${db}' --username='${POSTGRES_SUPERUSER:-postgres}'"
 }
 

@@ -19,8 +19,8 @@ PY
 ensure_testkit_role() {
 	local role=$1
 	local password=$2
-	compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
+	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+		psql --host "${POSTGRES_HOST}" --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" <<SQL
 DO
 \$\$
 BEGIN

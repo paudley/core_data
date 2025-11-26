@@ -67,7 +67,7 @@ jobs:
   "services": {
     "postgres": {
       "host": "127.0.0.1",
-      "port": 5432,
+      "port": 5433,
       "superuser": "postgres",
       "passwordFile": "secrets/postgres_superuser_password"
     },
@@ -78,5 +78,7 @@ jobs:
   }
 }
 ```
+
+> **Note**: PostgreSQL listens on port 5433 by default so PgBouncer can own the standard port 5432. Clients connecting to 5432 get pooled connections automatically; use 5433 to bypass pooling.
 
 Expose this file as an artifact or parse it to feed downstream jobs (e.g., integration tests running against the CI database).

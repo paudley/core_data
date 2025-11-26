@@ -191,14 +191,22 @@ stabilize_postgres() {
 	local max_window=${POSTGRES_STABILIZATION_TIMEOUT:-120}
 	local db=${POSTGRES_DB:-postgres}
 	local superuser=${POSTGRES_SUPERUSER:-postgres}
+	# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+	local port=5433
+	# Use Unix socket by default for in-container checks (matches healthcheck.sh behavior).
+	# TCP localhost connections can fail during initialization even when Unix socket works.
+	local host=${POSTGRES_STABILIZE_HOST:-/var/run/postgresql}
 	local elapsed=0
 	local consecutive=0
 	while ((elapsed < max_window)); do
-		if ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" pg_isready -h localhost -U "${superuser}" >/dev/null 2>&1; then
+		# Use exported PGHOST/PGPORT/PGUSER/PGPASSWORD without explicit flags, matching healthcheck.sh pattern.
+		# pg_isready and psql will read environment variables when no explicit flags are provided.
+		if ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGUSER="${superuser}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			pg_isready -q >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL failed readiness check during stabilization window." >&2
 			consecutive=0
-		elif ! compose_exec env PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --host localhost --username "${superuser}" --dbname "${db}" --command "SELECT 1;" >/dev/null 2>&1; then
+		elif ! compose_exec env PGHOST="${host}" PGPORT="${port}" PGUSER="${superuser}" PGDATABASE="${db}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql -Atqc "SELECT 1;" >/dev/null 2>&1; then
 			echo "[core_data] PostgreSQL query probe failed while waiting for stability." >&2
 			consecutive=0
 		else
@@ -290,9 +298,11 @@ ensure_postgres_running() {
 		exit 1
 	fi
 	# Wait for PostgreSQL to be ready to accept connections
+	# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+	local port=5433
 	local max_attempts=30
 	local attempt=1
-	while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
+	while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -h localhost -p "${port}" -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
 		if ((attempt >= max_attempts)); then
 			echo "[core_data] Postgres is running but not ready to accept connections after $((attempt)) attempts." >&2
 			exit 1

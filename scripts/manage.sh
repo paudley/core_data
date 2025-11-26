@@ -132,10 +132,11 @@ warn_if_config_drift() {
     return
   fi
   local ready=false
+  local port=${POSTGRES_PORT:-5433}
   local max_attempts=${CONFIG_DRIFT_READY_RETRIES:-10}
   local attempt=1
   while (( attempt <= max_attempts )); do
-    if compose_exec pg_isready -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; then
+    if compose_exec pg_isready -h localhost -p "${port}" -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; then
       ready=true
       break
     fi

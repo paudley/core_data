@@ -25,7 +25,8 @@ determine_pguser() {
 PGUSER=$(determine_pguser)
 PGDATABASE=${POSTGRES_DB:-postgres}
 PGHOST=${POSTGRES_HEALTHCHECK_HOST:-${PGHOST:-/var/run/postgresql}}
-PGPORT=${POSTGRES_PORT:-5432}
+# Container port is always 5433 (host port can vary via POSTGRES_PORT but that's external)
+PGPORT=5433
 PGSSLMODE=${POSTGRES_HEALTHCHECK_SSLMODE:-require}
 
 export PGUSER PGDATABASE PGHOST PGPORT PGSSLMODE
@@ -47,6 +48,15 @@ fi
 
 if ! psql -Atqc 'SELECT 1;' >/dev/null 2>&1; then
 	log 'failed to execute SELECT 1'
+	exit 1
+fi
+
+# Check bootstrap sentinel - ensures init scripts have completed
+# This is critical for first-start scenarios where PostgreSQL temporarily starts
+# during initdb, becomes "healthy" briefly, but init scripts haven't finished.
+BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-${PGDATA:-/var/lib/postgresql/data}/.core_data_bootstrap_complete}
+if [[ ! -f "${BOOTSTRAP_SENTINEL}" ]]; then
+	log "bootstrap sentinel '${BOOTSTRAP_SENTINEL}' not found; init scripts may still be running"
 	exit 1
 fi
 

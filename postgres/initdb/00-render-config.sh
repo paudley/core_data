@@ -104,6 +104,12 @@ if [[ -f "${SENTINEL}" ]]; then
 	rm -f "${SENTINEL}"
 fi
 
+# During initial Docker init (first_render=1), we need to stop the Docker
+# entrypoint's temporary postgres so we can start it with our rendered config
+# (which includes shared_preload_libraries for extensions like pgaudit).
+#
+# On subsequent runs (first_render=0 with FORCE_RENDER_CONFIG=1), we also need
+# to stop postgres before re-rendering configs.
 if [[ "${first_render}" -eq 1 ]]; then
 	if pg_ctl -D "${PGDATA}" status >/dev/null 2>&1; then
 		echo "[core_data] Stopping PostgreSQL before initial configuration render." >&2
@@ -173,11 +179,15 @@ archive-check=n
 
 [main]
 pg1-path=${PGDATA}
-pg1-port=5432
+pg1-port=5433
 CONF
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
 
+# Start postgres with our rendered config (which includes shared_preload_libraries).
+# On first_render=1, we stopped the Docker entrypoint's temp postgres earlier and now
+# start it with our config so extensions like pgaudit can be created.
+# On first_render=0 (FORCE_RENDER_CONFIG), restart if it was running.
 if [[ "${first_render}" -eq 1 ]]; then
 	if ! pg_ctl -D "${PGDATA}" -w start >/dev/null 2>&1; then
 		echo "[core_data] WARNING: pg_ctl start failed during initial configuration." >&2
