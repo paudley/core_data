@@ -104,9 +104,16 @@ if [[ -f "${SENTINEL}" ]]; then
 	rm -f "${SENTINEL}"
 fi
 
-if [[ "${first_render}" -eq 1 ]]; then
+# During initial Docker init (first_render=1), we do NOT stop/restart postgres.
+# The Docker entrypoint manages the temporary postgres instance for init scripts.
+# We only render configuration files; the entrypoint will restart postgres with
+# the new config after all init scripts complete.
+#
+# On subsequent runs (first_render=0 with FORCE_RENDER_CONFIG=1), we do need to
+# stop postgres if it's running on the old config before rendering new configs.
+if [[ "${first_render}" -eq 0 ]]; then
 	if pg_ctl -D "${PGDATA}" status >/dev/null 2>&1; then
-		echo "[core_data] Stopping PostgreSQL before initial configuration render." >&2
+		echo "[core_data] Stopping PostgreSQL before configuration re-render." >&2
 		pg_ctl -D "${PGDATA}" -m fast -w stop >/dev/null 2>&1 || true
 	fi
 fi
@@ -178,13 +185,15 @@ CONF
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
 
-if [[ "${first_render}" -eq 1 ]]; then
+# During first render (Docker init), do NOT start/restart postgres.
+# The Docker entrypoint manages the temporary postgres process for init scripts
+# and will restart postgres with the new config after all init scripts complete.
+#
+# For FORCE_RENDER_CONFIG (re-render on running system), start postgres with new config.
+# We stopped it earlier at line 114-118 before rendering.
+if [[ "${first_render}" -eq 0 ]]; then
 	if ! pg_ctl -D "${PGDATA}" -w start >/dev/null 2>&1; then
-		echo "[core_data] WARNING: pg_ctl start failed during initial configuration." >&2
-	fi
-elif pg_ctl -D "${PGDATA}" status >/dev/null 2>&1; then
-	if ! pg_ctl -D "${PGDATA}" -m fast -w restart >/dev/null 2>&1; then
-		echo "[core_data] WARNING: pg_ctl restart failed during configuration refresh." >&2
+		echo "[core_data] WARNING: pg_ctl start failed during configuration refresh." >&2
 	fi
 fi
 
