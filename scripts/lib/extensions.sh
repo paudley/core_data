@@ -122,7 +122,7 @@ run_pgtap_smoke() {
 		psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(36);
+SELECT plan(39);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
 SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
@@ -140,6 +140,7 @@ SELECT has_extension('hstore', 'hstore extension installed');
 SELECT has_extension('pg_trgm', 'pg_trgm extension installed');
 SELECT has_extension('btree_gin', 'btree_gin extension installed');
 SELECT has_extension('btree_gist', 'btree_gist extension installed');
+SELECT has_extension('bloom', 'bloom extension installed');
 SELECT has_extension('postgres_fdw', 'postgres_fdw extension installed');
 SELECT has_extension('dblink', 'dblink extension installed');
 SELECT has_extension('uuid-ossp', 'uuid-ossp extension installed');
@@ -154,6 +155,7 @@ SELECT has_extension('address_standardizer_data_us', 'address_standardizer_data_
 SELECT has_extension('pgrouting', 'pgRouting extension installed');
 SELECT has_extension('hypopg', 'hypopg extension installed');
 SELECT has_extension('pg_partman', 'pg_partman extension installed');
+SELECT has_extension('pg_cron', 'pg_cron extension installed');
 SELECT has_extension('earthdistance', 'earthdistance extension installed');
 SELECT has_extension('intarray', 'intarray extension installed');
 SELECT has_extension('ltree', 'ltree extension installed');
