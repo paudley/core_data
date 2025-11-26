@@ -192,7 +192,9 @@ stabilize_postgres() {
 	local db=${POSTGRES_DB:-postgres}
 	local superuser=${POSTGRES_SUPERUSER:-postgres}
 	local port=${POSTGRES_PORT:-5433}
-	local host=${POSTGRES_HOST:-localhost}
+	# Use Unix socket by default for in-container checks (matches healthcheck.sh behavior).
+	# TCP localhost connections can fail during initialization even when Unix socket works.
+	local host=${POSTGRES_STABILIZE_HOST:-/var/run/postgresql}
 	local elapsed=0
 	local consecutive=0
 	while ((elapsed < max_window)); do
