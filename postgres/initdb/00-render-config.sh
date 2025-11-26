@@ -53,6 +53,14 @@ apply_network_allow_entries() {
 : "${PG_MAINTENANCE_WORK_MEM:=256MB}"
 : "${PG_RANDOM_PAGE_COST:=1.1}"
 : "${PG_EFFECTIVE_IO_CONCURRENCY:=200}"
+# PostgreSQL 17 accepts effective_io_concurrency in range 0-1000; clamp invalid values
+if [[ "${PG_EFFECTIVE_IO_CONCURRENCY}" -lt 0 ]]; then
+	echo "[core_data] WARNING: PG_EFFECTIVE_IO_CONCURRENCY=${PG_EFFECTIVE_IO_CONCURRENCY} is negative; clamping to 0." >&2
+	PG_EFFECTIVE_IO_CONCURRENCY=0
+elif [[ "${PG_EFFECTIVE_IO_CONCURRENCY}" -gt 1000 ]]; then
+	echo "[core_data] WARNING: PG_EFFECTIVE_IO_CONCURRENCY=${PG_EFFECTIVE_IO_CONCURRENCY} exceeds max (1000); clamping to 1000." >&2
+	PG_EFFECTIVE_IO_CONCURRENCY=1000
+fi
 : "${PG_MAX_WAL_SIZE:=2GB}"
 : "${PG_MIN_WAL_SIZE:=1GB}"
 : "${PG_WAL_KEEP_SIZE:=2GB}"

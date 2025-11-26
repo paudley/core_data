@@ -3,19 +3,25 @@
 # SPDX-License-Identifier: MIT
 
 # Canonical list of default extensions enabled across bootstrap flows.
+# Note: Order matters for dependencies (e.g., cube must come before earthdistance)
 # shellcheck disable=SC2034
 CORE_EXTENSION_LIST=(
 	age
 	btree_gin
 	btree_gist
 	citext
+	cube
 	dblink
-	hstore
+	earthdistance
 	fuzzystrmatch
+	hstore
+	intarray
+	ltree
 	bloom
 	pg_buffercache
 	pg_cron
 	pg_partman
+	pg_prewarm
 	hypopg
 	pg_repack
 	pg_squeeze
@@ -33,6 +39,8 @@ CORE_EXTENSION_LIST=(
 	address_standardizer_data_us
 	postgis_tiger_geocoder
 	pgrouting
+	tablefunc
+	unaccent
 	uuid-ossp
 	vector
 )

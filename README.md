@@ -129,6 +129,23 @@ POSTGRES_IMAGE_NAME=ghcr.io/paudley/core-data-postgres
 POSTGRES_IMAGE_TAG=17.2-v1.0.0
 ```
 
+### Important: UID/GID Configuration for Pre-built Images
+
+Pre-built images from `ghcr.io` have the `postgres` user baked in with **UID/GID 999**. Your `.env` must match:
+
+```bash
+POSTGRES_UID=999
+POSTGRES_GID=999
+```
+
+**Why this matters:** The `volume_prep` service uses these values to `chown` data directories. If they don't match the image's baked-in UID, you'll see permission errors like:
+
+```
+chmod: changing permissions of '/var/lib/postgresql/data': Operation not permitted
+```
+
+**Building locally?** If you set `CORE_DATA_BUILD_IMAGE=1`, you can use your host user's UID/GID instead—the image build process will create the postgres user with your specified IDs.
+
 ## Highlights
 
 * Custom Docker image with PostGIS, pgvector, Apache AGE, pg\_cron, pg\_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
@@ -145,11 +162,11 @@ POSTGRES_IMAGE_TAG=17.2-v1.0.0
 
 core\_data provisions a batteries-included extension stack in every non-template database at init time:
 
-* **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`.
+* **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`, `pg_prewarm`, `bloom`.
 * **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
-* **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`.
+* **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`, `intarray`, `ltree`, `tablefunc`, `unaccent`.
 * **Connectivity** — `postgres_fdw`, `dblink`.
-* **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`.
+* **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`, `cube`, `earthdistance`.
 * **Maintenance & Testing** — `pg_cron` (kept in the `postgres` database), `pg_partman`, `pg_repack`, `pg_squeeze`, `pgstattuple`, `pgtap`.
 * **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
 
