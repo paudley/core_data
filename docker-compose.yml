@@ -193,6 +193,8 @@ services:
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_HOST: postgres
+      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
+      POSTGRES_PORT: "5433"
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       TZ: ${TZ}
     ports:
@@ -218,6 +220,8 @@ services:
     command: ["/opt/core_data/scripts/logical_backup_runner.sh"]
     environment:
       POSTGRES_HOST: postgres
+      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
+      POSTGRES_PORT: "5433"
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       LOGICAL_BACKUP_INTERVAL_SECONDS: ${LOGICAL_BACKUP_INTERVAL_SECONDS}
@@ -234,7 +238,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null) pg_isready -h $${POSTGRES_HOST:-postgres} -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-postgres}",
+          "PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null) pg_isready -h $${POSTGRES_HOST:-postgres} -p $${POSTGRES_PORT:-5433} -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-postgres}",
         ]
       interval: 30s
       timeout: 5s
