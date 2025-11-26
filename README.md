@@ -162,7 +162,7 @@ chmod: changing permissions of '/var/lib/postgresql/data': Operation not permitt
 
 core\_data provisions a batteries-included extension stack in every non-template database at init time:
 
-* **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`, `pg_prewarm`.
+* **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`, `pg_prewarm`, `bloom`.
 * **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
 * **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`, `intarray`, `ltree`, `tablefunc`, `unaccent`.
 * **Connectivity** — `postgres_fdw`, `dblink`.
