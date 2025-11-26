@@ -64,9 +64,10 @@ _select_helper_image() {
 _wait_for_postgres() {
 	local retries=${1:-30}
 	local delay=${2:-5}
+	local port=${POSTGRES_PORT:-5433}
 	local attempt
 	for ((attempt = 1; attempt <= retries; attempt++)); do
-		if compose_exec pg_isready -U "${POSTGRES_SUPERUSER:-postgres}" >/dev/null 2>&1; then
+		if compose_exec pg_isready -h localhost -p "${port}" -U "${POSTGRES_SUPERUSER:-postgres}" >/dev/null 2>&1; then
 			return 0
 		fi
 		sleep "$delay"

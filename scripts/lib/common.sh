@@ -291,9 +291,10 @@ ensure_postgres_running() {
 		exit 1
 	fi
 	# Wait for PostgreSQL to be ready to accept connections
+	local port=${POSTGRES_PORT:-5433}
 	local max_attempts=30
 	local attempt=1
-	while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
+	while ! compose exec -T "${POSTGRES_SERVICE_NAME}" pg_isready -h localhost -p "${port}" -U "${POSTGRES_EXEC_USER}" >/dev/null 2>&1; do
 		if ((attempt >= max_attempts)); then
 			echo "[core_data] Postgres is running but not ready to accept connections after $((attempt)) attempts." >&2
 			exit 1
