@@ -50,6 +50,15 @@ if ! psql -Atqc 'SELECT 1;' >/dev/null 2>&1; then
 	exit 1
 fi
 
+# Check bootstrap sentinel - ensures init scripts have completed
+# This is critical for first-start scenarios where PostgreSQL temporarily starts
+# during initdb, becomes "healthy" briefly, but init scripts haven't finished.
+BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-${PGDATA:-/var/lib/postgresql/data}/.core_data_bootstrap_complete}
+if [[ ! -f "${BOOTSTRAP_SENTINEL}" ]]; then
+	log "bootstrap sentinel '${BOOTSTRAP_SENTINEL}' not found; init scripts may still be running"
+	exit 1
+fi
+
 if [[ -n ${CORE_DATA_HEALTHCHECK_MAX_REPLICATION_LAG:-} ]]; then
 	lag_threshold=${CORE_DATA_HEALTHCHECK_MAX_REPLICATION_LAG}
 	if ! [[ ${lag_threshold} =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
