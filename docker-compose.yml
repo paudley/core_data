@@ -159,8 +159,11 @@ services:
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
     cpus: ${POSTGRES_CPU_LIMIT:-0.0}
     logging: *logging_defaults
+    # Override port at runtime to ensure PostgreSQL listens on POSTGRES_PORT
+    # regardless of what's in postgresql.conf (which only gets set during initdb)
+    command: ["postgres", "-c", "port=${POSTGRES_PORT:-5433}"]
     ports:
-      - "${POSTGRES_PORT:-5433}:5433"
+      - "${POSTGRES_PORT:-5433}:${POSTGRES_PORT:-5433}"
 
   pghero:
     <<: *security_defaults
