@@ -150,7 +150,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
-      start_period: 90s
+      start_period: 180s
     stop_grace_period: 1m
     shm_size: ${POSTGRES_SHM_SIZE:-0}
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
