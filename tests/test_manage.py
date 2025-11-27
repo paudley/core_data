@@ -1843,3 +1843,184 @@ def test_ci_up_dry_run_emits_outputs(manage_env, tmp_path):
     assert postgres["port"] == 65432
     assert postgres["host"] == "127.0.0.1"
     assert postgres["superuser"] == "postgres"
+
+
+@pytest.mark.permissions
+def test_permissions_validate(manage_env):
+    """Test that permissions-validate command runs successfully."""
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        # Create a test database with non-superuser owner
+        run_manage(env, "create-user", "perm_test_user", "perm_test_password")
+        run_manage(env, "create-db", "perm_test_db", "perm_test_user")
+
+        # Run permission validation - should pass after create-db applies grants
+        result = run_manage(env, "permissions-validate", "--db", "perm_test_db")
+        assert result.returncode == 0
+
+        # Cleanup
+        run_manage(env, "drop-db", "perm_test_db")
+        run_manage(env, "drop-user", "perm_test_user")
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.permissions
+def test_permissions_repair(manage_env):
+    """Test that permissions-repair command can fix missing permissions."""
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        # Create a test database
+        run_manage(env, "create-user", "repair_test_user", "repair_test_password")
+        run_manage(env, "create-db", "repair_test_db", "repair_test_user")
+
+        # Run permission repair
+        result = run_manage(env, "permissions-repair", "--db", "repair_test_db")
+        assert result.returncode == 0
+        assert "permissions" in result.stderr.lower() or "repair" in result.stderr.lower()
+
+        # Cleanup
+        run_manage(env, "drop-db", "repair_test_db")
+        run_manage(env, "drop-user", "repair_test_user")
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.permissions
+def test_permissions_report(manage_env, tmp_path):
+    """Test that permissions-report generates valid CSV output."""
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+
+        # Run permission report without output file (should print to stdout)
+        result = run_manage(env, "permissions-report", "--db", "postgres")
+        assert result.returncode == 0
+        # Should contain column headers from the report
+        assert "schema_name" in result.stdout or "role_name" in result.stdout
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.permissions
+def test_permissions_age_operations(manage_env):
+    """Test that AGE operations work for non-superuser after permission grants."""
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        # Create a test database with non-superuser owner
+        run_manage(env, "create-user", "age_test_user", "age_test_password")
+        run_manage(env, "create-db", "age_test_db", "age_test_user")
+
+        port = int(env.get("PGBOUNCER_HOST_PORT", env.get("PGBOUNCER_PORT", "6432")))
+
+        # Test AGE operations as non-superuser via PgBouncer
+        with psycopg.connect(
+            host="127.0.0.1",
+            port=port,
+            user="age_test_user",
+            password="age_test_password",
+            dbname="age_test_db",
+            autocommit=True,
+            row_factory=tuple_row,
+        ) as conn:
+            with conn.cursor() as cur:
+                # Set search_path to include ag_catalog
+                cur.execute("SET search_path TO ag_catalog, public;")
+
+                # Create a graph
+                cur.execute("SELECT * FROM ag_catalog.create_graph('perm_test_graph');")
+
+                # Create a vertex
+                cur.execute(
+                    """
+                    SELECT * FROM cypher('perm_test_graph', $$
+                        CREATE (n:TestNode {name: 'test'})
+                        RETURN n
+                    $$) AS (n agtype);
+                    """
+                )
+                result = cur.fetchone()
+                assert result is not None
+
+                # Drop the graph
+                cur.execute("SELECT * FROM ag_catalog.drop_graph('perm_test_graph', true);")
+
+        # Cleanup
+        run_manage(env, "drop-db", "age_test_db")
+        run_manage(env, "drop-user", "age_test_user")
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
+
+
+@pytest.mark.permissions
+def test_permissions_vector_operations(manage_env):
+    """Test that pgvector operations work for non-superuser after permission grants."""
+    env, _ = manage_env
+    run_manage(env, "build-image")
+    run_manage(env, "up")
+    try:
+        wait_for_ready(env)
+        # Create a test database with non-superuser owner
+        run_manage(env, "create-user", "vec_test_user", "vec_test_password")
+        run_manage(env, "create-db", "vec_test_db", "vec_test_user")
+
+        port = int(env.get("PGBOUNCER_HOST_PORT", env.get("PGBOUNCER_PORT", "6432")))
+
+        # Test pgvector operations as non-superuser via PgBouncer
+        with psycopg.connect(
+            host="127.0.0.1",
+            port=port,
+            user="vec_test_user",
+            password="vec_test_password",
+            dbname="vec_test_db",
+            autocommit=True,
+            row_factory=tuple_row,
+        ) as conn:
+            with conn.cursor() as cur:
+                # Create a table with vector column
+                cur.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS public.vec_perm_test (
+                        id serial PRIMARY KEY,
+                        embedding vector(3)
+                    );
+                    """
+                )
+
+                # Insert vector data
+                cur.execute(
+                    "INSERT INTO public.vec_perm_test (embedding) VALUES ('[1,2,3]'::vector);"
+                )
+
+                # Query using vector similarity
+                cur.execute(
+                    "SELECT id FROM public.vec_perm_test ORDER BY embedding <-> '[1,2,3]'::vector LIMIT 1;"
+                )
+                result = cur.fetchone()
+                assert result is not None
+                assert result[0] == 1
+
+                # Cleanup
+                cur.execute("DROP TABLE public.vec_perm_test;")
+
+        # Cleanup
+        run_manage(env, "drop-db", "vec_test_db")
+        run_manage(env, "drop-user", "vec_test_user")
+    finally:
+        run_manage(env, "down")
+        compose_down(env, volumes=True)
