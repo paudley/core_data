@@ -363,6 +363,12 @@ services:
       PGBOUNCER_STATS_USER: ${PGBOUNCER_STATS_USER}
       PGBOUNCER_AUTH_USER: ${PGBOUNCER_AUTH_USER}
       PGBOUNCER_AUTH_PASSWORD_FILE: /run/secrets/pgbouncer_auth_password
+      # Client TLS configuration (SSL for connections TO PgBouncer)
+      PGBOUNCER_CLIENT_TLS_SSLMODE: ${PGBOUNCER_CLIENT_TLS_SSLMODE:-require}
+      PGBOUNCER_CLIENT_TLS_CERT_FILE: ${PGBOUNCER_CLIENT_TLS_CERT_FILE:-/tmp/pgbouncer/tls/server.crt}
+      PGBOUNCER_CLIENT_TLS_KEY_FILE: ${PGBOUNCER_CLIENT_TLS_KEY_FILE:-/tmp/pgbouncer/tls/server.key}
+      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT: ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT:-/CN=core_data_pgbouncer}
+      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS: ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS:-730}
     entrypoint: ["/opt/core_data/bin/pgbouncer-entrypoint.sh"]
     volumes:
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
