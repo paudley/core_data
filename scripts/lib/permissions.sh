@@ -82,17 +82,26 @@ _permissions_log() {
 }
 
 # _run_psql executes SQL against a database using the superuser credentials.
-# Usage: _run_psql <db> <sql>
+# Usage: _run_psql <db> [sql] or _run_psql <db> <<< "sql" or _run_psql <db> <<HEREDOC
 _run_psql() {
 	local db=$1
-	local sql=$2
+	local sql=${2:-}
 	if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
 		# Running inside container (init scripts)
-		psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}" <<< "${sql}"
+		if [[ -n "${sql}" ]]; then
+			psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}" <<< "${sql}"
+		else
+			psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}"
+		fi
 	else
 		# Running via compose_exec (manage.sh)
-		compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<< "${sql}"
+		if [[ -n "${sql}" ]]; then
+			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+				psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<< "${sql}"
+		else
+			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+				psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}"
+		fi
 	fi
 }
 
