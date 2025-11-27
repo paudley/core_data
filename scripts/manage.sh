@@ -1540,35 +1540,19 @@ apparmor-load)
 permissions-validate)
 	ensure_env
 	ensure_postgres_running
-	db=""
-	while [[ $# -gt 0 ]]; do
-		case "$1" in
-		--db)
-			db=$2
-			shift 2
-			;;
-		--db=*)
-			db=${1#*=}
-			shift
-			;;
-		-h | --help)
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
 			echo "Usage: ${0##*/} permissions-validate [--db NAME]" >&2
 			exit 0
-			;;
-		--)
-			shift
-			break
-			;;
-		*)
-			echo "Unknown option for permissions-validate: $1" >&2
-			exit 1
-			;;
-		esac
+		fi
 	done
+	_parse_db_argument "$@"
+	db="${PARSED_DB}"
 	if [[ -n "${db}" ]]; then
 		owner=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${db}';")
+			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
 		if [[ -z "${owner}" ]]; then
 			echo "[core_data] Database '${db}' not found." >&2
 			exit 1
@@ -1585,35 +1569,19 @@ permissions-validate)
 permissions-repair)
 	ensure_env
 	ensure_postgres_running
-	db=""
-	while [[ $# -gt 0 ]]; do
-		case "$1" in
-		--db)
-			db=$2
-			shift 2
-			;;
-		--db=*)
-			db=${1#*=}
-			shift
-			;;
-		-h | --help)
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
 			echo "Usage: ${0##*/} permissions-repair [--db NAME]" >&2
 			exit 0
-			;;
-		--)
-			shift
-			break
-			;;
-		*)
-			echo "Unknown option for permissions-repair: $1" >&2
-			exit 1
-			;;
-		esac
+		fi
 	done
+	_parse_db_argument "$@"
+	db="${PARSED_DB}"
 	if [[ -n "${db}" ]]; then
 		owner=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${db}';")
+			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
 		if [[ -z "${owner}" ]]; then
 			echo "[core_data] Database '${db}' not found." >&2
 			exit 1
@@ -1626,6 +1594,14 @@ permissions-repair)
 permissions-report)
 	ensure_env
 	ensure_postgres_running
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
+			echo "Usage: ${0##*/} permissions-report [--db NAME] [--output PATH]" >&2
+			exit 0
+		fi
+	done
+	# Parse --db and --output arguments
 	db="${POSTGRES_DB:-postgres}"
 	output=""
 	while [[ $# -gt 0 ]]; do
@@ -1646,17 +1622,12 @@ permissions-report)
 			output=${1#*=}
 			shift
 			;;
-		-h | --help)
-			echo "Usage: ${0##*/} permissions-report [--db NAME] [--output PATH]" >&2
-			exit 0
-			;;
 		--)
 			shift
 			break
 			;;
 		*)
-			echo "Unknown option for permissions-report: $1" >&2
-			exit 1
+			shift
 			;;
 		esac
 	done

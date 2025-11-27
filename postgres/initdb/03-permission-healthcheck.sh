@@ -25,8 +25,15 @@ if [[ -n "${POSTGRES_PASSWORD:-}" ]]; then
 	export PGPASSWORD="${POSTGRES_PASSWORD}"
 fi
 
-# Wait for PostgreSQL to be ready
+# Wait for PostgreSQL to be ready, with a timeout
+MAX_RETRIES=60
+RETRY_COUNT=0
 until psql --username "${POSTGRES_USER}" --dbname "${POSTGRES_DB}" --command "SELECT 1;" >/dev/null 2>&1; do
+	RETRY_COUNT=$((RETRY_COUNT + 1))
+	if [[ ${RETRY_COUNT} -ge ${MAX_RETRIES} ]]; then
+		echo "[core_data] ERROR: PostgreSQL did not become ready after ${MAX_RETRIES} attempts. Exiting." >&2
+		exit 1
+	fi
 	sleep 1
 done
 

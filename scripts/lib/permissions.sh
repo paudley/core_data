@@ -37,6 +37,45 @@ CUSTOM_TYPES=(
 # Default search_path for database owners
 DEFAULT_SEARCH_PATH="public, ag_catalog, topology, tiger"
 
+# _psql_quote_literal escapes a string for use as a literal in a PostgreSQL query.
+# This prevents SQL injection by properly escaping single quotes.
+_psql_quote_literal() {
+	printf "'%s'" "${1//\'/\'\'}"
+}
+
+# _parse_db_argument parses --db arguments from command line for permission commands.
+# Sets PARSED_DB variable with the database name, or empty if not provided.
+# Usage: _parse_db_argument "$@"; db="${PARSED_DB}"
+# Returns: Sets PARSED_DB and PARSED_SHIFT variables (exported for caller use)
+# shellcheck disable=SC2034  # PARSED_DB and PARSED_SHIFT are used by callers
+_parse_db_argument() {
+	PARSED_DB=""
+	PARSED_SHIFT=0
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			PARSED_DB=$2
+			shift 2
+			PARSED_SHIFT=$((PARSED_SHIFT + 2))
+			;;
+		--db=*)
+			PARSED_DB=${1#*=}
+			shift
+			PARSED_SHIFT=$((PARSED_SHIFT + 1))
+			;;
+		--)
+			shift
+			PARSED_SHIFT=$((PARSED_SHIFT + 1))
+			break
+			;;
+		*)
+			# Unknown option - let caller handle
+			break
+			;;
+		esac
+	done
+}
+
 # _permissions_log outputs a timestamped log message to stderr.
 _permissions_log() {
 	echo "[core_data:permissions] $*" >&2
@@ -101,7 +140,7 @@ BEGIN
     EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I IN SCHEMA %I GRANT EXECUTE ON FUNCTIONS TO %I',
         '${grantor}', '${schema}', '${role}');
 
-    RAISE NOTICE 'Granted permissions on schema % to %', '${schema}', '${role}';
+    RAISE NOTICE 'Granted permissions on schema % to %', quote_ident('${schema}'), quote_ident('${role}');
   END IF;
 END;
 \$perm\$;
@@ -127,7 +166,7 @@ BEGIN
     WHERE n.nspname = '${schema}' AND t.typname = '${type_name}'
   ) THEN
     EXECUTE format('GRANT USAGE ON TYPE %I.%I TO %I', '${schema}', '${type_name}', '${role}');
-    RAISE NOTICE 'Granted USAGE on type %.% to %', '${schema}', '${type_name}', '${role}';
+    RAISE NOTICE 'Granted USAGE on type %.% to %', quote_ident('${schema}'), quote_ident('${type_name}'), quote_ident('${role}');
   END IF;
 END;
 \$type_perm\$;
@@ -136,11 +175,12 @@ SQL
 }
 
 # set_role_search_path configures the search_path for a role in a database.
-# Usage: set_role_search_path <db> <role> [search_path]
+# Uses DEFAULT_SEARCH_PATH to ensure consistent, safe configuration.
+# Usage: set_role_search_path <db> <role>
 set_role_search_path() {
 	local db=$1
 	local role=$2
-	local search_path=${3:-${DEFAULT_SEARCH_PATH}}
+	local search_path=${DEFAULT_SEARCH_PATH}
 
 	_run_psql "${db}" <<SQL
 ALTER ROLE "${role}" IN DATABASE "${db}" SET search_path TO ${search_path};
@@ -178,7 +218,7 @@ SQL
 }
 
 # validate_schema_permissions checks if a role has USAGE on a schema.
-# Returns 0 if permissions are correct, 1 if missing.
+# Sets shell exit code to 0 if permissions are correct, 1 if missing.
 # Usage: validate_schema_permissions <db> <schema> <role>
 validate_schema_permissions() {
 	local db=$1
@@ -189,8 +229,8 @@ validate_schema_permissions() {
 	has_usage=$(_run_psql_query "${db}" "
 		SELECT CASE WHEN EXISTS (
 			SELECT 1 FROM pg_namespace n
-			WHERE n.nspname = '${schema}'
-			AND has_schema_privilege('${role}', n.oid, 'USAGE')
+			WHERE n.nspname = $(_psql_quote_literal "${schema}")
+			AND has_schema_privilege($(_psql_quote_literal "${role}"), n.oid, 'USAGE')
 		) THEN 'yes' ELSE 'no' END;
 	")
 
@@ -201,7 +241,7 @@ validate_schema_permissions() {
 }
 
 # validate_function_permissions checks if a role has EXECUTE on functions in a schema.
-# Returns the count of functions without EXECUTE permission.
+# Outputs the count of functions without EXECUTE permission to stdout.
 # Usage: validate_function_permissions <db> <schema> <role>
 validate_function_permissions() {
 	local db=$1
@@ -212,15 +252,15 @@ validate_function_permissions() {
 	missing_count=$(_run_psql_query "${db}" "
 		SELECT COUNT(*) FROM pg_proc p
 		JOIN pg_namespace n ON p.pronamespace = n.oid
-		WHERE n.nspname = '${schema}'
-		AND NOT has_function_privilege('${role}', p.oid, 'EXECUTE');
+		WHERE n.nspname = $(_psql_quote_literal "${schema}")
+		AND NOT has_function_privilege($(_psql_quote_literal "${role}"), p.oid, 'EXECUTE');
 	")
 
 	echo "${missing_count:-0}"
 }
 
 # validate_sequence_permissions checks if a role has USAGE on sequences in a schema.
-# Returns the count of sequences without USAGE permission.
+# Outputs the count of sequences without USAGE permission to stdout.
 # Usage: validate_sequence_permissions <db> <schema> <role>
 validate_sequence_permissions() {
 	local db=$1
@@ -231,8 +271,8 @@ validate_sequence_permissions() {
 	missing_count=$(_run_psql_query "${db}" "
 		SELECT COUNT(*) FROM pg_class c
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-		WHERE n.nspname = '${schema}' AND c.relkind = 'S'
-		AND NOT has_sequence_privilege('${role}', c.oid, 'USAGE');
+		WHERE n.nspname = $(_psql_quote_literal "${schema}") AND c.relkind = 'S'
+		AND NOT has_sequence_privilege($(_psql_quote_literal "${role}"), c.oid, 'USAGE');
 	")
 
 	echo "${missing_count:-0}"
@@ -252,7 +292,7 @@ validate_all_permissions() {
 	for schema in "${EXTENSION_SCHEMAS[@]}"; do
 		# Check if schema exists first
 		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = '${schema}';")
+		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
 
 		if [[ -n "${schema_exists}" ]]; then
 			# Check schema USAGE
@@ -300,7 +340,7 @@ repair_permissions() {
 
 	for schema in "${EXTENSION_SCHEMAS[@]}"; do
 		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = '${schema}';")
+		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
 
 		if [[ -n "${schema_exists}" ]]; then
 			# Check and repair schema USAGE
@@ -403,11 +443,11 @@ startup_permission_healthcheck() {
 		local owner
 		if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
 			owner=$(psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${db}';")
+				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
 		else
 			owner=$(compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
 				psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = '${db}';")
+				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
 		fi
 
 		# Skip if owner is superuser
