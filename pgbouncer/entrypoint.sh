@@ -105,11 +105,15 @@ if [[ "${PGBOUNCER_CLIENT_TLS_SSLMODE}" != "disable" ]]; then
 			echo "[pgbouncer] ERROR: openssl not available; cannot create TLS assets." >&2
 			exit 1
 		fi
-		openssl req -x509 -nodes -newkey rsa:4096 \
+if ! openssl_output=$(openssl req -x509 -nodes -newkey rsa:4096 \
 			-keyout "${PGBOUNCER_CLIENT_TLS_KEY_FILE}" \
 			-out "${PGBOUNCER_CLIENT_TLS_CERT_FILE}" \
 			-days "${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS}" \
-			-subj "${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT}" >/dev/null 2>&1
+			-subj "${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT}" 2>&1); then
+			echo "[pgbouncer] ERROR: Failed to generate self-signed TLS certificate:" >&2
+			echo "${openssl_output}" >&2
+			exit 1
+		fi
 		chmod 600 "${PGBOUNCER_CLIENT_TLS_KEY_FILE}"
 		chmod 644 "${PGBOUNCER_CLIENT_TLS_CERT_FILE}"
 		echo "[pgbouncer] TLS certificate generated successfully." >&2
