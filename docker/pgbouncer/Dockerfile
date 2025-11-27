@@ -13,7 +13,8 @@ RUN apt-get update && \
       netcat-openbsd \
       procps \
       postgresql-client \
-      ca-certificates && \
+      ca-certificates \
+      openssl && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir -p /opt/core_data/bin /opt/core_data/docs && chmod 755 /opt/core_data
 COPY README.md SECURITY.md /opt/core_data/docs/

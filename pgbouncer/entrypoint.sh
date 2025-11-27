@@ -19,6 +19,13 @@ export POSTGRES_PORT=${POSTGRES_PORT:-5433}
 export PGBOUNCER_AUTH_USER=${PGBOUNCER_AUTH_USER:-pgbouncer_auth}
 export POSTGRES_DB=${POSTGRES_DB:-postgres}
 
+# Client TLS configuration (connections from clients to PgBouncer)
+export PGBOUNCER_CLIENT_TLS_SSLMODE=${PGBOUNCER_CLIENT_TLS_SSLMODE:-require}
+export PGBOUNCER_CLIENT_TLS_CERT_FILE=${PGBOUNCER_CLIENT_TLS_CERT_FILE:-/tmp/pgbouncer/tls/server.crt}
+export PGBOUNCER_CLIENT_TLS_KEY_FILE=${PGBOUNCER_CLIENT_TLS_KEY_FILE:-/tmp/pgbouncer/tls/server.key}
+export PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT=${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT:-/CN=core_data_pgbouncer}
+export PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS=${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS:-730}
+
 wait_for_backend() {
 	local attempts=${PGBOUNCER_BACKEND_WAIT_ATTEMPTS:-120}
 	local delay=2
@@ -87,6 +94,32 @@ fi
 mkdir -p "${log_dir}" "${run_dir}" "$(dirname "${config_path}")" "$(dirname "${userlist_path}")" "$(dirname "${hba_path}")"
 umask 077
 
+# Generate self-signed TLS certificate for client connections if not provided
+if [[ "${PGBOUNCER_CLIENT_TLS_SSLMODE}" != "disable" ]]; then
+	tls_cert_dir=$(dirname "${PGBOUNCER_CLIENT_TLS_CERT_FILE}")
+	tls_key_dir=$(dirname "${PGBOUNCER_CLIENT_TLS_KEY_FILE}")
+	mkdir -p "${tls_cert_dir}" "${tls_key_dir}"
+	if [[ ! -f "${PGBOUNCER_CLIENT_TLS_CERT_FILE}" || ! -f "${PGBOUNCER_CLIENT_TLS_KEY_FILE}" ]]; then
+		echo "[pgbouncer] Generating self-signed TLS certificate for client connections." >&2
+		if ! command -v openssl >/dev/null 2>&1; then
+			echo "[pgbouncer] ERROR: openssl not available; cannot create TLS assets." >&2
+			exit 1
+		fi
+if ! openssl_output=$(openssl req -x509 -nodes -newkey rsa:4096 \
+			-keyout "${PGBOUNCER_CLIENT_TLS_KEY_FILE}" \
+			-out "${PGBOUNCER_CLIENT_TLS_CERT_FILE}" \
+			-days "${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS}" \
+			-subj "${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT}" 2>&1); then
+			echo "[pgbouncer] ERROR: Failed to generate self-signed TLS certificate:" >&2
+			echo "${openssl_output}" >&2
+			exit 1
+		fi
+		chmod 600 "${PGBOUNCER_CLIENT_TLS_KEY_FILE}"
+		chmod 644 "${PGBOUNCER_CLIENT_TLS_CERT_FILE}"
+		echo "[pgbouncer] TLS certificate generated successfully." >&2
+	fi
+fi
+
 wait_for_backend
 unset PGUSER PGDATABASE PGPASSWORD
 
@@ -106,6 +139,15 @@ if [[ -r "${NETWORK_ALLOW_FILE}" ]]; then
 else
 	echo "[pgbouncer] WARNING: ${NETWORK_ALLOW_FILE} not found; defaulting to internal allow rules only." >&2
 fi
+# Build client TLS configuration block
+client_tls_config=""
+if [[ "${PGBOUNCER_CLIENT_TLS_SSLMODE}" != "disable" ]]; then
+	client_tls_config="client_tls_sslmode = ${PGBOUNCER_CLIENT_TLS_SSLMODE}
+client_tls_cert_file = ${PGBOUNCER_CLIENT_TLS_CERT_FILE}
+client_tls_key_file = ${PGBOUNCER_CLIENT_TLS_KEY_FILE}"
+	echo "[pgbouncer] Client TLS enabled with sslmode=${PGBOUNCER_CLIENT_TLS_SSLMODE}" >&2
+fi
+
 cat >"${config_path}" <<EOF
 [databases]
 * = host=${POSTGRES_HOST} port=${POSTGRES_PORT} auth_user=${PGBOUNCER_AUTH_USER}
@@ -131,6 +173,7 @@ stats_users = ${PGBOUNCER_STATS_USERS}
 logfile = ${log_dir}/pgbouncer.log
 pidfile = ${run_dir}/pgbouncer.pid
 server_tls_sslmode = ${PGBOUNCER_SERVER_TLS_MODE:-require}
+${client_tls_config}
 EOF
 
 cat >"${userlist_path}" <<EOF
