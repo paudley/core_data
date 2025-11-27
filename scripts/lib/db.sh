@@ -47,22 +47,20 @@ END
 SQL
 }
 
-# grant_db_owner_privileges ensures the owner can manage objects in public and ag_catalog schemas.
+# grant_db_owner_privileges ensures the owner can manage objects across all extension schemas.
+# Uses the comprehensive permissions library for full coverage of all 46 extensions.
 grant_db_owner_privileges() {
 	local db=$1
 	local owner=$2
-	compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-		psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<SQL
-GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${owner}";
-GRANT USAGE, CREATE ON SCHEMA public TO "${owner}";
-GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO "${owner}";
-GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO "${owner}";
-ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON TABLES TO "${owner}";
-ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA public GRANT ALL PRIVILEGES ON SEQUENCES TO "${owner}";
-GRANT USAGE ON SCHEMA ag_catalog TO "${owner}";
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA ag_catalog TO "${owner}";
-ALTER DEFAULT PRIVILEGES FOR ROLE "${POSTGRES_SUPERUSER:-postgres}" IN SCHEMA ag_catalog GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO "${owner}";
-SQL
+
+	# Source the permissions library if not already loaded
+	local lib_dir
+	lib_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	# shellcheck source=scripts/lib/permissions.sh
+	source "${lib_dir}/permissions.sh"
+
+	# Apply complete permissions using the new system
+	apply_complete_permissions "${db}" "${owner}"
 }
 
 # cmd_create_db ensures the owner exists, creates the database, and bootstraps extensions.

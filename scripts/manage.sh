@@ -49,6 +49,8 @@ source "${SCRIPT_DIR}/lib/test_dataset.sh"
 source "${SCRIPT_DIR}/lib/bootstrap_ci.sh"
 # shellcheck source=scripts/lib/ci.sh
 source "${SCRIPT_DIR}/lib/ci.sh"
+# shellcheck source=scripts/lib/permissions.sh
+source "${SCRIPT_DIR}/lib/permissions.sh"
 
 CORE_DATA_EXTENSIONS=("${CORE_EXTENSION_LIST[@]}")
 
@@ -251,6 +253,12 @@ Security hardening
                                         Build a whitelist profile from strace output.
   seccomp-verify                      Ensure docker-compose services define seccomp security_opts.
   apparmor-load                       Load AppArmor profiles under apparmor/ (requires sudo).
+
+Permissions
+  permissions-validate [--db NAME]    Validate permissions for all databases (or specific db).
+  permissions-repair [--db NAME]      Validate and repair permissions for databases.
+  permissions-report [--db NAME] [--output PATH]
+                                        Generate CSV report of permissions by schema/role.
   help                                Show this help.
 
   pgtune options:
@@ -1528,6 +1536,102 @@ seccomp-verify)
 	;;
 apparmor-load)
 	cmd_apparmor_load "$@"
+	;;
+permissions-validate)
+	ensure_env
+	ensure_postgres_running
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
+			echo "Usage: ${0##*/} permissions-validate [--db NAME]" >&2
+			exit 0
+		fi
+	done
+	_parse_db_argument "$@"
+	db="${PARSED_DB}"
+	if [[ -n "${db}" ]]; then
+		owner=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
+		if [[ -z "${owner}" ]]; then
+			echo "[core_data] Database '${db}' not found." >&2
+			exit 1
+		fi
+		if ! validate_all_permissions "${db}" "${owner}"; then
+			exit 1
+		fi
+	else
+		if ! startup_permission_healthcheck "false"; then
+			exit 1
+		fi
+	fi
+	;;
+permissions-repair)
+	ensure_env
+	ensure_postgres_running
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
+			echo "Usage: ${0##*/} permissions-repair [--db NAME]" >&2
+			exit 0
+		fi
+	done
+	_parse_db_argument "$@"
+	db="${PARSED_DB}"
+	if [[ -n "${db}" ]]; then
+		owner=$(compose_exec env PGHOST="${POSTGRES_HOST}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+			--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
+		if [[ -z "${owner}" ]]; then
+			echo "[core_data] Database '${db}' not found." >&2
+			exit 1
+		fi
+		repair_permissions "${db}" "${owner}"
+	else
+		startup_permission_healthcheck "true"
+	fi
+	;;
+permissions-report)
+	ensure_env
+	ensure_postgres_running
+	# Check for help first
+	for arg in "$@"; do
+		if [[ "${arg}" == "-h" || "${arg}" == "--help" ]]; then
+			echo "Usage: ${0##*/} permissions-report [--db NAME] [--output PATH]" >&2
+			exit 0
+		fi
+	done
+	# Parse --db and --output arguments
+	db="${POSTGRES_DB:-postgres}"
+	output=""
+	while [[ $# -gt 0 ]]; do
+		case "$1" in
+		--db)
+			db=$2
+			shift 2
+			;;
+		--db=*)
+			db=${1#*=}
+			shift
+			;;
+		--output)
+			output=$2
+			shift 2
+			;;
+		--output=*)
+			output=${1#*=}
+			shift
+			;;
+		--)
+			shift
+			break
+			;;
+		*)
+			shift
+			;;
+		esac
+	done
+	generate_permission_report "${db}" "${output}"
 	;;
 version-status)
 	output=""
