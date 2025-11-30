@@ -67,9 +67,12 @@ RUN set -euxo pipefail; \
     rm -rf /var/lib/apt/lists/*;
 
 # Recreate postgres system user with operator-selected UID/GID and home
+# Also add postgres to the secrets group so it can read shared secrets
+ARG SECRETS_GID=65532
 RUN set -eux; \
     groupmod --gid "${CORE_GID}" postgres; \
-    usermod --uid "${CORE_UID}" --gid "${CORE_GID}" --home "${CORE_HOME}" --comment "${CORE_GECOS}" --shell /bin/bash postgres; \
+    groupadd --gid "${SECRETS_GID}" secrets; \
+    usermod --uid "${CORE_UID}" --gid "${CORE_GID}" --home "${CORE_HOME}" --comment "${CORE_GECOS}" --shell /bin/bash --append --groups secrets postgres; \
     install -d -o "${CORE_UID}" -g "${CORE_GID}" "${CORE_HOME}"; \
     install -d -o "${CORE_UID}" -g "${CORE_GID}" /tmp/pgbackrest; \
     chown -R "${CORE_UID}:${CORE_GID}" /var/lib/postgresql /var/lib/pgbackrest;

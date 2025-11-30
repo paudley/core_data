@@ -286,14 +286,12 @@ BEGIN
     lo_count := lo_count + 1;
   END LOOP;
 
-  -- Default privileges for future large objects created by superuser
-  EXECUTE format('ALTER DEFAULT PRIVILEGES FOR ROLE %I GRANT SELECT, UPDATE ON LARGE OBJECTS TO %I',
-      '${grantor}', '${role}');
+  -- Note: ALTER DEFAULT PRIVILEGES does not support LARGE OBJECTS in PostgreSQL.
+  -- Large object permissions must be granted explicitly after creation.
 
   IF lo_count > 0 THEN
-    RAISE NOTICE 'Granted permissions on % large objects to %', lo_count, quote_ident('${role}');
+    RAISE NOTICE 'Granted permissions on % large objects to "%"', lo_count, '${role}';
   END IF;
-  RAISE NOTICE 'Set default large object privileges for % on objects created by %', quote_ident('${role}'), quote_ident('${grantor}');
 END;
 \$lo\$;
 SQL
@@ -524,6 +522,11 @@ repair_permissions() {
 	local role=$2
 
 	_permissions_log "Repairing permissions for '${role}' in database '${db}'."
+
+	# Database-level privileges (includes TEMPORARY)
+	_run_psql "${db}" <<SQL
+GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${role}";
+SQL
 
 	# Tier 1: Full access schemas
 	# Note: grant_schema_permissions checks schema existence internally

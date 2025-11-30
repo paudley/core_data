@@ -36,6 +36,11 @@ RUN apt-get update && \
 COPY README.md SECURITY.md /opt/core_data/docs/
 RUN cp /opt/core_data/docs/README.md /README.md && cp /opt/core_data/docs/SECURITY.md /SECURITY.md
 
+# Add secrets group and add postgres user to it for reading shared secrets
+ARG SECRETS_GID=65532
+RUN groupadd --gid "${SECRETS_GID}" secrets && \
+    usermod --append --groups secrets postgres
+
 COPY pgbouncer/entrypoint.sh /opt/core_data/bin/pgbouncer-entrypoint.sh
 RUN chmod 755 /opt/core_data/bin/pgbouncer-entrypoint.sh
 
