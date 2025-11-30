@@ -50,10 +50,8 @@ services:
       POSTGRES_GID: ${POSTGRES_GID:-1000}
       RABBITMQ_UID: ${RABBITMQ_UID:-100}
       RABBITMQ_GID: ${RABBITMQ_GID:-101}
-      VALKEY_UID: ${VALKEY_UID:-999}
-      VALKEY_GID: ${VALKEY_GID:-1000}
-      PGBOUNCER_UID: ${PGBOUNCER_UID:-100}
-      PGBOUNCER_GID: ${PGBOUNCER_GID:-102}
+      # Shared secrets group - all containers have this as a secondary group
+      SECRETS_GID: ${SECRETS_GID:-65532}
       SECRETS_MOUNT: /opt/core_data/secrets
     command:
       - "/bin/sh"
@@ -62,17 +60,12 @@ services:
         # Fix ownership for data directories
         chown -R $${POSTGRES_UID}:$${POSTGRES_GID} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}
         chown -R $${RABBITMQ_UID}:$${RABBITMQ_GID} $${RABBITMQ_DATA_MOUNT}
-        # Fix ownership for secrets - each service needs its own secrets readable
-        chown $${POSTGRES_UID}:$${POSTGRES_GID} $${SECRETS_MOUNT}/postgres_superuser_password 2>/dev/null || true
-        chown $${VALKEY_UID}:$${VALKEY_GID} $${SECRETS_MOUNT}/valkey_password 2>/dev/null || true
-        chown $${PGBOUNCER_UID}:$${PGBOUNCER_GID} $${SECRETS_MOUNT}/pgbouncer_auth_password 2>/dev/null || true
-        chown $${PGBOUNCER_UID}:$${PGBOUNCER_GID} $${SECRETS_MOUNT}/pgbouncer_stats_password 2>/dev/null || true
-        chown $${RABBITMQ_UID}:$${RABBITMQ_GID} $${SECRETS_MOUNT}/rabbitmq_default_pass 2>/dev/null || true
-        chown $${RABBITMQ_UID}:$${RABBITMQ_GID} $${SECRETS_MOUNT}/rabbitmq_erlang_cookie 2>/dev/null || true
+        # Fix group ownership for secrets - keep original owner, set group to secrets
+        # All service containers have the secrets group as a secondary group
+        chgrp $${SECRETS_GID} $${SECRETS_MOUNT}/* 2>/dev/null || true
+        chmod 640 $${SECRETS_MOUNT}/* 2>/dev/null || true
         # Ensure secrets directory is traversable by all services (711 = rwx--x--x)
-        # and individual secret files are owner-readable only (600)
         chmod 711 $${SECRETS_MOUNT} 2>/dev/null || true
-        chmod 600 $${SECRETS_MOUNT}/* 2>/dev/null || true
     volumes:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
@@ -114,6 +107,9 @@ services:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    group_add:
+      - "${SECRETS_GID:-65532}"
     environment:
       # PGPORT ensures Docker's init-time postgres starts on 5433 so init scripts
       # can connect on the same port as the final production configuration.
@@ -212,7 +208,10 @@ services:
       dockerfile: docker/pghero/Dockerfile
     image: ${PGHERO_IMAGE:-ghcr.io/paudley/core_data/pghero:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
-    user: "${POSTGRES_UID:-999}:${POSTGRES_GID:-999}"
+    user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    group_add:
+      - "${SECRETS_GID:-65532}"
     restart: unless-stopped
     depends_on:
       postgres:
@@ -246,6 +245,9 @@ services:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    group_add:
+      - "${SECRETS_GID:-65532}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -292,8 +294,11 @@ services:
     restart: unless-stopped
     profiles:
       - valkey
-    # Run as the valkey user (UID 999) from the valkey image, matching secret ownership
+    # Run as the valkey user (UID 999) from the valkey image
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
     user: "${VALKEY_UID:-999}:${VALKEY_GID:-1000}"
+    group_add:
+      - "${SECRETS_GID:-65532}"
     environment:
       VALKEY_PORT: ${VALKEY_PORT}
       VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}
@@ -330,7 +335,10 @@ services:
     restart: unless-stopped
     profiles:
       - rabbitmq
-    user: "${RABBITMQ_UID:-999}:${RABBITMQ_GID:-999}"
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    user: "${RABBITMQ_UID:-100}:${RABBITMQ_GID:-101}"
+    group_add:
+      - "${SECRETS_GID:-65532}"
     depends_on:
       volume_prep:
         condition: service_completed_successfully
@@ -373,8 +381,11 @@ services:
     restart: unless-stopped
     profiles:
       - pgbouncer
-    # Run as the postgres user (UID 100) from the pgbouncer image, matching secret ownership
+    # Run as the postgres user (UID 100) from the pgbouncer image
+    # group_add adds the secrets group as a supplementary group for reading shared secrets
     user: "${PGBOUNCER_UID:-100}:${PGBOUNCER_GID:-102}"
+    group_add:
+      - "${SECRETS_GID:-65532}"
     depends_on:
       network_probe:
         condition: service_completed_successfully
