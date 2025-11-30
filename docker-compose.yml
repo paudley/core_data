@@ -58,14 +58,16 @@ services:
       - "-c"
       - |
         # Fix ownership for data directories
-        chown -R $${POSTGRES_UID}:$${POSTGRES_GID} $${PGDATA_MOUNT} $${PGWAL_MOUNT} $${PGBACKREST_MOUNT}
-        chown -R $${RABBITMQ_UID}:$${RABBITMQ_GID} $${RABBITMQ_DATA_MOUNT}
+        chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" "$${PGDATA_MOUNT}" "$${PGWAL_MOUNT}" "$${PGBACKREST_MOUNT}"
+        chown -R "$${RABBITMQ_UID}:$${RABBITMQ_GID}" "$${RABBITMQ_DATA_MOUNT}"
         # Fix group ownership for secrets - keep original owner, set group to secrets
         # All service containers have the secrets group as a secondary group
-        chgrp $${SECRETS_GID} $${SECRETS_MOUNT}/* 2>/dev/null || true
-        chmod 640 $${SECRETS_MOUNT}/* 2>/dev/null || true
-        # Ensure secrets directory is traversable by all services (711 = rwx--x--x)
-        chmod 711 $${SECRETS_MOUNT} 2>/dev/null || true
+        if [ -d "$${SECRETS_MOUNT}" ]; then
+          find "$${SECRETS_MOUNT}" -maxdepth 1 -type f -exec chgrp "$${SECRETS_GID}" {} +
+          find "$${SECRETS_MOUNT}" -maxdepth 1 -type f -exec chmod 640 {} +
+          # Ensure secrets directory is traversable by all services (711 = rwx--x--x)
+          chmod 711 "$${SECRETS_MOUNT}"
+        fi
     volumes:
       - ./data/postgres_data:${POSTGRES_DATA_MOUNT_PATH:-/var/lib/postgresql/data}
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
@@ -289,6 +291,8 @@ services:
     build:
       context: .
       dockerfile: docker/valkey/Dockerfile
+      args:
+        SECRETS_GID: ${SECRETS_GID:-65532}
     image: ${VALKEY_IMAGE:-ghcr.io/paudley/core_data/valkey:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
@@ -330,6 +334,8 @@ services:
     build:
       context: .
       dockerfile: docker/rabbitmq/Dockerfile
+      args:
+        SECRETS_GID: ${SECRETS_GID:-65532}
     image: ${RABBITMQ_IMAGE:-ghcr.io/paudley/core_data/rabbitmq:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
@@ -376,6 +382,8 @@ services:
     build:
       context: .
       dockerfile: docker/pgbouncer/Dockerfile
+      args:
+        SECRETS_GID: ${SECRETS_GID:-65532}
     image: ${PGBOUNCER_IMAGE:-ghcr.io/paudley/core_data/pgbouncer:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
