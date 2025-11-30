@@ -23,6 +23,32 @@ checkpoint_completion_target = ${PG_CHECKPOINT_COMPLETION_TARGET}
 default_statistics_target = 200
 random_page_cost = ${PG_RANDOM_PAGE_COST}
 effective_io_concurrency = ${PG_EFFECTIVE_IO_CONCURRENCY}
+
+# === Transaction Pooling Optimizations ===
+# Plan cache mode: auto allows PostgreSQL to cache generic plans after 5 executions
+plan_cache_mode = ${PG_PLAN_CACHE_MODE}
+
+# JIT compilation - enabled for complex analytical queries
+jit = ${PG_JIT_ENABLED}
+jit_above_cost = ${PG_JIT_ABOVE_COST}
+
+# Parallel query settings
+max_parallel_workers_per_gather = ${PG_MAX_PARALLEL_WORKERS_PER_GATHER}
+max_parallel_workers = ${PG_MAX_PARALLEL_WORKERS}
+parallel_tuple_cost = ${PG_PARALLEL_TUPLE_COST}
+parallel_setup_cost = ${PG_PARALLEL_SETUP_COST}
+
+# Connection handling - fast setup for pooled connections
+tcp_keepalives_idle = ${PG_TCP_KEEPALIVES_IDLE}
+tcp_keepalives_interval = ${PG_TCP_KEEPALIVES_INTERVAL}
+tcp_keepalives_count = ${PG_TCP_KEEPALIVES_COUNT}
+
+# Idle session timeout (PostgreSQL 14+) - complementary to PgBouncer timeouts
+idle_session_timeout = ${PG_IDLE_SESSION_TIMEOUT}
+
+# Temp file management for transaction-scoped temp tables
+temp_file_limit = ${PG_TEMP_FILE_LIMIT}
+
 autovacuum = on
 autovacuum_max_workers = 5
 autovacuum_naptime = 30s
