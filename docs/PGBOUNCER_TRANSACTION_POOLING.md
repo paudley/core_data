@@ -213,14 +213,23 @@ DIRECT_DATABASE_URL="postgresql://user:pass@localhost:5433/app_main"  # Port 543
 
 **pgx**:
 ```go
-config, _ := pgxpool.ParseConfig(connString)
+config, err := pgxpool.ParseConfig(connString)
+if err != nil {
+    log.Fatal("failed to parse config:", err)
+}
 config.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
-pool, _ := pgxpool.NewWithConfig(context.Background(), config)
+pool, err := pgxpool.NewWithConfig(context.Background(), config)
+if err != nil {
+    log.Fatal("failed to create pool:", err)
+}
 ```
 
 **database/sql with lib/pq**:
 ```go
-db, _ := sql.Open("postgres", connString)
+db, err := sql.Open("postgres", connString)
+if err != nil {
+    log.Fatal("failed to open database:", err)
+}
 db.SetMaxOpenConns(20)
 db.SetMaxIdleConns(5)
 db.SetConnMaxLifetime(5 * time.Minute)
