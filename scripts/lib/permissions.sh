@@ -526,43 +526,28 @@ repair_permissions() {
 	_permissions_log "Repairing permissions for '${role}' in database '${db}'."
 
 	# Tier 1: Full access schemas
+	# Note: grant_schema_permissions checks schema existence internally
 	for schema in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
-		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
-		if [[ -n "${schema_exists}" ]]; then
-			_permissions_log "  [REPAIR] Granting tier 1 permissions on schema '${schema}'"
-			grant_schema_permissions "${db}" "${schema}" "${role}" 1
-		fi
+		_permissions_log "  [REPAIR] Granting tier 1 permissions on schema '${schema}'"
+		grant_schema_permissions "${db}" "${schema}" "${role}" 1
 	done
 
 	# Tier 2: Read-write schemas
 	for schema in "${TIER2_READWRITE_SCHEMAS[@]}"; do
-		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
-		if [[ -n "${schema_exists}" ]]; then
-			_permissions_log "  [REPAIR] Granting tier 2 permissions on schema '${schema}'"
-			grant_schema_permissions "${db}" "${schema}" "${role}" 2
-		fi
+		_permissions_log "  [REPAIR] Granting tier 2 permissions on schema '${schema}'"
+		grant_schema_permissions "${db}" "${schema}" "${role}" 2
 	done
 
 	# Tier 3: Read-only schemas
 	for schema in "${TIER3_READONLY_SCHEMAS[@]}"; do
-		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
-		if [[ -n "${schema_exists}" ]]; then
-			_permissions_log "  [REPAIR] Granting tier 3 permissions on schema '${schema}'"
-			grant_schema_permissions "${db}" "${schema}" "${role}" 3
-		fi
+		_permissions_log "  [REPAIR] Granting tier 3 permissions on schema '${schema}'"
+		grant_schema_permissions "${db}" "${schema}" "${role}" 3
 	done
 
 	# Tier 4: Function-only schemas
 	for schema in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
-		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
-		if [[ -n "${schema_exists}" ]]; then
-			_permissions_log "  [REPAIR] Granting tier 4 permissions on schema '${schema}'"
-			grant_schema_permissions "${db}" "${schema}" "${role}" 4
-		fi
+		_permissions_log "  [REPAIR] Granting tier 4 permissions on schema '${schema}'"
+		grant_schema_permissions "${db}" "${schema}" "${role}" 4
 	done
 
 	# Ensure type permissions
@@ -584,14 +569,21 @@ generate_permission_report() {
 	local db=$1
 	local output=${2:-}
 
+	# Build tier lists dynamically from the arrays to avoid duplication
+	local tier1_list tier2_list tier3_list tier4_list
+	tier1_list=$(printf "'%s'," "${TIER1_FULL_ACCESS_SCHEMAS[@]}" | sed 's/,$//')
+	tier2_list=$(printf "'%s'," "${TIER2_READWRITE_SCHEMAS[@]}" | sed 's/,$//')
+	tier3_list=$(printf "'%s'," "${TIER3_READONLY_SCHEMAS[@]}" | sed 's/,$//')
+	tier4_list=$(printf "'%s'," "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}" | sed 's/,$//')
+
 	local sql="
 SELECT
     n.nspname AS schema_name,
     CASE
-        WHEN n.nspname IN ('public','ag_catalog','partman','topology') THEN 'Tier 1 (Full)'
-        WHEN n.nspname IN ('cron') THEN 'Tier 2 (Read-Write)'
-        WHEN n.nspname IN ('tiger','tiger_data','address_standardizer','address_standardizer_data_us','squeeze') THEN 'Tier 3 (Read-Only)'
-        WHEN n.nspname IN ('core_data_admin') THEN 'Tier 4 (Functions)'
+        WHEN n.nspname IN (${tier1_list}) THEN 'Tier 1 (Full)'
+        WHEN n.nspname IN (${tier2_list}) THEN 'Tier 2 (Read-Write)'
+        WHEN n.nspname IN (${tier3_list}) THEN 'Tier 3 (Read-Only)'
+        WHEN n.nspname IN (${tier4_list}) THEN 'Tier 4 (Functions)'
         ELSE 'Unmanaged'
     END AS permission_tier,
     r.rolname AS role_name,
