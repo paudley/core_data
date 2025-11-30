@@ -6,8 +6,8 @@ LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies and add PGDG repository for PgBouncer 1.25+
-# PGDG provides latest PgBouncer with max_prepared_statements support (1.21+)
+# Install dependencies and add PGDG repository for PgBouncer 1.21+
+# PGDG provides latest PgBouncer with max_prepared_statements support (requires 1.21+)
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
       bash \
@@ -31,7 +31,7 @@ RUN apt-get update && \
       openssl && \
     # Cleanup
     apt-get purge -y --auto-remove curl gnupg lsb-release && \
-    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean && rm -rf /var/lib/apt/lists/* && \
     mkdir -p /opt/core_data/bin /opt/core_data/docs && chmod 755 /opt/core_data
 COPY README.md SECURITY.md /opt/core_data/docs/
 RUN cp /opt/core_data/docs/README.md /README.md && cp /opt/core_data/docs/SECURITY.md /SECURITY.md
