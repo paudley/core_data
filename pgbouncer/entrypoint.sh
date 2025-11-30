@@ -26,6 +26,26 @@ export PGBOUNCER_CLIENT_TLS_KEY_FILE=${PGBOUNCER_CLIENT_TLS_KEY_FILE:-/tmp/pgbou
 export PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT=${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT:-/CN=core_data_pgbouncer}
 export PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS=${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS:-730}
 
+# Transaction mode compatibility (PgBouncer 1.21+)
+export PGBOUNCER_MAX_PREPARED_STATEMENTS=${PGBOUNCER_MAX_PREPARED_STATEMENTS:-1024}
+export PGBOUNCER_IGNORE_STARTUP_PARAMETERS=${PGBOUNCER_IGNORE_STARTUP_PARAMETERS:-extra_float_digits,options}
+export PGBOUNCER_TRACK_EXTRA_PARAMETERS=${PGBOUNCER_TRACK_EXTRA_PARAMETERS:-IntervalStyle}
+export PGBOUNCER_APPLICATION_NAME_ADD_HOST=${PGBOUNCER_APPLICATION_NAME_ADD_HOST:-1}
+
+# Connection lifecycle
+export PGBOUNCER_SERVER_LIFETIME=${PGBOUNCER_SERVER_LIFETIME:-1800}
+export PGBOUNCER_SERVER_IDLE_TIMEOUT=${PGBOUNCER_SERVER_IDLE_TIMEOUT:-300}
+export PGBOUNCER_SERVER_CONNECT_TIMEOUT=${PGBOUNCER_SERVER_CONNECT_TIMEOUT:-10}
+export PGBOUNCER_SERVER_LOGIN_RETRY=${PGBOUNCER_SERVER_LOGIN_RETRY:-5}
+
+# Client timeout protection
+export PGBOUNCER_QUERY_WAIT_TIMEOUT=${PGBOUNCER_QUERY_WAIT_TIMEOUT:-30}
+export PGBOUNCER_CLIENT_IDLE_TIMEOUT=${PGBOUNCER_CLIENT_IDLE_TIMEOUT:-3600}
+
+# DNS failover
+export PGBOUNCER_DNS_MAX_TTL=${PGBOUNCER_DNS_MAX_TTL:-30}
+export PGBOUNCER_DNS_NXDOMAIN_TTL=${PGBOUNCER_DNS_NXDOMAIN_TTL:-5}
+
 wait_for_backend() {
 	local attempts=${PGBOUNCER_BACKEND_WAIT_ATTEMPTS:-120}
 	local delay=2
@@ -160,18 +180,47 @@ auth_user = ${PGBOUNCER_AUTH_USER}
 auth_file = ${userlist_path}
 auth_query = SELECT usename, passwd FROM pg_catalog.pg_shadow WHERE usename=\$1
 ${auth_hba_config}
+
+; === Connection Pool Settings ===
 pool_mode = ${PGBOUNCER_POOL_MODE}
 max_client_conn = ${PGBOUNCER_MAX_CLIENT_CONN}
 default_pool_size = ${PGBOUNCER_DEFAULT_POOL_SIZE}
 reserve_pool_size = ${PGBOUNCER_RESERVE_POOL_SIZE}
 reserve_pool_timeout = ${PGBOUNCER_RESERVE_POOL_TIMEOUT}
 min_pool_size = ${PGBOUNCER_MIN_POOL_SIZE}
+
+; === Transaction Mode Compatibility (PgBouncer 1.21+) ===
+max_prepared_statements = ${PGBOUNCER_MAX_PREPARED_STATEMENTS}
+ignore_startup_parameters = ${PGBOUNCER_IGNORE_STARTUP_PARAMETERS}
+track_extra_parameters = ${PGBOUNCER_TRACK_EXTRA_PARAMETERS}
+application_name_add_host = ${PGBOUNCER_APPLICATION_NAME_ADD_HOST}
+
+; === Session Reset Configuration ===
 server_reset_query = DISCARD ALL
-ignore_startup_parameters = extra_float_digits
+
+; === Connection Lifecycle ===
+server_lifetime = ${PGBOUNCER_SERVER_LIFETIME}
+server_idle_timeout = ${PGBOUNCER_SERVER_IDLE_TIMEOUT}
+server_connect_timeout = ${PGBOUNCER_SERVER_CONNECT_TIMEOUT}
+server_login_retry = ${PGBOUNCER_SERVER_LOGIN_RETRY}
+
+; === Client Timeout Protection ===
+query_wait_timeout = ${PGBOUNCER_QUERY_WAIT_TIMEOUT}
+client_idle_timeout = ${PGBOUNCER_CLIENT_IDLE_TIMEOUT}
+
+; === DNS Failover ===
+dns_max_ttl = ${PGBOUNCER_DNS_MAX_TTL}
+dns_nxdomain_ttl = ${PGBOUNCER_DNS_NXDOMAIN_TTL}
+
+; === Administration ===
 admin_users = ${PGBOUNCER_ADMIN_USERS}
 stats_users = ${PGBOUNCER_STATS_USERS}
+
+; === Logging ===
 logfile = ${log_dir}/pgbouncer.log
 pidfile = ${run_dir}/pgbouncer.pid
+
+; === TLS Configuration ===
 server_tls_sslmode = ${PGBOUNCER_SERVER_TLS_MODE:-require}
 ${client_tls_config}
 EOF
