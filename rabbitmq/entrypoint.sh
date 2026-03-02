@@ -47,6 +47,18 @@ export RABBITMQ_MANAGEMENT_PORT="${RABBITMQ_MANAGEMENT_PORT:-15672}"
 unset RABBITMQ_DEFAULT_PASS_FILE
 unset RABBITMQ_ERLANG_COOKIE_FILE
 
+# Write the cookie to disk so CLI tools (rabbitmqctl, rabbitmq-diagnostics)
+# invoked via "docker compose exec" can authenticate with the broker.
+# The env var is only visible to PID 1; exec'd shells read the file.
+# The file may already exist read-only (0400) from a previous run, so
+# widen permissions before overwriting, then lock back down.
+cookie_file="${RABBITMQ_MNESIA_DIR:-/var/lib/rabbitmq}/.erlang.cookie"
+if [ -f "${cookie_file}" ]; then
+	chmod 600 "${cookie_file}" 2>/dev/null || true
+fi
+printf '%s' "${cookie}" > "${cookie_file}"
+chmod 400 "${cookie_file}"
+
 entrypoint="/opt/rabbitmq/sbin/docker-entrypoint.sh"
 if [ ! -x "${entrypoint}" ]; then
 	entrypoint="$(command -v docker-entrypoint.sh || true)"
