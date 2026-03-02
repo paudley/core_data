@@ -241,6 +241,7 @@ Cache, messaging, pooling
   rabbitmq-ctl [args]                 Run rabbitmqctl inside the RabbitMQ container.
   rabbitmq-diagnostics [args]         Run rabbitmq-diagnostics inside RabbitMQ.
   rabbitmq-export [--output PATH]     Export RabbitMQ definitions to host (JSON).
+  rabbitmq-plugins [args]             List or manage RabbitMQ plugins.
   rabbitmq-overview                   Show rabbitmq-diagnostics status summary.
   pgbouncer-stats                     SHOW STATS via PgBouncer admin console.
   pgbouncer-pools                     SHOW POOLS via PgBouncer admin console.
@@ -1506,6 +1507,9 @@ rabbitmq-diagnostics)
 	;;
 rabbitmq-export)
 	cmd_rabbitmq_export "$@"
+	;;
+rabbitmq-plugins)
+	cmd_rabbitmq_plugins "$@"
 	;;
 rabbitmq-overview)
 	cmd_rabbitmq_overview "$@"

@@ -8,6 +8,7 @@ RABBITMQ_SERVICE_NAME=${RABBITMQ_SERVICE_NAME:-rabbitmq}
 RABBITMQ_HOST=${RABBITMQ_HOST:-rabbitmq}
 RABBITMQ_PORT=${RABBITMQ_PORT:-5672}
 RABBITMQ_MANAGEMENT_PORT=${RABBITMQ_MANAGEMENT_PORT:-15672}
+RABBITMQ_STREAM_PORT=${RABBITMQ_STREAM_PORT:-5552}
 
 ensure_rabbitmq_service() {
 	if ! compose_has_service "${RABBITMQ_SERVICE_NAME}"; then
@@ -84,6 +85,12 @@ USAGE
 	rabbitmq_exec rm -f "${container_tmp}" >/dev/null 2>&1 || true
 	chmod 0600 "${output_path}" 2>/dev/null || true
 	echo "[rabbitmq] Definitions written to ${output_path}" >&2
+}
+
+cmd_rabbitmq_plugins() {
+	ensure_env
+	ensure_rabbitmq_service
+	rabbitmq_exec rabbitmq-plugins list "$@"
 }
 
 cmd_rabbitmq_overview() {

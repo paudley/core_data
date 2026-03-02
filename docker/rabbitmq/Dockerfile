@@ -2,7 +2,31 @@
 FROM rabbitmq:4.2-management-alpine
 
 LABEL org.opencontainers.image.source="https://github.com/paudley/core_data" \
-      org.opencontainers.image.description="Core Data RabbitMQ with hardened entrypoint"
+      org.opencontainers.image.description="Core Data RabbitMQ with hardened entrypoint and core plugins"
+
+# Enable tier-1 core plugins required by the cognitive architecture and
+# production operations tooling.  The management image already enables
+# rabbitmq_management, rabbitmq_management_agent, rabbitmq_web_dispatch,
+# and rabbitmq_prometheus.
+#
+# Core requirements:
+#   consistent_hash_exchange – session affinity for LLM prefix-cache
+#   stream / stream_management – append-only Cognitive_Stream, Dreaming offsets
+#
+# Production operations:
+#   shovel / shovel_management – queue draining, dead-letter reprocessing
+#   event_exchange            – broker events as AMQP messages (observability)
+#   tracing                   – message-level tracing via management UI
+#   top                       – per-process resource monitoring
+RUN rabbitmq-plugins enable --offline \
+    rabbitmq_consistent_hash_exchange \
+    rabbitmq_stream \
+    rabbitmq_stream_management \
+    rabbitmq_shovel \
+    rabbitmq_shovel_management \
+    rabbitmq_event_exchange \
+    rabbitmq_tracing \
+    rabbitmq_top
 
 # Add secrets group and add rabbitmq user to it for reading shared secrets
 ARG SECRETS_GID=65532
