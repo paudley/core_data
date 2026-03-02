@@ -356,8 +356,11 @@ services:
       TZ: ${TZ}
     entrypoint: ["/opt/core_data/bin/rabbitmq-entrypoint.sh"]
     command: ["rabbitmq-server"]
+    mem_limit: ${RABBITMQ_MEMORY_LIMIT:-0}
+    cpus: ${RABBITMQ_CPU_LIMIT:-0.0}
     volumes:
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
       - ./secrets/rabbitmq_default_pass:/run/secrets/rabbitmq_default_pass:ro
       - ./secrets/rabbitmq_erlang_cookie:/run/secrets/rabbitmq_erlang_cookie:ro
     networks:
@@ -365,6 +368,7 @@ services:
     ports:
       - "${RABBITMQ_HOST_PORT}:${RABBITMQ_PORT}"
       - "${RABBITMQ_MANAGEMENT_HOST_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
+      - "${RABBITMQ_STREAM_HOST_PORT:-5552}:${RABBITMQ_STREAM_PORT:-5552}"
     healthcheck:
       test: ["CMD-SHELL", "/opt/core_data/bin/rabbitmq-healthcheck.sh"]
       interval: 10s
