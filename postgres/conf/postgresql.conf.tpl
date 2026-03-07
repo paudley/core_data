@@ -10,7 +10,7 @@ shared_buffers = ${PG_SHARED_BUFFERS}
 work_mem = ${PG_WORK_MEM}
 maintenance_work_mem = ${PG_MAINTENANCE_WORK_MEM}
 effective_cache_size = ${PG_EFFECTIVE_CACHE_SIZE}
-shared_preload_libraries = 'age,pgaudit,pg_stat_statements,pg_cron,pg_squeeze,auto_explain,pg_buffercache,pg_partman_bgw'
+shared_preload_libraries = 'age,pgaudit,pg_stat_statements,pg_cron,pg_squeeze,auto_explain,pg_buffercache,pg_partman_bgw,pgsodium'
 wal_level = logical
 archive_mode = on
 archive_command = 'pgbackrest --config=/var/lib/postgresql/data/pgbackrest.conf --stanza=main archive-push %p'
@@ -87,5 +87,6 @@ ssl = ${POSTGRES_SSL_ENABLED}
 ssl_cert_file = '${POSTGRES_SSL_CERT_FILE}'
 ssl_key_file = '${POSTGRES_SSL_KEY_FILE}'
 ssl_prefer_server_ciphers = on
+pgsodium.getkey_script = '/opt/core_data/tools/pgsodium_getkey.sh'
 datestyle = 'iso, mdy'
 timezone = '${TZ}'

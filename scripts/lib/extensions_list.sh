@@ -28,6 +28,9 @@ CORE_EXTENSION_LIST=(
 	pg_stat_statements
 	pg_trgm
 	pgcrypto
+	pgsodium
+	gzip
+	pgzstd
 	pgstattuple
 	pgtap
 	pgaudit
@@ -43,4 +46,19 @@ CORE_EXTENSION_LIST=(
 	unaccent
 	uuid-ossp
 	vector
+)
+
+# Canonical list of libraries that must be in shared_preload_libraries.
+# Enforced on every container startup regardless of config state.
+# shellcheck disable=SC2034
+REQUIRED_PRELOAD_LIBRARIES=(
+	age
+	pgaudit
+	pg_stat_statements
+	pg_cron
+	pg_squeeze
+	auto_explain
+	pg_buffercache
+	pg_partman_bgw
+	pgsodium
 )

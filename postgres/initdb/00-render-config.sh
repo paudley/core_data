@@ -15,6 +15,40 @@ NETWORK_ACCESS_DIR=${NETWORK_ACCESS_DIR:-/opt/core_data/network_access}
 NETWORK_ALLOW_FILE=${NETWORK_ALLOW_FILE:-${NETWORK_ACCESS_DIR}/allow.list}
 FORCE_RENDER_CONFIG=${FORCE_RENDER_CONFIG:-0}
 
+# shellcheck disable=SC1091
+# shellcheck source=/opt/core_data/scripts/lib/extensions_list.sh
+source /opt/core_data/scripts/lib/extensions_list.sh
+
+# Enforce that all required libraries are present in shared_preload_libraries.
+# Called on every startup to prevent config drift from manual edits.
+# Returns 0 if no changes needed, 1 if config was corrected (reload required).
+enforce_shared_preload_libraries() {
+	local conf_file="${PGDATA}/postgresql.conf"
+	[[ -f "${conf_file}" ]] || return 0
+
+	local current
+	current=$(grep -E "^shared_preload_libraries" "${conf_file}" | sed "s/shared_preload_libraries *= *'\\(.*\\)'/\\1/")
+
+	local missing=()
+	for lib in "${REQUIRED_PRELOAD_LIBRARIES[@]}"; do
+		if ! echo ",${current}," | grep -q ",${lib},"; then
+			missing+=("${lib}")
+		fi
+	done
+
+	if [[ ${#missing[@]} -gt 0 ]]; then
+		echo "[core_data] WARNING: shared_preload_libraries missing required entries: ${missing[*]}" >&2
+		local new_value="${current}"
+		for lib in "${missing[@]}"; do
+			new_value="${new_value},${lib}"
+		done
+		sed -i "s|^shared_preload_libraries *= *'.*'|shared_preload_libraries = '${new_value}'|" "${conf_file}"
+		echo "[core_data] Corrected shared_preload_libraries to: ${new_value}" >&2
+		return 1
+	fi
+	return 0
+}
+
 apply_network_allow_entries() {
 	local hba_path="${PGDATA}/pg_hba.conf"
 	if [[ ! -f "${hba_path}" ]]; then
@@ -101,8 +135,17 @@ if [[ -f "${SENTINEL}" ]]; then
 	if [[ "${FORCE_RENDER_CONFIG}" != "1" ]]; then
 		echo "[core_data] Configuration already rendered; refreshing network allow entries." >&2
 		apply_network_allow_entries
+		local needs_reload=0
+		if ! enforce_shared_preload_libraries; then
+			needs_reload=1
+		fi
 		if pg_ctl -D "${PGDATA}" status >/dev/null 2>&1; then
-			if ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
+			if [[ "${needs_reload}" -eq 1 ]]; then
+				echo "[core_data] Restarting PostgreSQL to apply corrected shared_preload_libraries." >&2
+				if ! pg_ctl -D "${PGDATA}" -m fast -w restart >/dev/null 2>&1; then
+					echo "[core_data] WARNING: pg_ctl restart failed after shared_preload_libraries correction." >&2
+				fi
+			elif ! pg_ctl -D "${PGDATA}" reload >/dev/null 2>&1; then
 				echo "[core_data] WARNING: pg_ctl reload failed while refreshing network allow entries." >&2
 			fi
 		fi
@@ -189,6 +232,10 @@ archive-check=n
 pg1-path=${PGDATA}
 pg1-port=5433
 CONF
+
+# Safety belt: enforce shared_preload_libraries even after fresh render
+# to catch any drift between the template and the canonical list.
+enforce_shared_preload_libraries || true
 
 echo "[core_data] Rendered PostgreSQL configs and pgBackRest configuration." >&2
 

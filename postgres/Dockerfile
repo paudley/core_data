@@ -45,10 +45,13 @@ RUN set -euxo pipefail; \
       gettext-base \
       bison \
       flex \
+      libsodium-dev \
       libssl-dev \
       libxml2-dev \
       libxslt1-dev \
       libreadline-dev \
+      libzstd-dev \
+      zlib1g-dev \
       "postgresql-server-dev-${PG_MAJOR}" \
       "postgresql-${PG_MAJOR}-pgaudit" \
       "postgresql-${PG_MAJOR}-pgvector" \
@@ -92,6 +95,31 @@ RUN set -eux; \
     make PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
     make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
     rm -rf /tmp/pg_squeeze
+
+# Build pgsodium from source
+ARG PGSODIUM_VERSION=3.1.9
+RUN set -eux; \
+    git clone --depth 1 --branch "v${PGSODIUM_VERSION}" --single-branch https://github.com/michelp/pgsodium.git /tmp/pgsodium; \
+    cd /tmp/pgsodium; \
+    make PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    rm -rf /tmp/pgsodium
+
+# Build pgsql-gzip from source
+RUN set -eux; \
+    git clone --depth 1 https://github.com/pramsey/pgsql-gzip.git /tmp/pgsql-gzip; \
+    cd /tmp/pgsql-gzip; \
+    make PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    rm -rf /tmp/pgsql-gzip
+
+# Build pgzstd from source
+RUN set -eux; \
+    git clone --depth 1 https://github.com/grahamedgecombe/pgzstd.git /tmp/pgzstd; \
+    cd /tmp/pgzstd; \
+    make PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
+    rm -rf /tmp/pgzstd
 
 # Copy configuration templates and initialization scripts
 COPY postgres/conf /opt/core_data/conf

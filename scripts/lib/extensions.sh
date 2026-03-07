@@ -35,6 +35,17 @@ RESET search_path;
 -- pgcrypto smoke
 SELECT encode(digest('core_data', 'sha256'), 'hex');
 
+-- pgsodium smoke
+SELECT length(pgsodium.crypto_pwhash_str('test_password')) > 0 AS pgsodium_ok;
+
+-- gzip smoke
+SELECT length(gzip('hello world')) > 0 AS gzip_compress_ok;
+SELECT convert_from(gunzip(gzip('hello world')), 'UTF8') = 'hello world' AS gzip_roundtrip_ok;
+
+-- pgzstd smoke
+SELECT length(zstd_compress('hello world'::bytea)) > 0 AS zstd_compress_ok;
+SELECT zstd_decompress(zstd_compress('hello world'::bytea)) = 'hello world'::bytea AS zstd_roundtrip_ok;
+
 -- uuid-ossp smoke
 SELECT uuid_generate_v4();
 
@@ -122,7 +133,7 @@ run_pgtap_smoke() {
 		psql --set ON_ERROR_STOP=on --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${database}" <<'SQL'
 CREATE SCHEMA IF NOT EXISTS test_core_data;
 SET search_path = test_core_data, public;
-SELECT plan(39);
+SELECT plan(42);
 SELECT ok(current_schema = 'test_core_data', 'search_path set to test schema');
 SELECT has_extension('vector', 'vector extension installed');
 SELECT has_extension('postgis', 'postgis extension installed');
@@ -134,6 +145,9 @@ SELECT has_extension('pg_stat_statements', 'pg_stat_statements extension install
 SELECT ok(position('auto_explain' in current_setting('shared_preload_libraries')) > 0, 'auto_explain registered in shared_preload_libraries');
 SELECT has_extension('pg_buffercache', 'pg_buffercache extension installed');
 SELECT has_extension('pgcrypto', 'pgcrypto extension installed');
+SELECT has_extension('pgsodium', 'pgsodium extension installed');
+SELECT has_extension('gzip', 'gzip extension installed');
+SELECT has_extension('pgzstd', 'pgzstd extension installed');
 SELECT has_extension('citext', 'citext extension installed');
 SELECT has_extension('cube', 'cube extension installed');
 SELECT has_extension('hstore', 'hstore extension installed');
