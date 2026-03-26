@@ -23,7 +23,7 @@ The ability to diagnose and optimize query performance is the most fundamental r
 * **auto\_explain**: This extension provides a low-overhead mechanism for automatically logging the execution plans of slow-running queries. Instead of requiring a developer to manually run EXPLAIN on a problematic statement, auto\_explain captures the plan at the moment of execution, providing invaluable diagnostic data for queries that are intermittently slow or difficult to reproduce. Its presence across AWS, Azure, and GCP underscores its importance for real-world troubleshooting.2
 * **pg\_buffercache**: To understand memory usage and caching efficiency, administrators need a window into the PostgreSQL shared buffer cache. The pg\_buffercache extension provides this visibility, allowing users to inspect the contents of the cache in real-time to determine which relations are cached and how effectively memory is being utilized.2 This is vital for tuning memory parameters and troubleshooting caching-related performance issues.
 
-The universal availability of these three extensions indicates that the competitive battleground has shifted. It is no longer sufficient to merely provide these tools. The opportunity for differentiation lies in the user experience built around them. The raw output from these extensions can be dense and require significant expertise to interpret. A platform that can ingest the data from pg\_stat\_statements and present it in a user-friendly, graphical dashboard—similar to the functionality provided by the open-source tool pghero 10—offers a significant leap in usability. By abstracting the complexity and presenting actionable information, a platform moves up the value chain from simply providing a tool to delivering a complete performance management solution.
+The universal availability of these three extensions indicates that the competitive battleground has shifted. It is no longer sufficient to merely provide these tools. The opportunity for differentiation lies in the user experience built around them. The raw output from these extensions can be dense and require significant expertise to interpret. A platform that can ingest the data from pg\_stat\_statements and present it in a user-friendly, graphical dashboard offers a significant leap in usability. By abstracting the complexity and presenting actionable information, a platform moves up the value chain from simply providing a tool to delivering a complete performance management solution.
 
 ### **1.2 Security and Compliance: Core Tenets of Trust**
 
@@ -165,9 +165,9 @@ A truly superior developer and administrator experience extends beyond the set o
 
 ### **4.1 Performance Dashboards: Visualizing Database Health**
 
-The user query's explicit mention of pghero highlights a common pain point: the difficulty of visualizing and understanding database performance.10 While cloud providers offer their own monitoring services like AWS CloudWatch 13 or Azure Monitor, these are often generic infrastructure monitoring tools that lack deep, PostgreSQL-specific context.
+Visualizing and understanding database performance is a common pain point.10 While cloud providers offer their own monitoring services like AWS CloudWatch 13 or Azure Monitor, these are often generic infrastructure monitoring tools that lack deep, PostgreSQL-specific context.
 
-A tool like pghero provides an immediate, intuitive, and actionable view of the database's health that is specifically tailored to PostgreSQL. It typically parses the output of pg\_stat\_statements and other system views to present a simple web-based dashboard showing:
+A PostgreSQL-specific performance dashboard provides an immediate, intuitive, and actionable view of the database's health. It typically parses the output of pg\_stat\_statements and other system views to present a simple web-based dashboard showing:
 
 * Long-running queries and their execution statistics.
 * Index usage, including unused and duplicate indexes.
@@ -175,7 +175,7 @@ A tool like pghero provides an immediate, intuitive, and actionable view of the 
 * Vacuum and analyze statistics.
 * Active connections and their states.
 
-Integrating a pghero-like dashboard directly into the platform's management UI would be a transformative feature. It makes vital performance data accessible to developers and administrators without requiring them to be deep PostgreSQL experts or to manually query system catalogs. It directly addresses the goal of improving the developer and admin experience by turning raw data into easily digestible insights.
+Integrating a PostgreSQL-specific performance dashboard directly into the platform's management UI would be a transformative feature. It makes vital performance data accessible to developers and administrators without requiring them to be deep PostgreSQL experts or to manually query system catalogs. It directly addresses the goal of improving the developer and admin experience by turning raw data into easily digestible insights.
 
 ### **4.2 Connection Pooling: The Non-Negotiable Prerequisite**
 
@@ -214,7 +214,7 @@ The following table outlines a strategic approach to bundling and integrating th
 
 | Functional Category       | Leading Open Source Tool | Core Value Proposition                                                                                                                                                  | Integration Strategy                                                                                                                                                 |
 | :------------------------ | :----------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Performance Dashboard** | pghero                   | Provides an intuitive, PostgreSQL-specific, graphical view of database health, performance metrics, and maintenance needs.                                              | Build a pghero-like interface directly into the platform's main management UI. Data is sourced from the default-enabled pg\_stat\_statements extension.                |
+| **Performance Dashboard** | pg\_stat\_statements UI    | Provides an intuitive, PostgreSQL-specific, graphical view of database health, performance metrics, and maintenance needs.                                              | Build a performance dashboard directly into the platform's main management UI. Data is sourced from the default-enabled pg\_stat\_statements extension.                |
 | **Connection Pooling**    | PgBouncer                | Essential for production workloads. Prevents connection exhaustion and improves performance by reusing database connections.                                            | Bundle and enable by default for every database. Expose key configuration parameters and performance metrics through the platform's control plane for expert tuning. |
 | **Backup & Recovery**     | pgBackRest               | Offers high-performance, parallelized backups and restores with advanced features like incremental backups and encryption.                                              | Integrate as the engine for the platform's backup system. Offer an "Advanced" tier that exposes features like parallel restores and differential backups.            |
 | **Job Queue**             | pgmq / Graphile Worker   | Simplifies application architecture by providing a reliable, transactional background job system within the database, eliminating the need for external message queues. | Offer as a "one-click add-on" from the platform control panel, which installs the necessary schema and provides connection examples and documentation.               |
@@ -266,7 +266,7 @@ This tier defines the external, best-of-breed open-source tools that should be s
 **Recommended Integrated Tools for Tier 3:**
 
 * **Connection Pooler (PgBouncer)**: Should be pre-configured and enabled by default for every database instance, with key parameters exposed for expert tuning.
-* **Performance Dashboard (a pghero-like interface)**: Should be built directly into the platform's management UI, providing an intuitive, out-of-the-box view of database performance.
+* **Performance Dashboard (pg\_stat\_statements UI)**: Should be built directly into the platform's management UI, providing an intuitive, out-of-the-box view of database performance.
 * **Advanced Backup Utility (pgBackRest)**: Should be integrated as the engine for the platform's backup and restore system, with its advanced features (e.g., parallel restores) offered as a premium option.
 * **Job Queue (pgmq or Graphile Worker)**: Should be available as a one-click add-on from the platform's control panel, simplifying the architecture for applications that require background job processing.
 
@@ -283,7 +283,7 @@ The following table summarizes the complete, tiered framework, providing a conci
 |                             | **Admin**         | pg\_partman, pg\_repack, pg\_cron, pgaudit | Offers a suite of expert tools for proactive maintenance, automation, and compliance.     |
 |                             | **Developer**     | HypoPG, pg\_hint\_plan, plv8              | Provides advanced capabilities for performance tuning and server-side development.        |
 | **3: Bundled & Integrated** | **Pooling**       | PgBouncer                               | Solves the critical connection scaling problem at the platform level.                     |
-|                             | **Dashboard**     | pghero-like UI                          | Transforms raw performance data into actionable insights through an intuitive interface.  |
+|                             | **Dashboard**     | pg\_stat\_statements UI                   | Transforms raw performance data into actionable insights through an intuitive interface.  |
 |                             | **Backup**        | pgBackRest                              | Offers a differentiated, high-performance backup and recovery solution.                   |
 |                             | **Job Queue**     | pgmq / Graphile Worker                  | Simplifies modern application architecture by providing a built-in background job system. |
 

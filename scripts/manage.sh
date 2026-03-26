@@ -317,7 +317,6 @@ cmd_service_urls() {
 	load_secret_from_file POSTGRES_SUPERUSER_PASSWORD
 	load_secret_from_file VALKEY_PASSWORD
 	load_secret_from_file PGBOUNCER_STATS_PASSWORD
-	load_secret_from_file PGHERO_PASSWORD
 	load_secret_from_file RABBITMQ_DEFAULT_PASS
 
 	local db_name=${POSTGRES_DB:-postgres}
@@ -345,10 +344,6 @@ cmd_service_urls() {
 	local pgbouncer_stats_user=${PGBOUNCER_STATS_USER:-pgbouncer_stats}
 	local pgbouncer_stats_password=${PGBOUNCER_STATS_PASSWORD:-}
 	local pgbouncer_admin_db=pgbouncer
-
-	local pghero_port=${PGHERO_PORT:-8080}
-	local pghero_user=${PGHERO_USER:-admin}
-	local pghero_password=${PGHERO_PASSWORD:-}
 
 	printf 'DATABASE_URL=postgresql://%s:%s@%s:%s/%s?sslmode=prefer\n' \
 		"${db_user}" "${db_password}" "${host_ip}" "${db_port}" "${db_name}"
@@ -380,12 +375,6 @@ cmd_service_urls() {
 		printf 'RABBITMQ_MANAGEMENT_URL=http://%s:%s/\n' "${host_ip}" "${rabbitmq_mgmt_port}"
 	fi
 
-	if [[ -n "${pghero_password}" ]]; then
-		printf 'PGHERO_URL=http://%s:%s@%s:%s/\n' \
-			"${pghero_user}" "${pghero_password}" "${host_ip}" "${pghero_port}"
-	else
-		printf 'PGHERO_URL=http://%s:%s/\n' "${host_ip}" "${pghero_port}"
-	fi
 }
 
 cmd_apparmor_load() {

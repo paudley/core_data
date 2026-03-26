@@ -32,6 +32,7 @@ seccomp/traces/
 # Docker volumes/data
 /data/
 !/data/.gitkeep
+docker-compose.override.yml
 
 # Editors & tooling
 .idea/

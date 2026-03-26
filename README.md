@@ -8,7 +8,7 @@ SPDX-License-Identifier: MIT
 [![CI](https://github.com/paudley/core_data/actions/workflows/ci.yml/badge.svg)](https://github.com/paudley/core_data/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A reproducible PostgreSQL 17 platform delivered as code. core\_data builds a hardened database image with spatial, vector, and graph extensions, provisions PgHero for observability, and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
+A reproducible PostgreSQL 17 platform delivered as code. core\_data builds a hardened database image with spatial, vector, and graph extensions and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
 
 ## Why You Want This
 
@@ -148,7 +148,7 @@ chmod: changing permissions of '/var/lib/postgresql/data': Operation not permitt
 
 ## Highlights
 
-* Custom Docker image with PostGIS, pgvector, Apache AGE, pg\_cron, pg\_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
+* Custom Docker image with PostGIS, pgvector, Apache AGE, pgsodium, gzip, zstd, pg\_cron, pg\_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 * Init scripts render configuration from templates, create application databases, and enable extensions automatically.
 * `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
 * PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
@@ -163,7 +163,8 @@ chmod: changing permissions of '/var/lib/postgresql/data': Operation not permitt
 core\_data provisions a batteries-included extension stack in every non-template database at init time:
 
 * **Performance & Observability** — `pg_stat_statements`, `auto_explain`, `pg_buffercache`, `pg_prewarm`, `bloom`.
-* **Security & Compliance** — `pgaudit`, `pgcrypto`, `"uuid-ossp"`.
+* **Security & Compliance** — `pgaudit`, `pgcrypto`, `pgsodium` (Transparent Column Encryption), `"uuid-ossp"`.
+* **Compression** — `gzip` (gzip/gunzip in SQL), `zstd` (Zstandard compress/decompress with dictionary support in SQL).
 * **Developer Ergonomics** — `hstore`, `citext`, `pg_trgm`, `btree_gin`, `btree_gist`, `hypopg`, `intarray`, `ltree`, `tablefunc`, `unaccent`.
 * **Connectivity** — `postgres_fdw`, `dblink`.
 * **Spatial, Vector, Graph** — `postgis`, `postgis_raster`, `postgis_topology`, `vector`, `age`, `cube`, `earthdistance`.
@@ -171,6 +172,17 @@ core\_data provisions a batteries-included extension stack in every non-template
 * **Geospatial Extras** — `postgis_tiger_geocoder`, `address_standardizer`, `address_standardizer_data_us`, `pgrouting`, `fuzzystrmatch`.
 
 The same bundle is installed into `template1` so freshly created databases inherit the tooling automatically.
+
+#### pgsodium Key Requirement
+
+pgsodium requires a 32-byte root encryption key for Transparent Column Encryption. The key is stored at `secrets/pgsodium.key` and bind-mounted read-only into the container at `/opt/core_data/secrets/pgsodium.key`. The `create-env` wizard and `bootstrap-ci` generate this key automatically. To generate one manually:
+
+```bash
+head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n' > secrets/pgsodium.key
+chmod 600 secrets/pgsodium.key
+```
+
+**This key is irreplaceable.** If lost, any data encrypted with pgsodium's Transparent Column Encryption becomes unrecoverable. Back it up alongside your other secret material.
 
 `pg_partman_bgw` is preloaded with a one-hour interval targeting the `postgres` database under the `postgres` superuser. Adjust `pg_partman_bgw.dbname`/`role` in `postgresql.conf.tpl` (or via `postgresql.pgtune.conf`) if you manage partitions from a different control schema.
 
@@ -214,7 +226,7 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
 - **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached,rabbitmq` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
-- **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, `pghero.json`, plus `docker-default.json` reused for RabbitMQ). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
+- **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, plus `docker-default.json` reused for RabbitMQ). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
 - **AppArmor (opt-in).** Minimal profiles live in `apparmor/core_data_minimal.profile`. Load them with `./scripts/manage.sh apparmor-load` (sudo), then set `CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal` in `.env` for each service you want to confine. The profile denies access to high-value host paths (`/root`, `/etc/shadow`, Docker socket) while leaving normal container paths alone.
 
 ### Service Add-ons
@@ -228,11 +240,11 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 
 core\_data/
 ├── .env.example # Template for environment-specific settings (never commit real secrets)
-├── docker-compose.yml # Orchestrates PostgreSQL and PgHero services
+├── docker-compose.yml # Orchestrates PostgreSQL and supporting services
 ├── scripts/ # Operator tooling (manage.sh + lib modules + maintenance workflow)
 ├── postgres/ # Custom image build assets, configs, and initdb scripts
 ├── backups/ # Host output directory for logical dumps and reports
-├── secrets/ # Docker secret material (e.g., postgres\_superuser\_password)
+├── secrets/ # Docker secret material (passwords, pgsodium.key — never committed)
 ├── README.md # This guide
 ├── THIRD\_PARTY\_LICENSES.md # Upstream license attributions for vendored tooling
 └── AGENTS.md # Contributor quick-reference & runbooks
@@ -328,7 +340,6 @@ Thank you to the maintainers and communities behind the components that make cor
 - [PostgreSQL](https://www.postgresql.org/) – the database at the heart of the platform.
 - [Docker](https://www.docker.com/) & [Docker Compose](https://docs.docker.com/compose/) – containerization and orchestration.
 - [PgBackRest](https://pgbackrest.org/) – resilient backup and restore tooling.
-- [PgHero](https://github.com/ankane/pghero) – query insights and monitoring.
 - [pgBadger](https://github.com/darold/pgbadger) – PostgreSQL log analytics.
 - [pg_cron](https://github.com/citusdata/pg_cron) – database-native scheduling.
 - [pg_squeeze](https://github.com/cybertec-postgresql/pg_squeeze) – automatic bloat mitigation.

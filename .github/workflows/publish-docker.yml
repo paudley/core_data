@@ -37,9 +37,6 @@ jobs:
           - service: memcached
             dockerfile: docker/memcached/Dockerfile
             context: .
-          - service: pghero
-            dockerfile: docker/pghero/Dockerfile
-            context: .
           - service: network-probe
             dockerfile: docker/network-probe/Dockerfile
             context: .
@@ -113,10 +110,6 @@ jobs:
             memcached)
               title="Core Data Memcached"
               desc="Memcached cache sidecar aligned with Core Data defaults."
-              ;;
-            pghero)
-              title="Core Data PgHero"
-              desc="PgHero observability container pre-wired for Core Data Postgres."
               ;;
             network-probe)
               title="Core Data Network Probe"

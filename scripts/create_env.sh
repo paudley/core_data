@@ -206,6 +206,18 @@ printf '%s\n' "${rabbitmq_cookie}" >"${rabbitmq_cookie_secret}"
 chmod 0600 "${rabbitmq_cookie_secret}" || true
 set_env_value RABBITMQ_ERLANG_COOKIE_FILE "./secrets/rabbitmq_erlang_cookie"
 
+# pgsodium root encryption key (32 bytes of random hex = 64 hex characters).
+# Required for Transparent Column Encryption via the pgsodium extension.
+pgsodium_key_file="${secret_dir}/pgsodium.key"
+if [[ -f "${pgsodium_key_file}" ]]; then
+	echo "[create-env] ${pgsodium_key_file} exists; keeping current key." >&2
+else
+	pgsodium_key=$(head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n')
+	printf '%s' "${pgsodium_key}" >"${pgsodium_key_file}"
+	chmod 0600 "${pgsodium_key_file}" || true
+	echo "[create-env] Generated pgsodium root key at ${pgsodium_key_file}." >&2
+fi
+
 # UID/GID alignment (default to current host user)
 user_uid=$(id -u)
 user_gid=$(id -g)
@@ -279,11 +291,6 @@ set_env_value DOCKER_NETWORK_SUBNET "${new_subnet}"
 current_dbs=$(grep '^DATABASES_TO_CREATE=' "${OUTPUT}" | cut -d '=' -f2-)
 new_dbs="$(prompt_default "Databases to create (format db:user:password,comma separated)" "${current_dbs}")"
 set_env_value DATABASES_TO_CREATE "${new_dbs}"
-
-# PgHero port prompt
-current_pghero=$(grep '^PGHERO_PORT=' "${OUTPUT}" | cut -d '=' -f2-)
-new_pghero="$(prompt_default "PgHero host port" "${current_pghero}")"
-set_env_value PGHERO_PORT "${new_pghero}"
 
 echo "[create-env] Wrote ${OUTPUT}. Secrets stored at ${secret_file}."
 if [[ ${NON_INTERACTIVE} != true ]]; then

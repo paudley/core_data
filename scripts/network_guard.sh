@@ -2,6 +2,10 @@
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
+# Network guard: restricts access to core_data service ports using nftables.
+# Reads an allow-list of CIDR networks and applies rules to the DOCKER-USER
+# chain so only listed networks can reach the exposed service ports.
+
 set -euo pipefail
 
 NETWORK_DIR=${NETWORK_DIR:-/opt/core_data/network_access}
@@ -12,85 +16,93 @@ CHAIN_V4=${CHAIN_V4:-CORE_DATA_ALLOW_V4}
 CHAIN_V6=${CHAIN_V6:-CORE_DATA_ALLOW_V6}
 RULE_COMMENT="core-data-allow"
 
-ensure_command() {
-	local cmd=$1
-	local pkg=$2
-	if ! command -v "${cmd}" >/dev/null 2>&1; then
-		if command -v apk >/dev/null 2>&1; then
-			apk add --no-cache "${pkg}" >/dev/null 2>&1
-		elif command -v apt-get >/dev/null 2>&1; then
-			apt-get update >/dev/null 2>&1
-			apt-get install -y --no-install-recommends "${pkg}" >/dev/null 2>&1
-		else
-			echo "[network_guard] ERROR: unable to install dependency ${pkg}" >&2
-			exit 1
-		fi
+log() {
+	printf '[network_guard] %s\n' "$1" >&2
+}
+
+# Verify nft is available and the kernel supports it
+verify_nft() {
+	if ! command -v nft >/dev/null 2>&1; then
+		log "ERROR: nft command not found"
+		exit 1
+	fi
+	if ! nft list tables >/dev/null 2>&1; then
+		log "ERROR: nftables not available (check kernel support and NET_ADMIN capability)"
+		exit 1
 	fi
 }
 
-# iptables is required; ip6tables optional (best-effort, skipped if unsupported)
-ensure_command iptables iptables
-has_ip6tables=false
-if command -v ip6tables >/dev/null 2>&1; then
-	if ip6tables -L >/dev/null 2>&1; then
-		has_ip6tables=true
-	else
-		echo "[network_guard] WARNING: ip6tables detected but IPv6 tables unavailable; skipping IPv6 enforcement." >&2
+# Ensure the DOCKER-USER chain exists in the given family's filter table.
+# Docker creates this chain, but we verify before inserting rules.
+ensure_docker_user_chain() {
+	local family=$1
+	if ! nft list chain "${family}" filter DOCKER-USER >/dev/null 2>&1; then
+		log "WARNING: DOCKER-USER chain not found in ${family} filter table; creating it"
+		nft add table "${family}" filter 2>/dev/null || true
+		nft add chain "${family}" filter DOCKER-USER 2>/dev/null || return 1
 	fi
-fi
-ensure_command sha256sum coreutils
-
-create_chain() {
-	local tool=$1
-	local chain=$2
-	if ! ${tool} -L "${chain}" >/dev/null 2>&1; then
-		${tool} -N "${chain}" >/dev/null 2>&1 || return 1
-	else
-		${tool} -F "${chain}" >/dev/null 2>&1 || return 1
-	fi
-	${tool} -A "${chain}" -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN >/dev/null 2>&1 || return 1
 	return 0
 }
 
-add_network_rules() {
-	local tool=$1
+# Create or flush our custom allow chain in the given family's filter table.
+create_chain() {
+	local family=$1
 	local chain=$2
-	shift 2
+	if nft list chain "${family}" filter "${chain}" >/dev/null 2>&1; then
+		nft flush chain "${family}" filter "${chain}"
+	else
+		nft add chain "${family}" filter "${chain}"
+	fi
+	# Allow established/related connections through
+	nft add rule "${family}" filter "${chain}" ct state established,related return
+}
+
+# Add allowed network CIDRs to the chain, then drop everything else.
+add_network_rules() {
+	local family=$1
+	local chain=$2
+	local addr_selector=$3
+	shift 3
 	local networks=("$@")
 	for net in "${networks[@]}"; do
-		${tool} -A "${chain}" -s "${net}" -j RETURN >/dev/null 2>&1 || return 1
+		nft add rule "${family}" filter "${chain}" "${addr_selector}" saddr "${net}" return
 	done
-	${tool} -A "${chain}" -j DROP >/dev/null 2>&1 || return 1
-	return 0
+	nft add rule "${family}" filter "${chain}" drop
 }
 
+# Remove existing jump rules from DOCKER-USER that reference our chain.
 remove_existing_rules() {
-	local tool=$1
+	local family=$1
 	local chain=$2
 	shift 2
 	local ports=("$@")
 	for port in "${ports[@]}"; do
-		while ${tool} -C DOCKER-USER -p tcp --dport "${port}" -m comment --comment "${RULE_COMMENT}" -j "${chain}" >/dev/null 2>&1; do
-			${tool} -D DOCKER-USER -p tcp --dport "${port}" -m comment --comment "${RULE_COMMENT}" -j "${chain}" >/dev/null 2>&1 || break
+		# Find and delete rules that jump to our chain for this port
+		local handles
+		handles=$(nft -a list chain "${family}" filter DOCKER-USER 2>/dev/null \
+			| grep "tcp dport ${port}.*jump ${chain}" \
+			| sed -n 's/.*# handle \([0-9]*\)/\1/p') || true
+		for handle in ${handles}; do
+			nft delete rule "${family}" filter DOCKER-USER handle "${handle}" 2>/dev/null || true
 		done
 	done
 }
 
+# Insert jump rules at the top of DOCKER-USER for each service port.
 insert_rules() {
-	local tool=$1
+	local family=$1
 	local chain=$2
 	shift 2
 	local ports=("$@")
 	for port in "${ports[@]}"; do
-		${tool} -I DOCKER-USER 1 -p tcp --dport "${port}" -m comment --comment "${RULE_COMMENT}" -j "${chain}" >/dev/null 2>&1 || return 1
+		nft insert rule "${family}" filter DOCKER-USER tcp dport "${port}" jump "${chain}" comment \"${RULE_COMMENT}\"
 	done
-	return 0
 }
 
 read_allow_file() {
 	local file=$1
 	if [[ ! -f "${file}" ]]; then
-		echo "[network_guard] Waiting for ${file}..." >&2
+		log "Waiting for ${file}..."
 		return 1
 	fi
 	mapfile -t raw < <(grep -v '^[[:space:]]*#' "${file}" | sed '/^[[:space:]]*$/d')
@@ -108,50 +120,74 @@ read_allow_file() {
 	return 0
 }
 
+# Check if IPv6 filter table is usable
+has_ipv6=false
+check_ipv6() {
+	if nft list tables ip6 >/dev/null 2>&1; then
+		has_ipv6=true
+	else
+		log "WARNING: IPv6 nftables not available; skipping IPv6 enforcement."
+	fi
+}
+
+verify_nft
+check_ipv6
+
 last_hash=""
 while true; do
 	if [[ -f "${ALLOW_FILE}" ]]; then
 		current_hash=$(sha256sum "${ALLOW_FILE}" | awk '{print $1}')
 		if [[ "${current_hash}" != "${last_hash}" ]]; then
 			if read_allow_file "${ALLOW_FILE}"; then
-				if ! iptables -S DOCKER-USER >/dev/null 2>&1; then
-					iptables -N DOCKER-USER
-					iptables -A DOCKER-USER -j RETURN
+				# Ensure DOCKER-USER exists
+				if ! ensure_docker_user_chain ip; then
+					log "ERROR: Cannot ensure DOCKER-USER chain in ip filter"
+					sleep "${CHECK_INTERVAL}"
+					continue
 				fi
-				if [[ "${has_ip6tables}" == true ]] && ! ip6tables -S DOCKER-USER >/dev/null 2>&1; then
-					ip6tables -N DOCKER-USER
-					ip6tables -A DOCKER-USER -j RETURN
-				fi
-				create_chain iptables "${CHAIN_V4}"
-				if [[ ${#ipv4[@]} -gt 0 ]]; then
-					add_network_rules iptables "${CHAIN_V4}" "${ipv4[@]}"
-				fi
+
+				# Build port list
 				read -ra port_array <<<"${SERVICES}"
 				ports=()
 				for port in "${port_array[@]}"; do
 					[[ -z "${port}" ]] && continue
 					ports+=("${port}")
 				done
-				if [[ ${#ports[@]} -gt 0 ]]; then
-					remove_existing_rules iptables "${CHAIN_V4}" "${ports[@]}" || true
-					insert_rules iptables "${CHAIN_V4}" "${ports[@]}"
+
+				# IPv4 rules
+				create_chain ip "${CHAIN_V4}"
+				if [[ ${#ipv4[@]} -gt 0 ]]; then
+					add_network_rules ip "${CHAIN_V4}" "ip" "${ipv4[@]}"
+				else
+					# No IPv4 networks allowed — drop all
+					nft add rule ip filter "${CHAIN_V4}" drop
 				fi
-				if [[ "${has_ip6tables}" == true ]]; then
-					if create_chain ip6tables "${CHAIN_V6}" 2>/dev/null; then
+				if [[ ${#ports[@]} -gt 0 ]]; then
+					remove_existing_rules ip "${CHAIN_V4}" "${ports[@]}"
+					insert_rules ip "${CHAIN_V4}" "${ports[@]}"
+				fi
+
+				# IPv6 rules
+				if [[ "${has_ipv6}" == true ]]; then
+					if ensure_docker_user_chain ip6; then
+						create_chain ip6 "${CHAIN_V6}"
 						if [[ ${#ipv6[@]} -gt 0 ]]; then
-							add_network_rules ip6tables "${CHAIN_V6}" "${ipv6[@]}"
+							add_network_rules ip6 "${CHAIN_V6}" "ip6" "${ipv6[@]}"
+						else
+							nft add rule ip6 filter "${CHAIN_V6}" drop
 						fi
 						if [[ ${#ports[@]} -gt 0 ]]; then
-							remove_existing_rules ip6tables "${CHAIN_V6}" "${ports[@]}" || true
-							insert_rules ip6tables "${CHAIN_V6}" "${ports[@]}"
+							remove_existing_rules ip6 "${CHAIN_V6}" "${ports[@]}"
+							insert_rules ip6 "${CHAIN_V6}" "${ports[@]}"
 						fi
 					else
-						echo "[network_guard] WARNING: Failed to manage IPv6 rules; disabling IPv6 enforcement." >&2
-						has_ip6tables=false
+						log "WARNING: Failed to manage IPv6 rules; disabling IPv6 enforcement."
+						has_ipv6=false
 					fi
 				fi
+
 				last_hash="${current_hash}"
-				echo "[network_guard] Applied firewall rules for ${ALLOW_FILE}" >&2
+				log "Applied nftables rules for ${ALLOW_FILE}"
 			fi
 		fi
 	fi

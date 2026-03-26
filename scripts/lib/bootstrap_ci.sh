@@ -226,6 +226,16 @@ cmd_bootstrap_ci() {
 		bootstrap_ci_write_secret PGBOUNCER_STATS_PASSWORD "${secrets_dir}/pgbouncer_stats_password" "${force}" base64
 		bootstrap_ci_write_secret RABBITMQ_DEFAULT_PASS "${secrets_dir}/rabbitmq_default_pass" "${force}" base64
 		bootstrap_ci_write_secret RABBITMQ_ERLANG_COOKIE "${secrets_dir}/rabbitmq_erlang_cookie" "${force}" alnum
+
+		# pgsodium root key: 32 bytes of random hex (64 hex chars)
+		local pgsodium_key_file="${secrets_dir}/pgsodium.key"
+		if [[ -f "${pgsodium_key_file}" && "${force}" != "true" ]]; then
+			echo "[bootstrap-ci] ${pgsodium_key_file} exists; keeping current key." >&2
+		else
+			head -c 32 /dev/urandom | od -A n -t x1 | tr -d ' \n' >"${pgsodium_key_file}"
+			chmod 0600 "${pgsodium_key_file}" || true
+			echo "[bootstrap-ci] wrote ${pgsodium_key_file} (source: generated)." >&2
+		fi
 	fi
 
 	if [[ "${skip_network}" != "true" ]]; then

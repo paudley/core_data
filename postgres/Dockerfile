@@ -3,7 +3,7 @@
 
 # syntax=docker/dockerfile:1.7
 ARG PG_VERSION=17
-ARG AGE_VERSION=master
+ARG AGE_VERSION=PG17/v1.7.0-rc0
 ARG CORE_UID=1000
 ARG CORE_GID=1000
 ARG CORE_USERNAME=postgres
@@ -113,10 +113,11 @@ RUN set -eux; \
     make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
     rm -rf /tmp/pgsql-gzip
 
-# Build pgzstd from source
+# Build pgzstd from source (with PG16+ varatt.h compatibility patch)
 RUN set -eux; \
     git clone --depth 1 https://github.com/grahamedgecombe/pgzstd.git /tmp/pgzstd; \
     cd /tmp/pgzstd; \
+    sed -i '/#include <fmgr.h>/a #include "varatt.h"' zstd.c; \
     make PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
     make install PG_CONFIG="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"; \
     rm -rf /tmp/pgzstd
@@ -128,7 +129,10 @@ COPY postgres/tools /opt/core_data/tools
 COPY scripts /opt/core_data/scripts
 
 # Ensure scripts are executable
-RUN chmod +x /docker-entrypoint-initdb.d/*.sh
+RUN chmod +x /docker-entrypoint-initdb.d/*.sh /opt/core_data/tools/*.sh
+
+ENTRYPOINT ["/opt/core_data/tools/docker-entrypoint-wrapper.sh"]
+CMD ["postgres"]
 
 # Provide default volume locations in the image
 VOLUME ["/var/lib/postgresql/data", "/var/lib/pgbackrest", "/home/postgres"]

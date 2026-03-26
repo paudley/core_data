@@ -42,7 +42,7 @@ SELECT length(pgsodium.crypto_pwhash_str('test_password')) > 0 AS pgsodium_ok;
 SELECT length(gzip('hello world')) > 0 AS gzip_compress_ok;
 SELECT convert_from(gunzip(gzip('hello world')), 'UTF8') = 'hello world' AS gzip_roundtrip_ok;
 
--- pgzstd smoke
+-- zstd smoke
 SELECT length(zstd_compress('hello world'::bytea)) > 0 AS zstd_compress_ok;
 SELECT zstd_decompress(zstd_compress('hello world'::bytea)) = 'hello world'::bytea AS zstd_roundtrip_ok;
 
@@ -147,7 +147,7 @@ SELECT has_extension('pg_buffercache', 'pg_buffercache extension installed');
 SELECT has_extension('pgcrypto', 'pgcrypto extension installed');
 SELECT has_extension('pgsodium', 'pgsodium extension installed');
 SELECT has_extension('gzip', 'gzip extension installed');
-SELECT has_extension('pgzstd', 'pgzstd extension installed');
+SELECT has_extension('zstd', 'zstd extension installed');
 SELECT has_extension('citext', 'citext extension installed');
 SELECT has_extension('cube', 'cube extension installed');
 SELECT has_extension('hstore', 'hstore extension installed');

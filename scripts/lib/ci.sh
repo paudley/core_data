@@ -51,7 +51,6 @@ ci_service_images() {
 	local rabbitmq_default="${registry_default}/rabbitmq:${release_tag}"
 	local pgbouncer_default="${registry_default}/pgbouncer:${release_tag}"
 	local memcached_default="${registry_default}/memcached:${release_tag}"
-	local pghero_default="${registry_default}/pghero:${release_tag}"
 	entries+=("postgres=${postgres_image}")
 	entries+=("logical_backup=${postgres_image}")
 	entries+=("volume_prep=${postgres_image}")
@@ -61,7 +60,6 @@ ci_service_images() {
 	entries+=("rabbitmq=${RABBITMQ_IMAGE:-${rabbitmq_default}}")
 	entries+=("pgbouncer=${PGBOUNCER_IMAGE:-${pgbouncer_default}}")
 	entries+=("memcached=${MEMCACHED_IMAGE:-${memcached_default}}")
-	entries+=("pghero=${PGHERO_IMAGE:-${pghero_default}}")
 	printf '%s\n' "${entries[@]}"
 }
 
@@ -449,10 +447,6 @@ data = {
         },
     },
 }
-data["services"]["pghero"] = {
-    "enabled": os.environ.get("PGHERO_DISABLED", "0") != "1",
-    "port": int(os.environ.get("PGHERO_PORT", "8080")),
-}
 out_dir = os.path.dirname(output) or "."
 os.makedirs(out_dir, exist_ok=True)
 with open(output, "w", encoding="utf-8") as fh:
@@ -541,8 +535,7 @@ USAGE
 		"postgres:${POSTGRES_PORT:-5433}" \
 		"pgbouncer:${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}" \
 		"valkey:${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}" \
-		"rabbitmq:${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}" \
-		"pghero:${PGHERO_PORT:-8080}"; then
+		"rabbitmq:${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}"; then
 		return 1
 	fi
 	if ! ci_verify_attestations "${skip_attestation}" "${require_attestation}"; then

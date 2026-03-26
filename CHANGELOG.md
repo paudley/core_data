@@ -76,7 +76,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Supporting Services
 
-* PgHero for database performance monitoring and insights
 * Valkey 7 (Redis-compatible) for caching and pub/sub
 * RabbitMQ 3.13 with management interface for message queuing
 * Memcached 1.6 for distributed caching

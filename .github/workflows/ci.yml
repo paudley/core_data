@@ -52,7 +52,7 @@ jobs:
           set -euo pipefail
           STACK_TAG="${GITHUB_SHA}"
           echo "stack_tag=${STACK_TAG}" >>"$GITHUB_OUTPUT"
-          SERVICES=("postgres" "valkey" "pgbouncer" "rabbitmq" "memcached" "pghero" "network-probe" "network-guard")
+          SERVICES=("postgres" "valkey" "pgbouncer" "rabbitmq" "memcached" "network-probe" "network-guard")
           mkdir -p stack-images
           for service in "${SERVICES[@]}"; do
             case "${service}" in
@@ -98,13 +98,6 @@ jobs:
                   --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
                   .
                 ;;
-              pghero)
-                docker buildx build --load \
-                  --platform linux/amd64 \
-                  --file docker/pghero/Dockerfile \
-                  --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
-                  .
-                ;;
               network-probe)
                 docker buildx build --load \
                   --platform linux/amd64 \
@@ -133,7 +126,6 @@ jobs:
             echo "PGBOUNCER_IMAGE=${STACK_REGISTRY}/pgbouncer:${STACK_TAG}"
             echo "RABBITMQ_IMAGE=${STACK_REGISTRY}/rabbitmq:${STACK_TAG}"
             echo "MEMCACHED_IMAGE=${STACK_REGISTRY}/memcached:${STACK_TAG}"
-            echo "PGHERO_IMAGE=${STACK_REGISTRY}/pghero:${STACK_TAG}"
             echo "NETWORK_PROBE_IMAGE=${STACK_REGISTRY}/network-probe:${STACK_TAG}"
             echo "NETWORK_GUARD_IMAGE=${STACK_REGISTRY}/network-guard:${STACK_TAG}"
           } >>"$GITHUB_ENV"
@@ -242,7 +234,6 @@ jobs:
           PGBOUNCER_IMAGE=ghcr.io/${{ github.repository }}/pgbouncer:${{ needs.docker-build.outputs.stack_tag }}
           RABBITMQ_IMAGE=ghcr.io/${{ github.repository }}/rabbitmq:${{ needs.docker-build.outputs.stack_tag }}
           MEMCACHED_IMAGE=ghcr.io/${{ github.repository }}/memcached:${{ needs.docker-build.outputs.stack_tag }}
-          PGHERO_IMAGE=ghcr.io/${{ github.repository }}/pghero:${{ needs.docker-build.outputs.stack_tag }}
           NETWORK_PROBE_IMAGE=ghcr.io/${{ github.repository }}/network-probe:${{ needs.docker-build.outputs.stack_tag }}
           NETWORK_GUARD_IMAGE=ghcr.io/${{ github.repository }}/network-guard:${{ needs.docker-build.outputs.stack_tag }}
           EOF
@@ -383,7 +374,6 @@ jobs:
           PGBOUNCER_IMAGE=ghcr.io/${{ github.repository }}/pgbouncer:${{ needs.docker-build.outputs.stack_tag }}
           RABBITMQ_IMAGE=ghcr.io/${{ github.repository }}/rabbitmq:${{ needs.docker-build.outputs.stack_tag }}
           MEMCACHED_IMAGE=ghcr.io/${{ github.repository }}/memcached:${{ needs.docker-build.outputs.stack_tag }}
-          PGHERO_IMAGE=ghcr.io/${{ github.repository }}/pghero:${{ needs.docker-build.outputs.stack_tag }}
           NETWORK_PROBE_IMAGE=ghcr.io/${{ github.repository }}/network-probe:${{ needs.docker-build.outputs.stack_tag }}
           NETWORK_GUARD_IMAGE=ghcr.io/${{ github.repository }}/network-guard:${{ needs.docker-build.outputs.stack_tag }}
           EOF

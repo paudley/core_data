@@ -45,6 +45,7 @@ services:
       PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       RABBITMQ_DATA_MOUNT: ${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      BACKUPS_MOUNT: /backups
       # Service UIDs/GIDs - must match the user baked into each pre-built image
       POSTGRES_UID: ${POSTGRES_UID:-1000}
       POSTGRES_GID: ${POSTGRES_GID:-1000}
@@ -60,6 +61,9 @@ services:
         # Fix ownership for data directories
         chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" "$${PGDATA_MOUNT}" "$${PGWAL_MOUNT}" "$${PGBACKREST_MOUNT}"
         chown -R "$${RABBITMQ_UID}:$${RABBITMQ_GID}" "$${RABBITMQ_DATA_MOUNT}"
+        # Ensure backups directory is writable by the postgres user (logical_backup runs as postgres)
+        mkdir -p "$${BACKUPS_MOUNT}/logical"
+        chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" "$${BACKUPS_MOUNT}"
         # Fix group ownership for secrets - keep original owner, set group to secrets
         # All service containers have the secrets group as a secondary group
         if [ -d "$${SECRETS_MOUNT}" ]; then
@@ -73,6 +77,7 @@ services:
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ${BACKUPS_HOST_PATH:-./backups}:/backups
       - ./secrets:/opt/core_data/secrets
     networks:
       - core_data
@@ -94,7 +99,7 @@ services:
     environment:
       NETWORK_DIR: /opt/core_data/network_access
       CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
-      SERVICES: "${POSTGRES_PORT:-5433} ${PGHERO_PORT:-8080} ${PGBOUNCER_HOST_PORT:-6432} ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
+      SERVICES: "${POSTGRES_PORT:-5433} ${PGBOUNCER_HOST_PORT:-6432} ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
     entrypoint: ["/opt/core_data/scripts/network_guard.sh"]
     volumes:
       - ./network_access:/opt/core_data/network_access:ro
@@ -170,6 +175,7 @@ services:
       - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
       - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
+      - ./secrets/pgsodium.key:/opt/core_data/secrets/pgsodium.key:ro
     networks:
       - core_data
     depends_on:
@@ -198,45 +204,6 @@ services:
     command: ["-c", "port=5433"]
     ports:
       - "${POSTGRES_PORT:-5433}:5433"
-
-  pghero:
-    <<: *security_defaults
-    security_opt:
-      - "no-new-privileges:true"
-      - "${CORE_DATA_SECCOMP_PGHERO:-seccomp:./seccomp/pghero.json}"
-      - "${CORE_DATA_APPARMOR_PGHERO:-apparmor:unconfined}"
-    build:
-      context: .
-      dockerfile: docker/pghero/Dockerfile
-    image: ${PGHERO_IMAGE:-ghcr.io/paudley/core_data/pghero:latest}
-    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pghero
-    user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
-    group_add:
-      - "${SECRETS_GID:-65532}"
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    entrypoint: ["/bin/sh", "/opt/core_data/scripts/pghero_entrypoint.sh"]
-    environment:
-      PGHERO_USERNAME: ${PGHERO_USER}
-      PGHERO_PASSWORD: ${PGHERO_PASSWORD}
-      PORT: "8080"
-      POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_HOST: postgres
-      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
-      POSTGRES_PORT: "5433"
-      POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
-      TZ: ${TZ}
-    ports:
-      - "${PGHERO_PORT}:8080"
-    networks:
-      - core_data
-    volumes:
-      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
-    logging: *logging_defaults
 
   logical_backup:
     <<: *security_defaults

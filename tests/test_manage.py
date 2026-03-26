@@ -230,7 +230,6 @@ def manage_env(tmp_path_factory):
     env_file = ROOT / ".env.test"
 
     postgres_port = _find_free_port()
-    pghero_port = _find_free_port()
     valkey_host_port = _find_free_port()
     pgbouncer_host_port = _find_free_port()
     memcached_port = _find_free_port()
@@ -246,7 +245,6 @@ def manage_env(tmp_path_factory):
     subnet_b = int(uuid.uuid4().hex[2:4], 16)
     replacements = {
         "POSTGRES_PORT": str(postgres_port),
-        "PGHERO_PORT": str(pghero_port),
         "DOCKER_NETWORK_NAME": f"core_data_net_{uuid.uuid4().hex[:8]}",
         "DOCKER_NETWORK_SUBNET": f"10.{subnet_a}.{subnet_b}.0/24",
         "DATABASES_TO_CREATE": "app_main:app_user:change_me",
@@ -377,7 +375,7 @@ def manage_env(tmp_path_factory):
         check=True,
     )
     compose_config = json.loads(config_result.stdout)
-    for service in ["postgres", "pghero", "pgbouncer", "logical_backup", "valkey", "memcached", "rabbitmq"]:
+    for service in ["postgres", "pgbouncer", "logical_backup", "valkey", "memcached", "rabbitmq"]:
         service_config = compose_config["services"].get(service)
         if not service_config:
             continue
@@ -694,7 +692,7 @@ def assert_service_security(project_name, service):
 
 
 def assert_stack_security(project_name):
-    for service in ("postgres", "pghero", "pgbouncer", "valkey", "memcached", "rabbitmq"):
+    for service in ("postgres", "pgbouncer", "valkey", "memcached", "rabbitmq"):
         if service_running(project_name, service):
             assert_service_security(project_name, service)
 
@@ -862,41 +860,6 @@ def exercise_rabbitmq_messages(http_host, http_port, username, password):
         )
 
 
-def check_pghero(host, port, username, password, retries=30, delay=3):
-    credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
-    wait_for_port(host, port, retries=retries, delay=delay)
-    authenticated = False
-    for _ in range(retries):
-        connection = http.client.HTTPConnection(host, port, timeout=5)
-        try:
-            connection.request(
-                "GET",
-                "/",
-                headers={"Authorization": f"Basic {credentials}"},
-            )
-            response = connection.getresponse()
-            body = response.read()
-            if response.status == 200 and b"PgHero" in body:
-                authenticated = True
-                break
-        except OSError:
-            pass
-        finally:
-            connection.close()
-        time.sleep(delay)
-    if not authenticated:
-        raise RuntimeError("PgHero did not return a healthy response")
-
-    api = http.client.HTTPConnection(host, port, timeout=5)
-    try:
-        api.request("GET", "/queries", headers={"Authorization": f"Basic {credentials}"})
-        api_response = api.getresponse()
-        if api_response.status not in {200, 302}:
-            raise RuntimeError("PgHero API endpoints not reachable")
-    finally:
-        api.close()
-
-
 def wait_for_ready(env, retries=40, delay=5):
     for _ in range(retries):
         result = subprocess.run(
@@ -941,7 +904,7 @@ def exercise_network_clients(env, app_db, app_user, app_password):
     if project_name:
         ip_addr = container_ip(project_name, "postgres")
         assert ip_addr.count(".") == 3
-        for sidecar in ("pgbouncer", "valkey", "memcached", "rabbitmq", "pghero"):
+        for sidecar in ("pgbouncer", "valkey", "memcached", "rabbitmq"):
             if not profile_enabled(sidecar):
                 continue
             try:
@@ -962,8 +925,6 @@ def exercise_network_clients(env, app_db, app_user, app_password):
         "RABBITMQ_MANAGEMENT_HOST_PORT", env_values.get("RABBITMQ_MANAGEMENT_PORT", "15672")
     )
     pgbouncer_host_port = resolve_port("PGBOUNCER_HOST_PORT", env_values.get("PGBOUNCER_PORT", "6432"))
-    pghero_host_port = int(env["PGHERO_PORT"])
-
     if profile_enabled("valkey"):
         valkey_issue = unavailable.pop("valkey", None)
         if valkey_issue:
@@ -1034,21 +995,6 @@ def exercise_network_clients(env, app_db, app_user, app_password):
             rabbitmq_user,
             rabbitmq_password,
         )
-
-    pghero_issue = unavailable.pop("pghero", None)
-    if pghero_issue:
-        pytest.fail(f"PgHero sidecar unavailable: {pghero_issue}")
-    pghero_primary = ("127.0.0.1", pghero_host_port)
-    pghero_secondary = container_endpoint_factory(project_name, "pghero", 8080)
-    pghero_host, pghero_port = pick_endpoint(
-        pghero_primary,
-        pghero_secondary,
-        primary_retries=30,
-        secondary_retries=30,
-    )
-    pghero_user = env_values.get("PGHERO_USER", "admin")
-    pghero_password = env_values.get("PGHERO_PASSWORD", "change_me")
-    check_pghero(pghero_host, pghero_port, pghero_user, pghero_password)
 
     pgbouncer_available = profile_enabled("pgbouncer") and "pgbouncer" not in unavailable
     if not pgbouncer_available and profile_enabled("pgbouncer"):
@@ -1637,7 +1583,6 @@ def test_shell_scripts_lint():
     scripts = [
         ROOT / "scripts" / "manage.sh",
         ROOT / "scripts" / "daily_maintenance.sh",
-        ROOT / "scripts" / "pghero_entrypoint.sh",
         ROOT / "pgbouncer" / "entrypoint.sh",
         ROOT / "valkey" / "entrypoint.sh",
     ]

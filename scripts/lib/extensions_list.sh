@@ -30,7 +30,7 @@ CORE_EXTENSION_LIST=(
 	pgcrypto
 	pgsodium
 	gzip
-	pgzstd
+	zstd
 	pgstattuple
 	pgtap
 	pgaudit

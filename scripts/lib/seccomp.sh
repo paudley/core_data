@@ -4,7 +4,7 @@
 
 set -euo pipefail
 
-SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached pghero rabbitmq)
+SEC_COMP_SERVICES=(postgres logical_backup pgbouncer valkey memcached rabbitmq)
 SEC_COMP_PROFILE_DIR=${SEC_COMP_PROFILE_DIR:-${ROOT_DIR}/seccomp}
 SEC_COMP_DEFAULT_PROFILE=${SEC_COMP_DEFAULT_PROFILE:-${SEC_COMP_PROFILE_DIR}/docker-default.json}
 SEC_COMP_TRACE_DIR=${SEC_COMP_TRACE_DIR:-${SEC_COMP_PROFILE_DIR}/traces}
@@ -15,7 +15,6 @@ declare -A SEC_COMP_SERVICE_DEFAULT_SPEC=(
 	[pgbouncer]='seccomp:./seccomp/pgbouncer.json'
 	[valkey]='seccomp:./seccomp/valkey.json'
 	[memcached]='seccomp:./seccomp/memcached.json'
-	[pghero]='seccomp:./seccomp/pghero.json'
 	[rabbitmq]='seccomp:./seccomp/docker-default.json'
 )
 
@@ -304,7 +303,6 @@ services = {
     "pgbouncer": "CORE_DATA_SECCOMP_PGBOUNCER",
     "valkey": "CORE_DATA_SECCOMP_VALKEY",
     "memcached": "CORE_DATA_SECCOMP_MEMCACHED",
-    "pghero": "CORE_DATA_SECCOMP_PGHERO",
 }
 missing = []
 for service, var in services.items():

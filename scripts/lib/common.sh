@@ -14,7 +14,7 @@ PGBACKREST_CONF=${PGBACKREST_CONF:-/var/lib/postgresql/data/pgbackrest.conf}
 POSTGRES_HOST=${POSTGRES_HOST:-localhost}
 POSTGRES_EXEC_USER=${POSTGRES_EXEC_USER:-postgres}
 CORE_DATA_BOOTSTRAP_SENTINEL=${CORE_DATA_BOOTSTRAP_SENTINEL:-/var/lib/postgresql/data/.core_data_bootstrap_complete}
-CORE_DATA_HEALTH_GUARD_SERVICES=${CORE_DATA_HEALTH_GUARD_SERVICES:-"postgres pgbouncer pghero"}
+CORE_DATA_HEALTH_GUARD_SERVICES=${CORE_DATA_HEALTH_GUARD_SERVICES:-"postgres pgbouncer"}
 case "${CORE_DATA_SELECTED_COMMAND:-}" in
 ci-up | ci-down | ci-verify | bootstrap-ci)
 	default_require_env=0
