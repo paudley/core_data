@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "coding-ethos": {
+      "args": [
+        "mcp"
+      ],
+      "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run",
+      "type": "stdio"
+    }
+  }
+}

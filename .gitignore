@@ -44,3 +44,13 @@ docker-compose.override.yml
 # Node (if used for tooling)
 node_modules/
 .lint-cache
+
+# coding-ethos generated runtime output
+.code-ethos/cache/
+.coding-ethos/cache/
+.coding-ethos/code-intel.db
+.coding-ethos/hook-runs/
+.coding-ethos/lint-runs/
+.coding-ethos/prune-runs/
+.coding-ethos/state/
+.coding-ethos/code-intel.db

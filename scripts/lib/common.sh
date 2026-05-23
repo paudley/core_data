@@ -231,7 +231,7 @@ build_postgres_image() {
 	local image_name=${POSTGRES_IMAGE_NAME:-core_data/postgres}
 	local image_tag=${POSTGRES_IMAGE_TAG:-latest}
 	local pg_version=${PG_VERSION:-17}
-	local age_version=${AGE_VERSION:-master}
+	local age_version=${AGE_VERSION:-PG17/v1.7.0-rc0}
 
 	echo "[core_data] Building PostgreSQL image ${image_name}:${image_tag} (PG ${pg_version}, AGE ${age_version})." >&2
 	docker build \
