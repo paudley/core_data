@@ -783,6 +783,7 @@ def check_rabbitmq(amqp_host, amqp_port, http_host, http_port, username, passwor
     wait_for_port(amqp_host, amqp_port, retries=retries, delay=delay)
     wait_for_port(http_host, http_port, retries=retries, delay=delay)
     credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
+    last_error = None
     for _ in range(retries):
         conn = http.client.HTTPConnection(http_host, http_port, timeout=5)
         try:
@@ -796,11 +797,13 @@ def check_rabbitmq(amqp_host, amqp_port, http_host, http_port, username, passwor
             if response.status == 200 and b"queue_totals" in payload:
                 return
         except OSError as exc:
-            warnings.warn(f"RabbitMQ management API check failed: {exc}", RuntimeWarning, stacklevel=2)
+            last_error = exc
         finally:
             conn.close()
         time.sleep(delay)
-    raise RuntimeError("RabbitMQ management API not reachable")
+    if last_error is not None:
+        raise RuntimeError("RabbitMQ management API not reachable") from last_error
+    raise RuntimeError("RabbitMQ management API did not report queue totals")
 
 
 def exercise_rabbitmq_messages(http_host, http_port, username, password):

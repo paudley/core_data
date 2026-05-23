@@ -4,8 +4,10 @@
 
 set -euo pipefail
 
+LIB_UPGRADE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+: "${SCRIPT_DIR:=${LIB_UPGRADE_DIR%/lib}}"
+
 if [[ -z ${ROOT_DIR:-} ]]; then
-	LIB_UPGRADE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 	# shellcheck source=scripts/lib/common.sh
 	source "${LIB_UPGRADE_DIR}/common.sh"
 fi
@@ -33,7 +35,7 @@ _default_age_version_for_pg() {
 		echo "PG17/v1.7.0-rc0"
 		;;
 	*)
-		echo "${AGE_VERSION:-master}"
+		echo "master"
 		;;
 	esac
 }
