@@ -38,7 +38,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
    ```
 
 ## Published images and attestations
-- Postgres image tag is `${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}`. CI builds/publishes to GHCR; attestations can be checked with:
+- Postgres image tag is `${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-18.4-bookworm-core}`. CI builds/publishes to GHCR; attestations can be checked with:
   ```bash
   gh attestation verify oci://ghcr.io/paudley/core_data/postgres:<tag> --repo paudley/core_data
   ```

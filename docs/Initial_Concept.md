@@ -7,7 +7,7 @@ SPDX-License-Identifier: MIT
 
 ## Overview
 
-core\_data packages a production-focused PostgreSQL 17 environment using Docker Compose. The platform builds a custom PostgreSQL image with spatial, graph, auditing, and automation extensions and ships helper scripts for day-two operations such as backups, tuning, and log analytics. All behavior is driven from version-controlled assets so the stack can be reproduced consistently across environments.
+core\_data packages a production-focused PostgreSQL 18 environment using Docker Compose. The platform builds a custom PostgreSQL image with spatial, graph, auditing, and automation extensions and ships helper scripts for day-two operations such as backups, tuning, and log analytics. All behavior is driven from version-controlled assets so the stack can be reproduced consistently across environments.
 
 ## Repository Layout
 
@@ -69,10 +69,10 @@ The `.env` file is the single source of truth for runtime tuning. The template d
 | `POSTGRES_SUPERUSER_PASSWORD`                                | Password for the superuser; required before running the stack.                                     | `change_me`                                                                           |
 | `POSTGRES_DB`                                                | Name of the primary database created by the official entrypoint.                                   | `postgres`                                                                            |
 | `POSTGRES_PORT`                                              | Host port mapped to PostgreSQL (5433 default, allowing PgBouncer to own 5432).                     | `5433`                                                                                |
-| `PG_VERSION`                                                 | Major PostgreSQL version that drives the Dockerfile build ARG.                                     | `17`                                                                                  |
+| `PG_VERSION`                                                 | Major PostgreSQL version that drives the Dockerfile build ARG.                                     | `18`                                                                                  |
 | `DATABASES_TO_CREATE`                                        | Comma-delimited list of `db:owner:password` tuples consumed by `01-init-db-user-creation.sh`.      | `app_main:app_user:secret`                                                            |
-| `POSTGRES_IMAGE_NAME` / `POSTGRES_IMAGE_TAG`                 | Optional overrides for tagging the custom image.                                                   | `core_data/postgres` / `17.2-bookworm-core`                                           |
-| `AGE_VERSION`                                                | Git ref used when cloning and compiling Apache AGE.                                                | `master`                                                                              |
+| `POSTGRES_IMAGE_NAME` / `POSTGRES_IMAGE_TAG`                 | Optional overrides for tagging the custom image.                                                   | `core_data/postgres` / `18.4-bookworm-core`                                           |
+| `AGE_VERSION`                                                | Git ref used when cloning and compiling Apache AGE.                                                | `PG18/v1.7.0-rc0`                                                                     |
 | `POSTGRES_MEMORY_LIMIT`                                      | Memory limit passed to the PostgreSQL container.                                                   | `4g`                                                                                  |
 | `POSTGRES_CPU_LIMIT`                                         | CPU cores allocated to the PostgreSQL container.                                                   | `2`                                                                                   |
 | `POSTGRES_SHM_SIZE`                                          | `/dev/shm` allocation to support parallel workers.                                                 | `1g`                                                                                  |

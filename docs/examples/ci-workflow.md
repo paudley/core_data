@@ -24,7 +24,7 @@ jobs:
     env:
       COMPOSE_PROFILES: valkey,pgbouncer
       POSTGRES_IMAGE_NAME: ghcr.io/paudley/core_data/postgres
-      POSTGRES_IMAGE_TAG: 17.2-v1.0.0
+      POSTGRES_IMAGE_TAG: 18.4-v1.0.0
       CORE_DATA_REQUIRE_ATTESTATION: 1
     steps:
       - uses: actions/checkout@v4

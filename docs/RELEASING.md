@@ -32,17 +32,17 @@ We use a **hybrid versioning strategy** that combines PostgreSQL version with se
 
 **Examples:**
 
-* `17.2-v1.0.0` - Initial stable release with PostgreSQL 17.2
-* `17.2-v1.0.1` - Patch/build fix (PostgreSQL version unchanged)
-* `17.2-v1.1.0` - New extensions or features added (minor bump)
-* `17.3-v1.2.0` - PostgreSQL minor update with features
-* `18.0-v2.0.0` - PostgreSQL major upgrade (breaking change)
+* `18.4-v1.0.0` - Initial stable release with PostgreSQL 18.4
+* `18.4-v1.0.1` - Patch/build fix (PostgreSQL version unchanged)
+* `18.4-v1.1.0` - New extensions or features added (minor bump)
+* `18.4-v1.2.0` - PostgreSQL minor update with features
+* `19.0-v2.0.0` - PostgreSQL major upgrade (breaking change)
 
 ### Version Components
 
 #### PostgreSQL Version (`{PG_VERSION}`)
 
-* Format: `MAJOR.MINOR` (e.g., `17.2`)
+* Format: `MAJOR.MINOR` (e.g., `18.4`)
 * Changes when the base PostgreSQL version is updated
 * Major version changes (17 → 18) typically require semantic major version bump
 
@@ -56,13 +56,13 @@ We use a **hybrid versioning strategy** that combines PostgreSQL version with se
 
 ### Generated Docker Tags
 
-For a release tag `17.2-v1.0.0`, the following Docker image tags are automatically created:
+For a release tag `18.4-v1.0.0`, the following Docker image tags are automatically created:
 
-* `17.2-v1.0.0` - Full version (exact release)
-* `17.2-v1.0` - Minor version (latest patch)
-* `17.2-v1` - Major version (latest minor)
-* `17.2` - PostgreSQL version (latest semantic version)
-* `17` - PostgreSQL major version (latest minor)
+* `18.4-v1.0.0` - Full version (exact release)
+* `18.4-v1.0` - Minor version (latest patch)
+* `18.4-v1` - Major version (latest minor)
+* `18.4` - PostgreSQL version (latest semantic version)
+* `18` - PostgreSQL major version (latest minor)
 * `latest` - Latest stable release
 
 ## Release Checklist
@@ -87,7 +87,7 @@ Edit `CHANGELOG.md` and move items from `[Unreleased]` to a new version section:
 ```markdown
 ## [Unreleased]
 
-## [17.2-v1.0.0] - 2025-01-15
+## [18.4-v1.0.0] - 2025-01-15
 
 ### Added
 - Feature XYZ
@@ -103,8 +103,8 @@ Edit `CHANGELOG.md` and move items from `[Unreleased]` to a new version section:
 Update the comparison links at the bottom:
 
 ```markdown
-[unreleased]: https://github.com/paudley/core_data/compare/17.2-v1.0.0...HEAD
-[17.2-v1.0.0]: https://github.com/paudley/core_data/releases/tag/17.2-v1.0.0
+[unreleased]: https://github.com/paudley/core_data/compare/18.4-v1.0.0...HEAD
+[18.4-v1.0.0]: https://github.com/paudley/core_data/releases/tag/18.4-v1.0.0
 ```
 
 ### Step 2: Update VERSION File
@@ -119,7 +119,7 @@ echo "1.0.0" > VERSION
 
 ```bash
 git add CHANGELOG.md VERSION
-git commit -m "chore: prepare release 17.2-v1.0.0"
+git commit -m "chore: prepare release 18.4-v1.0.0"
 ```
 
 ### Step 4: Create and Push Tag
@@ -127,12 +127,12 @@ git commit -m "chore: prepare release 17.2-v1.0.0"
 Create an annotated tag with release notes:
 
 ```bash
-git tag -a 17.2-v1.0.0 -m "Release 17.2-v1.0.0
+git tag -a 18.4-v1.0.0 -m "Release 18.4-v1.0.0
 
-PostgreSQL 17.2 with comprehensive extension suite
+PostgreSQL 18.4 with comprehensive extension suite
 
 ## Highlights
-- PostgreSQL 17.2 on Debian Bookworm
+- PostgreSQL 18.4 on Debian Bookworm
 - PostGIS 3, pgvector, Apache AGE
 - Comprehensive performance and maintenance extensions
 - Full SLSA attestation support
@@ -143,7 +143,7 @@ See CHANGELOG.md for complete details."
 Push the tag to trigger the release workflow:
 
 ```bash
-git push origin 17.2-v1.0.0
+git push origin 18.4-v1.0.0
 ```
 
 ### Step 5: Monitor GitHub Actions
@@ -159,7 +159,7 @@ After the workflow completes, create a GitHub Release:
 
 1. Go to **Releases** → **Draft a new release**
 2. Choose the tag you just pushed
-3. Title: `Core Data PostgreSQL 17.2-v1.0.0`
+3. Title: `Core Data PostgreSQL 18.4-v1.0.0`
 4. Copy highlights from CHANGELOG.md
 5. Add verification instructions (see template below)
 6. Publish release
@@ -167,31 +167,31 @@ After the workflow completes, create a GitHub Release:
 #### GitHub Release Template
 
 ````markdown
-## Core Data PostgreSQL 17.2-v1.0.0
+## Core Data PostgreSQL 18.4-v1.0.0
 
-PostgreSQL 17.2 with comprehensive extension suite for spatial, vector, and graph data.
+PostgreSQL 18.4 with comprehensive extension suite for spatial, vector, and graph data.
 
 ### 📦 Installation
 
 ```bash
-docker pull ghcr.io/<username>/core-data-postgres:17.2-v1.0.0
+docker pull ghcr.io/<username>/core-data-postgres:18.4-v1.0.0
 ````
 
 ### 🔐 Verify Attestation
 
 ```bash
-gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
+gh attestation verify oci://ghcr.io/<username>/core-data-postgres:18.4-v1.0.0 \
   --owner <username>
 ```
 
 ### 📋 What's Changed
 
-See [CHANGELOG.md](https://github.com/%3Cusername%3E/core_data/blob/main/CHANGELOG.md#17.2-v1.0.0) for complete details.
+See [CHANGELOG.md](https://github.com/%3Cusername%3E/core_data/blob/main/CHANGELOG.md#18.4-v1.0.0) for complete details.
 
 ### 🐳 Available Tags
 
-* `ghcr.io/<username>/core-data-postgres:17.2-v1.0.0` (exact version)
-* `ghcr.io/<username>/core-data-postgres:17.2` (PostgreSQL version)
+* `ghcr.io/<username>/core-data-postgres:18.4-v1.0.0` (exact version)
+* `ghcr.io/<username>/core-data-postgres:18.4` (PostgreSQL version)
 * `ghcr.io/<username>/core-data-postgres:latest` (latest stable)
 
 ### 🔒 Security
@@ -205,7 +205,7 @@ This release includes SLSA build attestations and SBOM for supply chain security
 ### 1. Pull the Image
 
 ```bash
-docker pull ghcr.io/<username>/core-data-postgres:17.2-v1.0.0
+docker pull ghcr.io/<username>/core-data-postgres:18.4-v1.0.0
 ````
 
 ### 2. Verify Attestation
@@ -213,7 +213,7 @@ docker pull ghcr.io/<username>/core-data-postgres:17.2-v1.0.0
 Using GitHub CLI:
 
 ```bash
-gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
+gh attestation verify oci://ghcr.io/<username>/core-data-postgres:18.4-v1.0.0 \
   --owner <username>
 ```
 
@@ -224,7 +224,7 @@ Expected output:
 
 sha256:abc123... was attested by:
 REPO                    PREDICATE_TYPE                  WORKFLOW
-owner/core_data         https://slsa.dev/provenance/v1  .github/workflows/publish-docker.yml@refs/tags/17.2-v1.0.0
+owner/core_data         https://slsa.dev/provenance/v1  .github/workflows/publish-docker.yml@refs/tags/18.4-v1.0.0
 ```
 
 ### 3. Inspect SBOM
@@ -232,7 +232,7 @@ owner/core_data         https://slsa.dev/provenance/v1  .github/workflows/publis
 View the Software Bill of Materials:
 
 ```bash
-gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
+gh attestation verify oci://ghcr.io/<username>/core-data-postgres:18.4-v1.0.0 \
   --owner <username> \
   --format json | jq '.verificationResult.statement.predicate.sbom'
 ```
@@ -242,14 +242,14 @@ gh attestation verify oci://ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
 Run a quick test:
 
 ```bash
-docker run --rm ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
+docker run --rm ghcr.io/<username>/core-data-postgres:18.4-v1.0.0 \
   postgres --version
 ```
 
 Expected output:
 
 ```
-postgres (PostgreSQL) 17.2 (Debian 17.2-1.pgdg120+1)
+postgres (PostgreSQL) 18.4 (Debian 18.4-1.pgdg12+1)
 ```
 
 ### 5. Verify Extensions
@@ -257,7 +257,7 @@ postgres (PostgreSQL) 17.2 (Debian 17.2-1.pgdg120+1)
 ```bash
 docker run --rm \
   -e POSTGRES_PASSWORD=test \
-  ghcr.io/<username>/core-data-postgres:17.2-v1.0.0 \
+  ghcr.io/<username>/core-data-postgres:18.4-v1.0.0 \
   postgres -c "SELECT * FROM pg_available_extensions WHERE name IN ('postgis', 'vector', 'age');"
 ```
 
@@ -272,7 +272,7 @@ docker run --rm \
 1. Check build logs for specific errors
 2. Verify Dockerfile syntax locally: `docker build -f postgres/Dockerfile .`
 3. Ensure all build dependencies are available
-4. Check if base image (`postgres:17-bookworm`) is accessible
+4. Check if base image (`postgres:18-bookworm`) is accessible
 
 ### Attestation Generation Fails
 
@@ -294,13 +294,13 @@ docker run --rm \
 Delete local tag:
 
 ```bash
-git tag -d 17.2-v1.0.0
+git tag -d 18.4-v1.0.0
 ```
 
 Delete remote tag (use with caution):
 
 ```bash
-git push origin :refs/tags/17.2-v1.0.0
+git push origin :refs/tags/18.4-v1.0.0
 ```
 
 Create corrected tag and push again.
@@ -343,9 +343,9 @@ For critical security fixes or severe bugs:
 
 1. Create a branch from the affected release tag
 2. Apply minimal fix
-3. Update CHANGELOG.md with `[17.2-v1.0.1] - YYYY-MM-DD` section
+3. Update CHANGELOG.md with `[18.4-v1.0.1] - YYYY-MM-DD` section
 4. Increment PATCH version in VERSION file
-5. Create tag with PATCH bump (e.g., `17.2-v1.0.1`)
+5. Create tag with PATCH bump (e.g., `18.4-v1.0.1`)
 6. Push tag to trigger automated release
 7. Create GitHub release with clear hotfix description
 

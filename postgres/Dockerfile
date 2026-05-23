@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: MIT
 
 # syntax=docker/dockerfile:1.7
-ARG PG_VERSION=17
-ARG AGE_VERSION=PG17/v1.7.0-rc0
+ARG PG_VERSION=18
+ARG AGE_VERSION=PG18/v1.7.0-rc0
 ARG CORE_UID=1000
 ARG CORE_GID=1000
 ARG CORE_USERNAME=postgres
@@ -23,6 +23,7 @@ ARG CORE_GECOS
 ARG CORE_HOME
 
 ENV DEBIAN_FRONTEND=noninteractive \
+    PGDATA=/var/lib/postgresql/data \
     AGE_VERSION=${AGE_VERSION}
 
 RUN mkdir -p /opt/core_data/docs
@@ -63,7 +64,6 @@ RUN set -euxo pipefail; \
       "postgresql-${PG_MAJOR}-repack" \
       "postgresql-${PG_MAJOR}-hypopg" \
       "postgresql-${PG_MAJOR}-pgtap" \
-      postgresql-contrib \
       pgbadger \
       strace \
       pgbackrest; \
