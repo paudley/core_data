@@ -1,7 +1,14 @@
+#!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
-# shellcheck shell=bash
+set -euo pipefail
+
+if [[ -z ${ROOT_DIR:-} ]]; then
+	LIB_UPGRADE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+	# shellcheck source=scripts/lib/common.sh
+	source "${LIB_UPGRADE_DIR}/common.sh"
+fi
 
 # Major version upgrade workflow helpers for manage.sh.
 # _update_env_var rewrites a key=value entry inside the active .env file.
@@ -14,6 +21,21 @@ _update_env_var() {
 		exit 1
 	fi
 	python3 "${SCRIPT_DIR}/lib/update_env_var.py" "${file}" "${key}" "${value}"
+}
+
+_default_age_version_for_pg() {
+	local version=$1
+	case "${version%%.*}" in
+	18)
+		echo "PG18/v1.7.0-rc0"
+		;;
+	17)
+		echo "PG17/v1.7.0-rc0"
+		;;
+	*)
+		echo "${AGE_VERSION:-master}"
+		;;
+	esac
 }
 
 # _ensure_base_image pulls the postgres base image for the target version.
@@ -168,6 +190,15 @@ USAGE
 	echo "[upgrade] updating PG_VERSION in ${ENV_FILE}" >&2
 	_update_env_var PG_VERSION "${new_version}"
 	export PG_VERSION="${new_version}"
+	if [[ -z ${AGE_VERSION:-} ||
+		${AGE_VERSION} == "master" ||
+		( ${AGE_VERSION} =~ ^PG([0-9]+)\/ && ${BASH_REMATCH[1]} != "${new_version%%.*}" ) ]]; then
+		local new_age_version
+		new_age_version=$(_default_age_version_for_pg "${new_version}")
+		echo "[upgrade] updating AGE_VERSION in ${ENV_FILE} to ${new_age_version}" >&2
+		_update_env_var AGE_VERSION "${new_age_version}"
+		export AGE_VERSION="${new_age_version}"
+	fi
 
 	echo "[upgrade] rebuilding PostgreSQL image" >&2
 	compose build postgres

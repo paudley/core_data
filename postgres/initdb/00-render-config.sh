@@ -87,7 +87,7 @@ apply_network_allow_entries() {
 : "${PG_MAINTENANCE_WORK_MEM:=256MB}"
 : "${PG_RANDOM_PAGE_COST:=1.1}"
 : "${PG_EFFECTIVE_IO_CONCURRENCY:=200}"
-# PostgreSQL 17 accepts effective_io_concurrency in range 0-1000; clamp invalid values
+# PostgreSQL 18 accepts effective_io_concurrency in range 0-1000; clamp invalid values
 if [[ "${PG_EFFECTIVE_IO_CONCURRENCY}" -lt 0 ]]; then
 	echo "[core_data] WARNING: PG_EFFECTIVE_IO_CONCURRENCY=${PG_EFFECTIVE_IO_CONCURRENCY} is negative; clamping to 0." >&2
 	PG_EFFECTIVE_IO_CONCURRENCY=0

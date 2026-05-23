@@ -40,6 +40,13 @@ docker-compose.override.yml
 *.swp
 .DS_Store
 .claude
+.code-ethos/cache/
+.coding-ethos/cache/
+.coding-ethos/hook-runs/
+.coding-ethos/lint-runs/
+.coding-ethos/prune-runs/
+.coding-ethos/state/
+.coding-ethos/code-intel.db
 
 # Node (if used for tooling)
 node_modules/

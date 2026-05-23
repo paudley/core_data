@@ -3,7 +3,7 @@ name: Publish Docker Image to GHCR
 on:
   push:
     tags:
-      - '*-v*.*.*'  # Matches hybrid tags like 17.2-v1.0.0
+      - '*-v*.*.*'  # Matches hybrid tags like 18.4-v1.0.0
       - 'v*.*.*'    # Also matches simple semantic tags like v1.0.0
 
 env:
@@ -93,7 +93,7 @@ jobs:
           case "${{ matrix.service }}" in
             postgres)
               title="Core Data PostgreSQL"
-              desc="Hardened PostgreSQL 17 image with spatial/vector/graph extensions."
+              desc="Hardened PostgreSQL 18 image with spatial/vector/graph extensions."
               ;;
             valkey)
               title="Core Data ValKey"
@@ -132,7 +132,7 @@ jobs:
       - name: Prepare build args
         id: build-args
         env:
-          PG_VERSION: ${{ steps.version.outputs.pg_major || '17' }}
+          PG_VERSION: ${{ steps.version.outputs.pg_major || '18' }}
         shell: bash
         run: |
           if [[ "${{ matrix.service }}" == "postgres" ]]; then
@@ -144,7 +144,7 @@ jobs:
               echo "CORE_GECOS=Core Data PostgreSQL Administrator"
               echo "CORE_HOME=/home/postgres"
               echo "PG_VERSION=${PG_VERSION}"
-              echo "AGE_VERSION=master"
+              echo "AGE_VERSION=PG${PG_VERSION}/v1.7.0-rc0"
               echo "EOT"
             } >>"$GITHUB_OUTPUT"
           else
@@ -157,7 +157,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.service }}
           tags: |
-            # For hybrid tags (17.2-v1.0.0), create multiple tags
+            # For hybrid tags (18.4-v1.0.0), create multiple tags
             type=raw,value=${{ steps.version.outputs.tag }},enable=${{ steps.version.outputs.is_hybrid == 'true' }}
             type=raw,value=${{ steps.version.outputs.pg_version }}-v${{ steps.version.outputs.sem_minor }},enable=${{ steps.version.outputs.is_hybrid == 'true' }}
             type=raw,value=${{ steps.version.outputs.pg_version }}-v${{ steps.version.outputs.sem_major }},enable=${{ steps.version.outputs.is_hybrid == 'true' }}

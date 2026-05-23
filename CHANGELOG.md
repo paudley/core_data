@@ -13,13 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Allow PostgreSQL superuser names with hyphens by quoting the role in init scripts when creating the `core_data_admin` schema.
 * Fixed `./scripts/manage.sh backup` so it no longer treats the command name as an argument, restoring pgBackRest backup/verify flows.
 
-## [17.2-v1.0.0] - TBD
+## [18.4-v1.0.0] - TBD
 
 ### Added
 
 #### Core Database
 
-* PostgreSQL 17.2 on Debian Bookworm base image
+* PostgreSQL 18.4 on Debian Bookworm base image
 * Custom Docker image with comprehensive extension suite
 * Automated database initialization and configuration templating
 * User and permission management via environment variables
@@ -33,7 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Vector and Graph Database
 
 * pgvector for AI/ML vector similarity search
-* Apache AGE (latest) for graph database capabilities built from source
+* Apache AGE `PG18/v1.7.0-rc0` for graph database capabilities built from source
 
 #### Performance and Optimization
 
@@ -90,7 +90,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Documentation
 
-* Best practices guide for Dockerized PostgreSQL 17
+* Best practices guide for Dockerized PostgreSQL 18
 * Initial concept and architecture documentation
 * Service configuration examples
 * Environment variable reference
@@ -126,6 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * Secure credential management via environment variables
 * No hardcoded secrets in repository
 
-[17.2-v1.0.0]: https://github.com/paudley/core_data/releases/tag/17.2-v1.0.0
+[18.4-v1.0.0]: https://github.com/paudley/core_data/releases/tag/18.4-v1.0.0
 
-[unreleased]: https://github.com/paudley/core_data/compare/17.2-v1.0.0...HEAD
+[unreleased]: https://github.com/paudley/core_data/compare/18.4-v1.0.0...HEAD

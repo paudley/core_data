@@ -8,11 +8,11 @@ SPDX-License-Identifier: MIT
 [![CI](https://github.com/paudley/core_data/actions/workflows/ci.yml/badge.svg)](https://github.com/paudley/core_data/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A reproducible PostgreSQL 17 platform delivered as code. core\_data builds a hardened database image with spatial, vector, and graph extensions and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
+A reproducible PostgreSQL 18 platform delivered as code. core\_data builds a hardened database image with spatial, vector, and graph extensions and ships a management CLI that automates backups, restores, QA cloning, and upgrades. Everything lives in version control so environments can be rebuilt consistently across laptops, CI, and production.
 
 ## Why You Want This
 
-* Run the same Postgres 17 stack everywhere: laptop, CI runner, or production.
+* Run the same Postgres 18 stack everywhere: laptop, CI runner, or production.
 * Ship with the heavy hitters pre-installed—PostGIS, pgvector, AGE, pg\_cron, pgBackRest—without custom build scripts.
 * Automate the boring-but-critical tasks: backups, restores, QA clones, log analytics, and even major version upgrades via pgautoupgrade.
 * Treat your database like code with reproducible `.env` configs, templated init scripts, and a pytest smoke test that catches regressions early.
@@ -28,7 +28,7 @@ Pre-built images are available from GitHub Container Registry with full SLSA att
 docker pull ghcr.io/paudley/core-data-postgres:latest
 
 # Or specify a version
-docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
+docker pull ghcr.io/paudley/core-data-postgres:18.4-v1.0.0
 ```
 
 ### Available Tags
@@ -38,15 +38,15 @@ Images follow a hybrid versioning strategy combining PostgreSQL version with sem
 | Tag Pattern                             | Example       | Description                                    |
 | --------------------------------------- | ------------- | ---------------------------------------------- |
 | `latest`                                | `latest`      | Latest stable release                          |
-| `{PG_VERSION}-v{MAJOR}.{MINOR}.{PATCH}` | `17.2-v1.0.0` | Exact version (recommended for production)     |
-| `{PG_VERSION}-v{MAJOR}.{MINOR}`         | `17.2-v1.0`   | Latest patch for minor version                 |
-| `{PG_VERSION}-v{MAJOR}`                 | `17.2-v1`     | Latest minor for major version                 |
-| `{PG_VERSION}`                          | `17.2`        | Latest semantic version for PostgreSQL version |
-| `{PG_MAJOR}`                            | `17`          | Latest for PostgreSQL major version            |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}.{PATCH}` | `18.4-v1.0.0` | Exact version (recommended for production)     |
+| `{PG_VERSION}-v{MAJOR}.{MINOR}`         | `18.4-v1.0`   | Latest patch for minor version                 |
+| `{PG_VERSION}-v{MAJOR}`                 | `18.4-v1`     | Latest minor for major version                 |
+| `{PG_VERSION}`                          | `18.4`        | Latest semantic version for PostgreSQL version |
+| `{PG_MAJOR}`                            | `18`          | Latest for PostgreSQL major version            |
 
 **Version Format**: `{PostgreSQL_Version}-v{Semantic_Version}`
 
-* Example: `17.2-v1.0.0` means PostgreSQL 17.2 with semantic version 1.0.0
+* Example: `18.4-v1.0.0` means PostgreSQL 18.4 with semantic version 1.0.0
 * See [docs/RELEASING.md](docs/RELEASING.md) for complete versioning details
 
 ### Security & Verification
@@ -55,12 +55,12 @@ All published images include cryptographic attestations that prove build provena
 
 ```bash
 # Verify image attestation (requires GitHub CLI)
-gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
+gh attestation verify oci://ghcr.io/paudley/core-data-postgres:18.4-v1.0.0 \
   --owner paudley
 
 # Pull and verify in one step
-docker pull ghcr.io/paudley/core-data-postgres:17.2-v1.0.0
-gh attestation verify oci://ghcr.io/paudley/core-data-postgres:17.2-v1.0.0 \
+docker pull ghcr.io/paudley/core-data-postgres:18.4-v1.0.0
+gh attestation verify oci://ghcr.io/paudley/core-data-postgres:18.4-v1.0.0 \
   --owner paudley
 
 # Verify every referenced image from your .env (pretty console output)
@@ -94,7 +94,7 @@ Expected verification output:
 
 sha256:abc123... was attested by:
 REPO              PREDICATE_TYPE                  WORKFLOW
-paudley/core_data https://slsa.dev/provenance/v1  .github/workflows/publish-docker.yml@refs/tags/17.2-v1.0.0
+paudley/core_data https://slsa.dev/provenance/v1  .github/workflows/publish-docker.yml@refs/tags/18.4-v1.0.0
 ```
 
 **What's Verified:**
@@ -115,7 +115,7 @@ Update your `docker-compose.yml` to use the published image instead of building 
 ```yaml
 services:
   postgres:
-    image: ghcr.io/paudley/core-data-postgres:17.2-v1.0.0  # Use published image
+    image: ghcr.io/paudley/core-data-postgres:18.4-v1.0.0  # Use published image
     # Remove or comment out the 'build:' section
     # build:
     #   context: .
@@ -126,7 +126,7 @@ Or override via `.env`:
 
 ```bash
 POSTGRES_IMAGE_NAME=ghcr.io/paudley/core-data-postgres
-POSTGRES_IMAGE_TAG=17.2-v1.0.0
+POSTGRES_IMAGE_TAG=18.4-v1.0.0
 ```
 
 ### Important: UID/GID Configuration for Pre-built Images

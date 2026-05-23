@@ -4,6 +4,7 @@
 import base64
 import concurrent.futures
 import csv
+import functools
 import gzip
 import http.client
 import json
@@ -62,15 +63,15 @@ def _build_testkit_schema(db_settings):
             cur.execute("SET search_path TO testkit, public")
         return conn
 
-    place_type = GraphQLObjectType(
-        "Place",
-        lambda: {
+    def place_fields():
+        return {
             "slug": GraphQLField(GraphQLString),
             "name": GraphQLField(GraphQLString),
             "locationWkt": GraphQLField(GraphQLString),
             "regionCode": GraphQLField(GraphQLString),
-        },
-    )
+        }
+
+    place_type = GraphQLObjectType("Place", place_fields)
 
     def resolve_places(_root, _info):
         with get_connection() as conn:
@@ -141,9 +142,8 @@ def _build_testkit_schema(db_settings):
                 result = cur.fetchone()
                 return float(result[0]) if result and result[0] is not None else None
 
-    query_type = GraphQLObjectType(
-        "Query",
-        lambda: {
+    def query_fields():
+        return {
             "places": GraphQLField(GraphQLList(place_type), resolve=resolve_places),
             "nearestPlace": GraphQLField(
                 place_type,
@@ -160,8 +160,9 @@ def _build_testkit_schema(db_settings):
                 },
                 resolve=resolve_route_cost,
             ),
-        },
-    )
+        }
+
+    query_type = GraphQLObjectType("Query", query_fields)
 
     return GraphQLSchema(query_type)
 
@@ -275,8 +276,8 @@ def manage_env(tmp_path_factory):
 
     try:
         backups_target.chmod(0o777)
-    except PermissionError:
-        pass
+    except PermissionError as exc:
+        warnings.warn(f"Unable to relax backup target permissions: {exc}", RuntimeWarning, stacklevel=2)
 
     managed_secrets = []
 
@@ -561,14 +562,14 @@ def wait_for_port(host, port, retries=30, delay=2):
     raise RuntimeError(f"service on {host}:{port} not reachable")
 
 
+def container_endpoint(project_name, service, port):
+    return container_ip(project_name, service), port
+
+
 def container_endpoint_factory(project_name, service, port):
     if not project_name:
         return None
-
-    def _resolver():
-        return container_ip(project_name, service), port
-
-    return _resolver
+    return functools.partial(container_endpoint, project_name, service, port)
 
 
 def wait_for_container(project_name, service, retries=60, delay=2):
@@ -794,8 +795,8 @@ def check_rabbitmq(amqp_host, amqp_port, http_host, http_port, username, passwor
             payload = response.read()
             if response.status == 200 and b"queue_totals" in payload:
                 return
-        except OSError:
-            pass
+        except OSError as exc:
+            warnings.warn(f"RabbitMQ management API check failed: {exc}", RuntimeWarning, stacklevel=2)
         finally:
             conn.close()
         time.sleep(delay)
@@ -1191,7 +1192,7 @@ def test_full_workflow(manage_env):
 
     run_manage(env, "backup", "--type=full")
 
-    run_manage(env, "upgrade", "--new-version", "17")
+    run_manage(env, "upgrade", "--new-version", "18")
     wait_for_ready(env)
 
     status = subprocess.run([str(MANAGE), "status"], cwd=ROOT, env=env, capture_output=True, text=True)
@@ -1200,7 +1201,7 @@ def test_full_workflow(manage_env):
 
     env_file = Path(env["ENV_FILE"])
     contents = env_file.read_text()
-    assert "PG_VERSION=17" in contents
+    assert "PG_VERSION=18" in contents
 
     run_manage(env, "down")
     compose_down(env, volumes=True)

@@ -37,8 +37,8 @@ jobs:
             echo "POSTGRES_RUNTIME_USER=${POSTGRES_RUNTIME_USER:-postgres}"
             echo "POSTGRES_RUNTIME_GECOS=${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}"
             echo "POSTGRES_RUNTIME_HOME=${POSTGRES_RUNTIME_HOME:-/home/postgres}"
-            echo "PG_VERSION=${PG_VERSION:-17}"
-            echo "AGE_VERSION=${AGE_VERSION:-master}"
+            echo "PG_VERSION=${PG_VERSION:-18}"
+            echo "AGE_VERSION=${AGE_VERSION:-PG18/v1.7.0-rc0}"
           } >> "$GITHUB_ENV"
 
       - name: Set up Docker Buildx
@@ -65,8 +65,8 @@ jobs:
                   --build-arg CORE_USERNAME="${POSTGRES_RUNTIME_USER:-postgres}" \
                   --build-arg CORE_GECOS="${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}" \
                   --build-arg CORE_HOME="${POSTGRES_RUNTIME_HOME:-/home/postgres}" \
-                  --build-arg PG_VERSION="${PG_VERSION:-17}" \
-                  --build-arg AGE_VERSION="${AGE_VERSION:-master}" \
+                  --build-arg PG_VERSION="${PG_VERSION:-18}" \
+                  --build-arg AGE_VERSION="${AGE_VERSION:-PG18/v1.7.0-rc0}" \
                   --tag "${STACK_REGISTRY}/${service}:${STACK_TAG}" \
                   .
                 ;;
