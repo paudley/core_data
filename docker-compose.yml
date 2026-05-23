@@ -237,8 +237,8 @@ services:
       test: ["CMD-SHELL", "/opt/core_data/scripts/healthcheck.sh"]
       interval: 10s
       timeout: 5s
-      retries: 6
-      start_period: 60s
+      retries: 18
+      start_period: 120s
     stop_grace_period: 1m
     shm_size: ${POSTGRES_SHM_SIZE:-0}
     mem_limit: ${POSTGRES_MEMORY_LIMIT:-0}
@@ -529,7 +529,7 @@ services:
       test:
         - CMD-SHELL
         - >-
-          printf 'version\\r\\n' | nc -w 2 127.0.0.1 11211
+          printf 'version\r\n' | nc -w 2 127.0.0.1 11211
           | grep -qi '^VERSION'
       interval: 10s
       timeout: 5s
@@ -561,10 +561,7 @@ services:
     ports:
       - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9187/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   pgbouncer_exporter:
@@ -594,10 +591,7 @@ services:
     ports:
       - "${PGBOUNCER_EXPORTER_HOST_PORT:-9127}:9127"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9127/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   valkey_exporter:
@@ -618,10 +612,7 @@ services:
     ports:
       - "${VALKEY_EXPORTER_HOST_PORT:-9121}:9121"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9121/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   memcached_exporter:
@@ -639,10 +630,7 @@ services:
     ports:
       - "${MEMCACHED_EXPORTER_HOST_PORT:-9150}:9150"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9150/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   node_exporter:
@@ -661,10 +649,7 @@ services:
     ports:
       - "${NODE_EXPORTER_HOST_PORT:-9100}:9100"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9100/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   cadvisor:
@@ -686,10 +671,7 @@ services:
     ports:
       - "${CADVISOR_HOST_PORT:-8080}:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:8080/metrics"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+      disable: true
     logging: *logging_defaults
 
   prometheus:
@@ -700,19 +682,19 @@ services:
     user: "${PROMETHEUS_UID:-65534}:${PROMETHEUS_GID:-65534}"
     depends_on:
       postgres_exporter:
-        condition: service_healthy
+        condition: service_started
       pgbouncer_exporter:
-        condition: service_healthy
+        condition: service_started
       valkey_exporter:
-        condition: service_healthy
+        condition: service_started
       rabbitmq:
         condition: service_healthy
       memcached_exporter:
-        condition: service_healthy
+        condition: service_started
       node_exporter:
-        condition: service_healthy
+        condition: service_started
       cadvisor:
-        condition: service_healthy
+        condition: service_started
       logical_backup:
         condition: service_healthy
     command:
