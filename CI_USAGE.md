@@ -23,7 +23,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
    ```bash
    ./scripts/manage.sh ci-up --env-file ci.env.example --output ./backups/ci-output.json
    ```
-   The output JSON includes host/ports, superuser, and password file paths for services enabled via `COMPOSE_PROFILES`.
+   The output JSON includes host/ports, superuser, password file paths, and monitoring endpoints. Prometheus and Grafana are required services in CI, not optional profiles.
 
 4. Run the CI test markers (uses the repo-local `.venv`):
    ```bash
@@ -49,6 +49,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
   - `ghcr.io/paudley/core_data/memcached:<tag>`
   - `ghcr.io/paudley/core_data/network-probe:<tag>`
   - `ghcr.io/paudley/core_data/network-guard:<tag>`
+- Prometheus, Grafana, and exporter images are third-party images configured by `.env` (`PROMETHEUS_IMAGE`, `GRAFANA_IMAGE`, `POSTGRES_EXPORTER_IMAGE`, etc.) and are skipped by GitHub attestation enforcement unless mirrored into your attested registry.
 - Override `CORE_DATA_STACK_REGISTRY` or `CORE_DATA_STACK_TAG` in your environment to pin a specific release or mirror; otherwise helpers default to the `latest` GHCR tag.
 - To verify every image referenced by your `.env` (with detailed output), run:
   ```bash
@@ -63,7 +64,7 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
     --certificate-oidc-issuer https://token.actions.githubusercontent.com \
     ghcr.io/paudley/core_data/postgres@<digest>
   ```
-- `./scripts/manage.sh ci-verify --require-attestation` performs this automatically for all services in scope for the active compose profiles.
+- `./scripts/manage.sh ci-verify --require-attestation` performs this automatically for all Core Data GHCR images; third-party monitoring images are logged and skipped unless you mirror them under the attested repository prefix.
 
 ## Troubleshooting in CI
 - **`/run/secrets/...: Permission denied`**: ensure `create-env` ran in the same workspace and that `POSTGRES_UID/GID` and `RABBITMQ_UID/GID` reflect the runner user. `volume_prep` will chown `./secrets/*` to that UID at startup.
@@ -73,5 +74,5 @@ This repository ships helpers and workflows tuned for CI pipelines that rely on 
 ## Suggested CI workflow shape
 - Pre-step: reset `./secrets` and run `create-env --non-interactive --force`.
 - Build (or download) Postgres image; tag to `${POSTGRES_IMAGE_NAME}:${POSTGRES_IMAGE_TAG}` for compose to consume.
-- Run `ci-up`, then targeted pytest markers (`-m ci` or others) using `uv run`.
+- Run `ci-up`, confirm Prometheus and Grafana endpoints from `ci-output.json`, then run targeted pytest markers (`-m ci` or others) using `uv run`.
 - Always upload diagnostics bundles and JUnit reports when jobs fail to simplify debugging.

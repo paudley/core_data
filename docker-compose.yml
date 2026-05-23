@@ -32,7 +32,7 @@ services:
       - ./scripts/network_probe.sh:/opt/core_data/scripts/network_probe.sh:ro
 
   volume_prep:
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-18.4-bookworm-core}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
     restart: "no"
     # Runs as root briefly to fix ownership; uses Docker's default capabilities.
@@ -45,12 +45,18 @@ services:
       PGWAL_MOUNT: ${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       PGBACKREST_MOUNT: ${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       RABBITMQ_DATA_MOUNT: ${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      PROMETHEUS_DATA_MOUNT: /prometheus
+      GRAFANA_DATA_MOUNT: /grafana
       BACKUPS_MOUNT: /backups
       # Service UIDs/GIDs - must match the user baked into each pre-built image
       POSTGRES_UID: ${POSTGRES_UID:-1000}
       POSTGRES_GID: ${POSTGRES_GID:-1000}
       RABBITMQ_UID: ${RABBITMQ_UID:-100}
       RABBITMQ_GID: ${RABBITMQ_GID:-101}
+      PROMETHEUS_UID: ${PROMETHEUS_UID:-65534}
+      PROMETHEUS_GID: ${PROMETHEUS_GID:-65534}
+      GRAFANA_UID: ${GRAFANA_UID:-472}
+      GRAFANA_GID: ${GRAFANA_GID:-472}
       # Shared secrets group - all containers have this as a secondary group
       SECRETS_GID: ${SECRETS_GID:-65532}
       SECRETS_MOUNT: /opt/core_data/secrets
@@ -59,15 +65,19 @@ services:
       - "-c"
       - |
         # Fix ownership for data directories
-        chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" "$${PGDATA_MOUNT}" "$${PGWAL_MOUNT}" "$${PGBACKREST_MOUNT}"
+        chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" \
+          "$${PGDATA_MOUNT}" "$${PGWAL_MOUNT}" "$${PGBACKREST_MOUNT}"
         chown -R "$${RABBITMQ_UID}:$${RABBITMQ_GID}" "$${RABBITMQ_DATA_MOUNT}"
-        # Ensure backups directory is writable by the postgres user (logical_backup runs as postgres)
+        chown -R "$${PROMETHEUS_UID}:$${PROMETHEUS_GID}" "$${PROMETHEUS_DATA_MOUNT}"
+        chown -R "$${GRAFANA_UID}:$${GRAFANA_GID}" "$${GRAFANA_DATA_MOUNT}"
+        # logical_backup runs as postgres and writes here.
         mkdir -p "$${BACKUPS_MOUNT}/logical"
         chown -R "$${POSTGRES_UID}:$${POSTGRES_GID}" "$${BACKUPS_MOUNT}"
         # Fix group ownership for secrets - keep original owner, set group to secrets
         # All service containers have the secrets group as a secondary group
         if [ -d "$${SECRETS_MOUNT}" ]; then
-          find "$${SECRETS_MOUNT}" -maxdepth 1 -type f -exec chgrp "$${SECRETS_GID}" {} +
+          find "$${SECRETS_MOUNT}" -maxdepth 1 -type f \
+            -exec chgrp "$${SECRETS_GID}" {} +
           find "$${SECRETS_MOUNT}" -maxdepth 1 -type f -exec chmod 640 {} +
           # Ensure secrets directory is traversable by all services (711 = rwx--x--x)
           chmod 711 "$${SECRETS_MOUNT}"
@@ -77,6 +87,8 @@ services:
       - ./data/postgres_wal:${POSTGRES_WAL_MOUNT_PATH:-/var/lib/postgresql/wal}
       - ./data/pgbackrest:${POSTGRES_BACKREST_MOUNT_PATH:-/var/lib/pgbackrest}
       - ./data/rabbitmq_data:${RABBITMQ_DATA_MOUNT_PATH:-/var/lib/rabbitmq}
+      - ./data/prometheus:/prometheus
+      - ./data/grafana:/grafana
       - ${BACKUPS_HOST_PATH:-./backups}:/backups
       - ./secrets:/opt/core_data/secrets
     networks:
@@ -99,7 +111,12 @@ services:
     environment:
       NETWORK_DIR: /opt/core_data/network_access
       CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
-      SERVICES: "${POSTGRES_PORT:-5433} ${PGBOUNCER_HOST_PORT:-6432} ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379} ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672} ${MEMCACHED_PORT:-11211}"
+      SERVICES: >-
+        ${POSTGRES_PORT:-5433} ${PGBOUNCER_HOST_PORT:-6432}
+        ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379}
+        ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}
+        ${RABBITMQ_PROMETHEUS_HOST_PORT:-15692} ${MEMCACHED_PORT:-11211}
+        ${PROMETHEUS_HOST_PORT:-9090} ${GRAFANA_HOST_PORT:-3000}
     entrypoint: ["/opt/core_data/scripts/network_guard.sh"]
     volumes:
       - ./network_access:/opt/core_data/network_access:ro
@@ -123,11 +140,11 @@ services:
         SECRETS_GID: ${SECRETS_GID:-65532}
         PG_VERSION: ${PG_VERSION:-18}
         AGE_VERSION: ${AGE_VERSION:-PG18/v1.7.0-rc0}
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-18.4-bookworm-core}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
     user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    # Add the shared secrets group for read access.
     group_add:
       - "${SECRETS_GID:-65532}"
     environment:
@@ -157,6 +174,21 @@ services:
       PG_MAX_WAL_SENDERS: ${PG_MAX_WAL_SENDERS}
       PG_CHECKPOINT_COMPLETION_TARGET: ${PG_CHECKPOINT_COMPLETION_TARGET}
       PG_LOG_MIN_DURATION_STATEMENT: ${PG_LOG_MIN_DURATION_STATEMENT}
+      PG_AUTO_EXPLAIN_LOG_MIN_DURATION: ${PG_AUTO_EXPLAIN_LOG_MIN_DURATION:-250}
+      PG_AUTO_EXPLAIN_LOG_ANALYZE: ${PG_AUTO_EXPLAIN_LOG_ANALYZE:-on}
+      PG_AUTO_EXPLAIN_LOG_BUFFERS: ${PG_AUTO_EXPLAIN_LOG_BUFFERS:-on}
+      PG_AUTO_EXPLAIN_LOG_NESTED_STATEMENTS: >-
+        ${PG_AUTO_EXPLAIN_LOG_NESTED_STATEMENTS:-on}
+      PG_AUTO_EXPLAIN_SAMPLE_RATE: ${PG_AUTO_EXPLAIN_SAMPLE_RATE:-0.1}
+      PG_PGAUDIT_LOG: ${PG_PGAUDIT_LOG:-write,ddl}
+      PG_PGAUDIT_LOG_CLIENT: ${PG_PGAUDIT_LOG_CLIENT:-on}
+      PG_PGAUDIT_LOG_PARAMETER: ${PG_PGAUDIT_LOG_PARAMETER:-off}
+      PGBACKREST_RETENTION_FULL: ${PGBACKREST_RETENTION_FULL:-7}
+      PGBACKREST_RETENTION_DIFF: ${PGBACKREST_RETENTION_DIFF:-7}
+      PGBACKREST_RETENTION_ARCHIVE: ${PGBACKREST_RETENTION_ARCHIVE:-7}
+      PGBACKREST_RETENTION_ARCHIVE_TYPE: ${PGBACKREST_RETENTION_ARCHIVE_TYPE:-diff}
+      PGBACKREST_PROCESS_MAX: ${PGBACKREST_PROCESS_MAX:-4}
+      PGBACKREST_ARCHIVE_CHECK: ${PGBACKREST_ARCHIVE_CHECK:-y}
       # Transaction pooling optimizations
       PG_PLAN_CACHE_MODE: ${PG_PLAN_CACHE_MODE:-auto}
       PG_JIT_ENABLED: ${PG_JIT_ENABLED:-on}
@@ -185,7 +217,10 @@ services:
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
       - ./scripts:/opt/core_data/scripts:ro
       - ./network_access:/opt/core_data/network_access:ro
-      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
+      - type: bind
+        source: ./secrets/postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
+        read_only: true
       - ./secrets/pgbouncer_auth_password:/run/secrets/pgbouncer_auth_password:ro
       - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
       - ./secrets/pgsodium.key:/opt/core_data/secrets/pgsodium.key:ro
@@ -211,9 +246,9 @@ services:
     logging: *logging_defaults
     # Override port at runtime to ensure PostgreSQL listens on 5433
     # regardless of what's in postgresql.conf (which only gets set during initdb).
-    # Note: The official postgres docker-entrypoint.sh already invokes `exec postgres "$@"`,
+    # docker-entrypoint.sh already invokes `exec postgres "$@"`,
     # so we pass only the arguments, not the command itself.
-    # The container port is FIXED at 5433; the host port can vary (POSTGRES_PORT) for CI tests.
+    # Container port is fixed at 5433; host port varies for CI.
     command: ["-c", "port=5433"]
     ports:
       - "${POSTGRES_PORT:-5433}:5433"
@@ -224,11 +259,11 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_LOGICAL_BACKUP:-seccomp:./seccomp/logical_backup.json}"
       - "${CORE_DATA_APPARMOR_LOGICAL_BACKUP:-apparmor:unconfined}"
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-18.4-bookworm-core}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
     user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    # Add the shared secrets group for read access.
     group_add:
       - "${SECRETS_GID:-65532}"
     depends_on:
@@ -237,26 +272,36 @@ services:
     command: ["/opt/core_data/scripts/logical_backup_runner.sh"]
     environment:
       POSTGRES_HOST: postgres
-      # Container port is always 5433; must be explicit to avoid inheriting random CI port from .env
+      # Keep container port stable when CI randomizes host ports.
       POSTGRES_PORT: "5433"
       POSTGRES_SUPERUSER: ${POSTGRES_SUPERUSER}
       POSTGRES_SUPERUSER_PASSWORD_FILE: /run/secrets/postgres_superuser_password
       LOGICAL_BACKUP_INTERVAL_SECONDS: ${LOGICAL_BACKUP_INTERVAL_SECONDS}
       LOGICAL_BACKUP_RETENTION_DAYS: ${LOGICAL_BACKUP_RETENTION_DAYS}
       LOGICAL_BACKUP_OUTPUT: ${LOGICAL_BACKUP_OUTPUT}
+      LOGICAL_BACKUP_METRICS_PORT: ${LOGICAL_BACKUP_METRICS_PORT:-9188}
       TZ: ${TZ}
     volumes:
       - ${BACKUPS_HOST_PATH:-./backups}:/backups
-      - ./scripts/logical_backup_runner.sh:/opt/core_data/scripts/logical_backup_runner.sh:ro
-      - ./secrets/postgres_superuser_password:/run/secrets/postgres_superuser_password:ro
+      - type: bind
+        source: ./scripts/logical_backup_runner.sh
+        target: /opt/core_data/scripts/logical_backup_runner.sh
+        read_only: true
+      - type: bind
+        source: ./secrets/postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
+        read_only: true
     networks:
       - core_data
     healthcheck:
       test:
-        [
-          "CMD-SHELL",
-          "PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null) pg_isready -h $${POSTGRES_HOST:-postgres} -p $${POSTGRES_PORT:-5433} -U $${POSTGRES_SUPERUSER:-postgres} -d $${POSTGRES_DB:-postgres}",
-        ]
+        - CMD-SHELL
+        - >-
+          PGPASSWORD=$(cat /run/secrets/postgres_superuser_password 2>/dev/null)
+          pg_isready -h $${POSTGRES_HOST:-postgres}
+          -p $${POSTGRES_PORT:-5433}
+          -U $${POSTGRES_SUPERUSER:-postgres}
+          -d $${POSTGRES_DB:-postgres}
       interval: 30s
       timeout: 5s
       retries: 5
@@ -277,10 +322,8 @@ services:
     image: ${VALKEY_IMAGE:-ghcr.io/paudley/core_data/valkey:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey
     restart: unless-stopped
-    profiles:
-      - valkey
     # Run as the valkey user (UID 999) from the valkey image
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    # Add the shared secrets group for read access.
     user: "${VALKEY_UID:-999}:${VALKEY_GID:-1000}"
     group_add:
       - "${SECRETS_GID:-65532}"
@@ -300,7 +343,11 @@ services:
     ports:
       - "${VALKEY_HOST_PORT}:${VALKEY_PORT}"
     healthcheck:
-      test: ["CMD-SHELL", "REDISCLI_AUTH=$(cat /run/secrets/valkey_password) valkey-cli -h 127.0.0.1 -p ${VALKEY_PORT} ping | grep -q PONG"]
+      test:
+        - CMD-SHELL
+        - >-
+          REDISCLI_AUTH=$(cat /run/secrets/valkey_password)
+          valkey-cli -h 127.0.0.1 -p ${VALKEY_PORT} ping | grep -q PONG
       interval: 10s
       timeout: 5s
       retries: 5
@@ -320,9 +367,7 @@ services:
     image: ${RABBITMQ_IMAGE:-ghcr.io/paudley/core_data/rabbitmq:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
     restart: unless-stopped
-    profiles:
-      - rabbitmq
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    # Add the shared secrets group for read access.
     user: "${RABBITMQ_UID:-100}:${RABBITMQ_GID:-101}"
     group_add:
       - "${SECRETS_GID:-65532}"
@@ -349,6 +394,7 @@ services:
     ports:
       - "${RABBITMQ_HOST_PORT}:${RABBITMQ_PORT}"
       - "${RABBITMQ_MANAGEMENT_HOST_PORT}:${RABBITMQ_MANAGEMENT_PORT}"
+      - "${RABBITMQ_PROMETHEUS_HOST_PORT:-15692}:${RABBITMQ_PROMETHEUS_PORT:-15692}"
       - "${RABBITMQ_STREAM_HOST_PORT:-5552}:${RABBITMQ_STREAM_PORT:-5552}"
     healthcheck:
       test: ["CMD-SHELL", "/opt/core_data/bin/rabbitmq-healthcheck.sh"]
@@ -372,10 +418,8 @@ services:
     image: ${PGBOUNCER_IMAGE:-ghcr.io/paudley/core_data/pgbouncer:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer
     restart: unless-stopped
-    profiles:
-      - pgbouncer
     # Run as the postgres user (UID 100) from the pgbouncer image
-    # group_add adds the secrets group as a supplementary group for reading shared secrets
+    # Add the shared secrets group for read access.
     user: "${PGBOUNCER_UID:-100}:${PGBOUNCER_GID:-102}"
     group_add:
       - "${SECRETS_GID:-65532}"
@@ -403,14 +447,20 @@ services:
       PGBOUNCER_AUTH_PASSWORD_FILE: /run/secrets/pgbouncer_auth_password
       # Client TLS configuration (SSL for connections TO PgBouncer)
       PGBOUNCER_CLIENT_TLS_SSLMODE: ${PGBOUNCER_CLIENT_TLS_SSLMODE:-require}
-      PGBOUNCER_CLIENT_TLS_CERT_FILE: ${PGBOUNCER_CLIENT_TLS_CERT_FILE:-/tmp/pgbouncer/tls/server.crt}
-      PGBOUNCER_CLIENT_TLS_KEY_FILE: ${PGBOUNCER_CLIENT_TLS_KEY_FILE:-/tmp/pgbouncer/tls/server.key}
-      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT: ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT:-/CN=core_data_pgbouncer}
-      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS: ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS:-730}
+      PGBOUNCER_CLIENT_TLS_CERT_FILE: >-
+        ${PGBOUNCER_CLIENT_TLS_CERT_FILE:-/tmp/pgbouncer/tls/server.crt}
+      PGBOUNCER_CLIENT_TLS_KEY_FILE: >-
+        ${PGBOUNCER_CLIENT_TLS_KEY_FILE:-/tmp/pgbouncer/tls/server.key}
+      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT: >-
+        ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_SUBJECT:-/CN=core_data_pgbouncer}
+      PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS: >-
+        ${PGBOUNCER_CLIENT_TLS_SELF_SIGNED_DAYS:-730}
       # Transaction mode compatibility (PgBouncer 1.21+)
       PGBOUNCER_MAX_PREPARED_STATEMENTS: ${PGBOUNCER_MAX_PREPARED_STATEMENTS:-1024}
-      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: ${PGBOUNCER_IGNORE_STARTUP_PARAMETERS:-extra_float_digits,options}
-      PGBOUNCER_TRACK_EXTRA_PARAMETERS: ${PGBOUNCER_TRACK_EXTRA_PARAMETERS:-IntervalStyle}
+      PGBOUNCER_IGNORE_STARTUP_PARAMETERS: >-
+        ${PGBOUNCER_IGNORE_STARTUP_PARAMETERS:-extra_float_digits,options}
+      PGBOUNCER_TRACK_EXTRA_PARAMETERS: >-
+        ${PGBOUNCER_TRACK_EXTRA_PARAMETERS:-IntervalStyle}
       PGBOUNCER_APPLICATION_NAME_ADD_HOST: ${PGBOUNCER_APPLICATION_NAME_ADD_HOST:-1}
       # Connection lifecycle
       PGBOUNCER_SERVER_LIFETIME: ${PGBOUNCER_SERVER_LIFETIME:-1800}
@@ -436,7 +486,14 @@ services:
       - "${PGBOUNCER_HOST_PORT:-6432}:${PGBOUNCER_PORT:-6432}"
       - "${PGBOUNCER_EXTRA_HOST_PORT:-5432}:${PGBOUNCER_PORT:-6432}"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep pgbouncer >/dev/null"]
+      test:
+        - CMD-SHELL
+        - >-
+          PGPASSWORD=$$(cat /run/secrets/pgbouncer_stats_password 2>/dev/null)
+          psql --host 127.0.0.1 --port $${PGBOUNCER_PORT:-6432}
+          --username $${PGBOUNCER_STATS_USER:-pgbouncer_stats}
+          --dbname pgbouncer --tuples-only --no-align
+          --command 'SHOW VERSION;' >/dev/null
       interval: 10s
       timeout: 5s
       retries: 5
@@ -454,8 +511,6 @@ services:
     image: ${MEMCACHED_IMAGE:-ghcr.io/paudley/core_data/memcached:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached
     restart: unless-stopped
-    profiles:
-      - memcached
     command:
       - memcached
       - -m
@@ -471,10 +526,242 @@ services:
     ports:
       - "${MEMCACHED_PORT}:11211"
     healthcheck:
-      test: ["CMD-SHELL", "printf 'version\\r\\n' | nc -w 2 127.0.0.1 11211 | grep -qi '^VERSION'"]
+      test:
+        - CMD-SHELL
+        - >-
+          printf 'version\\r\\n' | nc -w 2 127.0.0.1 11211
+          | grep -qi '^VERSION'
       interval: 10s
       timeout: 5s
       retries: 5
+    logging: *logging_defaults
+
+  postgres_exporter:
+    <<: *security_defaults
+    image: ${POSTGRES_EXPORTER_IMAGE:-prometheuscommunity/postgres-exporter:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres_exporter
+    restart: unless-stopped
+    user: "${POSTGRES_EXPORTER_UID:-65534}:${POSTGRES_EXPORTER_GID:-65534}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_URI: "postgres:5433/${POSTGRES_DB:-postgres}?sslmode=require"
+      DATA_SOURCE_USER: ${POSTGRES_SUPERUSER:-postgres}
+      DATA_SOURCE_PASS_FILE: /run/secrets/postgres_superuser_password
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres_exporter/queries.yml
+    volumes:
+      - ./monitoring/postgres_exporter/queries.yml:/etc/postgres_exporter/queries.yml:ro
+      - type: bind
+        source: ./secrets/postgres_superuser_password
+        target: /run/secrets/postgres_superuser_password
+        read_only: true
+    networks:
+      - core_data
+    ports:
+      - "${POSTGRES_EXPORTER_HOST_PORT:-9187}:9187"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9187/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  pgbouncer_exporter:
+    <<: *security_defaults
+    image: ${PGBOUNCER_EXPORTER_IMAGE:-prometheuscommunity/pgbouncer-exporter:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_pgbouncer_exporter
+    restart: unless-stopped
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+    environment:
+      PGBOUNCER_STATS_USER: ${PGBOUNCER_STATS_USER:-pgbouncer_stats}
+      PGBOUNCER_PORT: ${PGBOUNCER_PORT:-6432}
+      PGBOUNCER_STATS_PASSWORD_FILE: /run/secrets/pgbouncer_stats_password
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        password="$$(tr -d '\r\n' </run/secrets/pgbouncer_stats_password)"
+        dsn="postgres://$${PGBOUNCER_STATS_USER}:$${password}"
+        dsn="$${dsn}@pgbouncer:$${PGBOUNCER_PORT}/pgbouncer?sslmode=require"
+        exec /bin/pgbouncer_exporter --pgBouncer.connectionString="$${dsn}"
+    volumes:
+      - ./secrets/pgbouncer_stats_password:/run/secrets/pgbouncer_stats_password:ro
+    networks:
+      - core_data
+    ports:
+      - "${PGBOUNCER_EXPORTER_HOST_PORT:-9127}:9127"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9127/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  valkey_exporter:
+    <<: *security_defaults
+    image: ${VALKEY_EXPORTER_IMAGE:-oliver006/redis_exporter:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_valkey_exporter
+    restart: unless-stopped
+    depends_on:
+      valkey:
+        condition: service_healthy
+    command:
+      - "--redis.addr=redis://valkey:${VALKEY_PORT:-6379}"
+      - "--redis.password-file=/run/secrets/valkey_password"
+    volumes:
+      - ./secrets/valkey_password:/run/secrets/valkey_password:ro
+    networks:
+      - core_data
+    ports:
+      - "${VALKEY_EXPORTER_HOST_PORT:-9121}:9121"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9121/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  memcached_exporter:
+    <<: *security_defaults
+    image: ${MEMCACHED_EXPORTER_IMAGE:-prom/memcached-exporter:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_memcached_exporter
+    restart: unless-stopped
+    depends_on:
+      memcached:
+        condition: service_healthy
+    command:
+      - "--memcached.address=memcached:11211"
+    networks:
+      - core_data
+    ports:
+      - "${MEMCACHED_EXPORTER_HOST_PORT:-9150}:9150"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9150/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  node_exporter:
+    <<: *security_defaults
+    image: ${NODE_EXPORTER_IMAGE:-prom/node-exporter:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_node_exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    networks:
+      - core_data
+    ports:
+      - "${NODE_EXPORTER_HOST_PORT:-9100}:9100"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9100/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  cadvisor:
+    <<: *security_defaults
+    image: ${CADVISOR_IMAGE:-gcr.io/cadvisor/cadvisor:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_cadvisor
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - core_data
+    ports:
+      - "${CADVISOR_HOST_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:8080/metrics"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  prometheus:
+    <<: *security_defaults
+    image: ${PROMETHEUS_IMAGE:-prom/prometheus:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_prometheus
+    restart: unless-stopped
+    user: "${PROMETHEUS_UID:-65534}:${PROMETHEUS_GID:-65534}"
+    depends_on:
+      postgres_exporter:
+        condition: service_healthy
+      pgbouncer_exporter:
+        condition: service_healthy
+      valkey_exporter:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      memcached_exporter:
+        condition: service_healthy
+      node_exporter:
+        condition: service_healthy
+      cadvisor:
+        condition: service_healthy
+      logical_backup:
+        condition: service_healthy
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./data/prometheus:/prometheus
+    networks:
+      - core_data
+    ports:
+      - "${PROMETHEUS_HOST_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    logging: *logging_defaults
+
+  grafana:
+    <<: *security_defaults
+    image: ${GRAFANA_IMAGE:-grafana/grafana-oss:latest}
+    container_name: ${COMPOSE_PROJECT_NAME:-core_data}_grafana
+    restart: unless-stopped
+    user: "${GRAFANA_UID:-472}:${GRAFANA_GID:-472}"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - core_data
+    ports:
+      - "${GRAFANA_HOST_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --spider http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
     logging: *logging_defaults
 
 networks:
