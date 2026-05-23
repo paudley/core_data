@@ -1,0 +1,267 @@
+{
+  "hooks": {
+    "AfterAgent": [
+      {
+        "matcher": "stop",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "write_file",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "replace",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "read_file",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "list_directory",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "search_file_content",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "glob",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "web_fetch",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "google_web_search",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "matcher": "prompt",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "write_file",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "replace",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "MultiEdit",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "read_file",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "list_directory",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "search_file_content",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "glob",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "web_fetch",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      },
+      {
+        "matcher": "google_web_search",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "session",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "name": "coding-ethos",
+            "type": "command",
+            "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run agent-hook"
+          }
+        ]
+      }
+    ]
+  },
+  "hooksConfig": {
+    "enabled": true
+  },
+  "mcpServers": {
+    "coding-ethos": {
+      "args": [
+        "mcp"
+      ],
+      "command": "/home/paudley/Active.running/core_data/coding-ethos/bin/coding-ethos-run"
+    }
+  }
+}

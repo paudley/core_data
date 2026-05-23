@@ -111,9 +111,22 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_POSTGRES:-seccomp:./seccomp/postgres.json}"
       - "${CORE_DATA_APPARMOR_POSTGRES:-apparmor:unconfined}"
+    build:
+      context: .
+      dockerfile: postgres/Dockerfile
+      args:
+        CORE_UID: ${POSTGRES_UID:-1000}
+        CORE_GID: ${POSTGRES_GID:-1000}
+        CORE_USERNAME: ${POSTGRES_RUNTIME_USER:-postgres}
+        CORE_GECOS: ${POSTGRES_RUNTIME_GECOS:-Core Data PostgreSQL Administrator}
+        CORE_HOME: ${POSTGRES_RUNTIME_HOME:-/home/postgres}
+        SECRETS_GID: ${SECRETS_GID:-65532}
+        PG_VERSION: ${PG_VERSION:-17}
+        AGE_VERSION: ${AGE_VERSION:-PG17/v1.7.0-rc0}
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
+    user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
     # group_add adds the secrets group as a supplementary group for reading shared secrets
     group_add:
       - "${SECRETS_GID:-65532}"
@@ -214,6 +227,7 @@ services:
     image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-17.2-bookworm-core}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
+    user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
     # group_add adds the secrets group as a supplementary group for reading shared secrets
     group_add:
       - "${SECRETS_GID:-65532}"

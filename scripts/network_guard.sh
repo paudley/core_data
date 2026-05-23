@@ -11,6 +11,7 @@ set -euo pipefail
 NETWORK_DIR=${NETWORK_DIR:-/opt/core_data/network_access}
 ALLOW_FILE=${ALLOW_FILE:-${NETWORK_DIR}/allow.list}
 CHECK_INTERVAL=${CHECK_INTERVAL:-30}
+NETWORK_GUARD_REQUIRED=${NETWORK_GUARD_REQUIRED:-false}
 SERVICES=${SERVICES:-"5432 5433 5672 6379 6432 8080 11211 15672"}
 CHAIN_V4=${CHAIN_V4:-CORE_DATA_ALLOW_V4}
 CHAIN_V6=${CHAIN_V6:-CORE_DATA_ALLOW_V6}
@@ -23,12 +24,24 @@ log() {
 # Verify nft is available and the kernel supports it
 verify_nft() {
 	if ! command -v nft >/dev/null 2>&1; then
-		log "ERROR: nft command not found"
-		exit 1
+		if [[ "${NETWORK_GUARD_REQUIRED}" == "true" ]]; then
+			log "ERROR: nft command not found"
+			exit 1
+		fi
+		log "WARNING: nft command not found; network guard is disabled. Set NETWORK_GUARD_REQUIRED=true to fail closed."
+		while true; do
+			sleep "${CHECK_INTERVAL}"
+		done
 	fi
 	if ! nft list tables >/dev/null 2>&1; then
-		log "ERROR: nftables not available (check kernel support and NET_ADMIN capability)"
-		exit 1
+		if [[ "${NETWORK_GUARD_REQUIRED}" == "true" ]]; then
+			log "ERROR: nftables not available (check kernel support and NET_ADMIN capability)"
+			exit 1
+		fi
+		log "WARNING: nftables not available; network guard is disabled. Set NETWORK_GUARD_REQUIRED=true to fail closed."
+		while true; do
+			sleep "${CHECK_INTERVAL}"
+		done
 	fi
 }
 
