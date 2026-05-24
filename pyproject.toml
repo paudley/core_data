@@ -22,7 +22,7 @@ default-groups = ["dev"]
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4.2",
+    "pytest>=9.0.3",
     "graphql-core>=3.2.3",
 ]
 
