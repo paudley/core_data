@@ -84,10 +84,9 @@ cmd_pgbadger_report() {
   compose_exec bash -lc "mkdir -p '$(dirname "$output")'"
   local cmd=(pgbadger --quiet --format csv --jobs "$jobs" --outfile "$output")
   [[ -n $since ]] && cmd+=(--begin "$since")
-  cmd+=(/var/lib/postgresql/data/log/postgresql-*.csv)
   local command_string
   printf -v command_string '%q ' "${cmd[@]}"
-  compose_exec bash -lc "${command_string}"
+  compose_exec bash -lc "${command_string} /var/lib/postgresql/data/log/postgresql-*.csv"
   echo "pgBadger report written to ${output}" >&2
 }
 
