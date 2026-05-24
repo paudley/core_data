@@ -334,7 +334,7 @@ from pathlib import Path
 
 rows = []
 for line in Path(sys.argv[1]).read_text(encoding="utf-8").splitlines():
-    name, status, duration, message = (line.split("\t", 3) + [""])[:4]
+    name, status, duration, message = (line.split("\t", 3) + ["", "", "", ""])[:4]
     rows.append({
         "name": name,
         "status": status,

@@ -125,7 +125,11 @@ class MetricsHandler(http.server.BaseHTTPRequestHandler):
         return
 
 
-with socketserver.TCPServer(("", port), MetricsHandler) as httpd:
+class ReusableTCPServer(socketserver.TCPServer):
+    allow_reuse_address = True
+
+
+with ReusableTCPServer(("", port), MetricsHandler) as httpd:
     httpd.serve_forever()
 PY
 METRICS_PID=$!
@@ -224,7 +228,11 @@ files = []
 for path in sorted(target.iterdir()):
     if path.name == "manifest.json" or not path.is_file():
         continue
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(65536), b""):
+            hasher.update(chunk)
+    digest = hasher.hexdigest()
     files.append({"name": path.name, "size_bytes": path.stat().st_size, "sha256": digest})
 manifest = {
     "timestamp": sys.argv[2],

@@ -27,7 +27,35 @@ normalize_pgbadger_begin() {
     printf '%s\n' "${value}"
     return 0
   fi
-  date -u -d "${value}" '+%Y-%m-%d %H:%M:%S'
+  python3 - "${value}" << 'PY'
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
+import sys
+
+value = sys.argv[1].strip()
+lower_value = value.lower()
+now = datetime.now(timezone.utc)
+
+if lower_value == "now":
+    parsed = now
+elif lower_value == "today":
+    parsed = now.replace(hour=0, minute=0, second=0, microsecond=0)
+elif lower_value == "yesterday":
+    parsed = now - timedelta(days=1)
+else:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        try:
+            parsed = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            print(value)
+            raise SystemExit(0)
+
+if parsed.tzinfo is None:
+    parsed = parsed.replace(tzinfo=timezone.utc)
+print(parsed.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"))
+PY
 }
 
 # cmd_pgbadger_report generates a pgBadger HTML report from recent CSV logs.

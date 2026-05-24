@@ -32,7 +32,7 @@ services:
       - ./scripts/network_probe.sh:/opt/core_data/scripts/network_probe.sh:ro
 
   volume_prep:
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_volume_prep
     restart: "no"
     # Runs as root briefly to fix ownership; uses Docker's default capabilities.
@@ -140,7 +140,7 @@ services:
         SECRETS_GID: ${SECRETS_GID:-65532}
         PG_VERSION: ${PG_VERSION:-18}
         AGE_VERSION: ${AGE_VERSION:-PG18/v1.7.0-rc0}
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_postgres
     restart: unless-stopped
     user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"
@@ -259,7 +259,7 @@ services:
       - "no-new-privileges:true"
       - "${CORE_DATA_SECCOMP_LOGICAL_BACKUP:-seccomp:./seccomp/logical_backup.json}"
       - "${CORE_DATA_APPARMOR_LOGICAL_BACKUP:-apparmor:unconfined}"
-    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG}
+    image: ${POSTGRES_IMAGE_NAME:-core_data/postgres}:${POSTGRES_IMAGE_TAG:-latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_logical_backup
     restart: unless-stopped
     user: "${POSTGRES_UID:-1000}:${POSTGRES_GID:-1000}"

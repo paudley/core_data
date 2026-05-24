@@ -35,7 +35,7 @@ ci_service_images() {
   entries+=("rabbitmq=${RABBITMQ_IMAGE:-${rabbitmq_default}}")
   entries+=("pgbouncer=${PGBOUNCER_IMAGE:-${pgbouncer_default}}")
   entries+=("memcached=${MEMCACHED_IMAGE:-${memcached_default}}")
-  entries+=("postgres_exporter=${POSTGRES_EXPORTER_IMAGE:-quay.io/prometheuscommunity/postgres-exporter:latest}")
+  entries+=("postgres_exporter=${POSTGRES_EXPORTER_IMAGE:-prometheuscommunity/postgres-exporter:latest}")
   entries+=("pgbouncer_exporter=${PGBOUNCER_EXPORTER_IMAGE:-prometheuscommunity/pgbouncer-exporter:latest}")
   entries+=("valkey_exporter=${VALKEY_EXPORTER_IMAGE:-oliver006/redis_exporter:latest}")
   entries+=("memcached_exporter=${MEMCACHED_EXPORTER_IMAGE:-prom/memcached-exporter:latest}")
