@@ -3,6 +3,11 @@
 # SPDX-License-Identifier: MIT
 
 # shellcheck shell=bash
+set -euo pipefail
+
+PERMISSIONS_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=scripts/lib/common.sh
+source "${PERMISSIONS_LIB_DIR}/common.sh"
 
 # Comprehensive PostgreSQL permission management for database owners.
 # Covers all extension schemas, custom types, sequences, functions, and search_path.
@@ -11,52 +16,52 @@
 # Tier 1: Full access (USAGE + CREATE + Full CRUD + Default Privileges)
 # These schemas need CREATE for users to create objects (AGE graphs, partitions, etc.)
 TIER1_FULL_ACCESS_SCHEMAS=(
-	"public"             # Default user schema, extension types
-	"ag_catalog"         # Apache AGE - stores graphs as tables here
-	"partman"            # pg_partman - partition config tables
-	"topology"           # PostGIS - CreateTopology creates schemas/tables
+  "public"     # Default user schema, extension types
+  "ag_catalog" # Apache AGE - stores graphs as tables here
+  "partman"    # pg_partman - partition config tables
+  "topology"   # PostGIS - CreateTopology creates schemas/tables
 )
 
 # Tier 2: Read-Write (USAGE + CRUD, no CREATE)
 # Users can manipulate data but not create new objects
 TIER2_READWRITE_SCHEMAS=(
-	"cron"               # pg_cron - job scheduling writes to cron tables
+  "cron" # pg_cron - job scheduling writes to cron tables
 )
 
 # Tier 3: Read-Only (USAGE + SELECT only)
 # Reference data schemas - users query but don't modify
 TIER3_READONLY_SCHEMAS=(
-	"tiger"              # PostGIS tiger geocoder reference data
-	"tiger_data"         # PostGIS tiger geocoder reference data
-	"address_standardizer"
-	"address_standardizer_data_us"
-	"squeeze"            # pg_squeeze - system-managed bloat tracking
+  "tiger"      # PostGIS tiger geocoder reference data
+  "tiger_data" # PostGIS tiger geocoder reference data
+  "address_standardizer"
+  "address_standardizer_data_us"
+  "squeeze" # pg_squeeze - system-managed bloat tracking
 )
 
 # Tier 4: Function-Only (USAGE + EXECUTE)
 # Admin schemas - users only call functions, no table access
 TIER4_FUNCTION_ONLY_SCHEMAS=(
-	"core_data_admin"    # Project admin schema
+  "core_data_admin" # Project admin schema
 )
 
 # Combined list for backward compatibility and iteration
 ALL_EXTENSION_SCHEMAS=(
-	"${TIER1_FULL_ACCESS_SCHEMAS[@]}"
-	"${TIER2_READWRITE_SCHEMAS[@]}"
-	"${TIER3_READONLY_SCHEMAS[@]}"
-	"${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"
+  "${TIER1_FULL_ACCESS_SCHEMAS[@]}"
+  "${TIER2_READWRITE_SCHEMAS[@]}"
+  "${TIER3_READONLY_SCHEMAS[@]}"
+  "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"
 )
 
 # Custom types requiring USAGE grants
 CUSTOM_TYPES=(
-	"ag_catalog.agtype"
-	"ag_catalog.graphid"
-	"public.geometry"
-	"public.geography"
-	"public.box2d"
-	"public.box3d"
-	"public.vector"
-	"topology.topogeometry"
+  "ag_catalog.agtype"
+  "ag_catalog.graphid"
+  "public.geometry"
+  "public.geography"
+  "public.box2d"
+  "public.box3d"
+  "public.vector"
+  "topology.topogeometry"
 )
 
 # Default search_path for database owners
@@ -65,7 +70,7 @@ DEFAULT_SEARCH_PATH="public, ag_catalog, topology, tiger"
 # _psql_quote_literal escapes a string for use as a literal in a PostgreSQL query.
 # This prevents SQL injection by properly escaping single quotes.
 _psql_quote_literal() {
-	printf "'%s'" "${1//\'/\'\'}"
+  printf "'%s'" "${1//\'/\'\'}"
 }
 
 # _parse_db_argument parses --db arguments from command line for permission commands.
@@ -74,73 +79,73 @@ _psql_quote_literal() {
 # Returns: Sets PARSED_DB and PARSED_SHIFT variables (exported for caller use)
 # shellcheck disable=SC2034  # PARSED_DB and PARSED_SHIFT are used by callers
 _parse_db_argument() {
-	PARSED_DB=""
-	PARSED_SHIFT=0
-	while [[ $# -gt 0 ]]; do
-		case "$1" in
-		--db)
-			PARSED_DB=$2
-			shift 2
-			PARSED_SHIFT=$((PARSED_SHIFT + 2))
-			;;
-		--db=*)
-			PARSED_DB=${1#*=}
-			shift
-			PARSED_SHIFT=$((PARSED_SHIFT + 1))
-			;;
-		--)
-			shift
-			PARSED_SHIFT=$((PARSED_SHIFT + 1))
-			break
-			;;
-		*)
-			# Unknown option - let caller handle
-			break
-			;;
-		esac
-	done
+  PARSED_DB=""
+  PARSED_SHIFT=0
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --db)
+        PARSED_DB=$2
+        shift 2
+        PARSED_SHIFT=$((PARSED_SHIFT + 2))
+        ;;
+      --db=*)
+        PARSED_DB=${1#*=}
+        shift
+        PARSED_SHIFT=$((PARSED_SHIFT + 1))
+        ;;
+      --)
+        shift
+        PARSED_SHIFT=$((PARSED_SHIFT + 1))
+        break
+        ;;
+      *)
+        # Unknown option - let caller handle
+        break
+        ;;
+    esac
+  done
 }
 
 # _permissions_log outputs a timestamped log message to stderr.
 _permissions_log() {
-	echo "[core_data:permissions] $*" >&2
+  echo "[core_data:permissions] $*" >&2
 }
 
 # _run_psql executes SQL against a database using the superuser credentials.
 # Usage: _run_psql <db> [sql] or _run_psql <db> <<< "sql" or _run_psql <db> <<HEREDOC
 _run_psql() {
-	local db=$1
-	local sql=${2:-}
-	if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-		# Running inside container (init scripts)
-		if [[ -n "${sql}" ]]; then
-			psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}" <<< "${sql}"
-		else
-			psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}"
-		fi
-	else
-		# Running via compose_exec (manage.sh)
-		if [[ -n "${sql}" ]]; then
-			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-				psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<< "${sql}"
-		else
-			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-				psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}"
-		fi
-	fi
+  local db=$1
+  local sql=${2:-}
+  if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
+    # Running inside container (init scripts)
+    if [[ -n "${sql}" ]]; then
+      psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}" <<< "${sql}"
+    else
+      psql --set ON_ERROR_STOP=0 --username "${POSTGRES_USER:-postgres}" --dbname "${db}"
+    fi
+  else
+    # Running via compose_exec (manage.sh)
+    if [[ -n "${sql}" ]]; then
+      compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+        psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" <<< "${sql}"
+    else
+      compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+        psql --set ON_ERROR_STOP=0 --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}"
+    fi
+  fi
 }
 
 # _run_psql_query executes a query and returns the result.
 # Usage: _run_psql_query <db> <sql>
 _run_psql_query() {
-	local db=$1
-	local sql=$2
-	if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-		psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${db}" --command "${sql}" 2>/dev/null
-	else
-		compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "${sql}" 2>/dev/null
-	fi
+  local db=$1
+  local sql=$2
+  if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
+    psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${db}" --command "${sql}" 2> /dev/null
+  else
+    compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+      psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "${sql}" 2> /dev/null
+  fi
 }
 
 # grant_schema_permissions grants tiered permissions on a schema to a role.
@@ -150,13 +155,13 @@ _run_psql_query() {
 # Tier 4: USAGE + EXECUTE only (function access, no table access)
 # Usage: grant_schema_permissions <db> <schema> <role> [tier]
 grant_schema_permissions() {
-	local db=$1
-	local schema=$2
-	local role=$3
-	local tier=${4:-1}
-	local grantor=${POSTGRES_SUPERUSER:-postgres}
+  local db=$1
+  local schema=$2
+  local role=$3
+  local tier=${4:-1}
+  local grantor=${POSTGRES_SUPERUSER:-postgres}
 
-	_run_psql "${db}" <<SQL
+  _run_psql "${db}" << SQL
 DO \$perm\$
 DECLARE
   pg_version integer;
@@ -242,14 +247,14 @@ SQL
 # grant_type_permissions grants USAGE on custom types to a role.
 # Usage: grant_type_permissions <db> <role>
 grant_type_permissions() {
-	local db=$1
-	local role=$2
+  local db=$1
+  local role=$2
 
-	for type_fqn in "${CUSTOM_TYPES[@]}"; do
-		local schema=${type_fqn%%.*}
-		local type_name=${type_fqn##*.}
+  for type_fqn in "${CUSTOM_TYPES[@]}"; do
+    local schema=${type_fqn%%.*}
+    local type_name=${type_fqn##*.}
 
-		_run_psql "${db}" <<SQL
+    _run_psql "${db}" << SQL
 DO \$type_perm\$
 BEGIN
   IF EXISTS (
@@ -263,18 +268,18 @@ BEGIN
 END;
 \$type_perm\$;
 SQL
-	done
+  done
 }
 
 # grant_large_object_permissions grants SELECT/UPDATE on large objects to a role.
 # Also sets default privileges for future large objects created by the grantor.
 # Usage: grant_large_object_permissions <db> <role>
 grant_large_object_permissions() {
-	local db=$1
-	local role=$2
-	local grantor=${POSTGRES_SUPERUSER:-postgres}
+  local db=$1
+  local role=$2
+  local grantor=${POSTGRES_SUPERUSER:-postgres}
 
-	_run_psql "${db}" <<SQL
+  _run_psql "${db}" << SQL
 DO \$lo\$
 DECLARE
   loid oid;
@@ -301,14 +306,14 @@ SQL
 # Uses DEFAULT_SEARCH_PATH to ensure consistent, safe configuration.
 # Usage: set_role_search_path <db> <role>
 set_role_search_path() {
-	local db=$1
-	local role=$2
-	local search_path=${DEFAULT_SEARCH_PATH}
+  local db=$1
+  local role=$2
+  local search_path=${DEFAULT_SEARCH_PATH}
 
-	_run_psql "${db}" <<SQL
+  _run_psql "${db}" << SQL
 ALTER ROLE "${role}" IN DATABASE "${db}" SET search_path TO ${search_path};
 SQL
-	_permissions_log "Set search_path for '${role}' in '${db}' to: ${search_path}"
+  _permissions_log "Set search_path for '${role}' in '${db}' to: ${search_path}"
 }
 
 # apply_complete_permissions applies comprehensive tiered permissions for a database owner.
@@ -316,79 +321,79 @@ SQL
 # Grants: Database privileges, tiered schema permissions, types, large objects, search_path.
 # Usage: apply_complete_permissions <db> <owner>
 apply_complete_permissions() {
-	local db=$1
-	local owner=$2
+  local db=$1
+  local owner=$2
 
-	_permissions_log "Applying complete permissions for '${owner}' in database '${db}'."
+  _permissions_log "Applying complete permissions for '${owner}' in database '${db}'."
 
-	# 1. Database-level privileges (includes TEMPORARY)
-	_run_psql "${db}" <<SQL
+  # 1. Database-level privileges (includes TEMPORARY)
+  _run_psql "${db}" << SQL
 GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${owner}";
 SQL
 
-	# 2. Tier 1: Full access schemas (USAGE + CREATE + Full CRUD + Defaults)
-	for schema in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
-		grant_schema_permissions "${db}" "${schema}" "${owner}" 1
-	done
+  # 2. Tier 1: Full access schemas (USAGE + CREATE + Full CRUD + Defaults)
+  for schema in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
+    grant_schema_permissions "${db}" "${schema}" "${owner}" 1
+  done
 
-	# 3. Tier 2: Read-write schemas (USAGE + CRUD, no CREATE)
-	for schema in "${TIER2_READWRITE_SCHEMAS[@]}"; do
-		grant_schema_permissions "${db}" "${schema}" "${owner}" 2
-	done
+  # 3. Tier 2: Read-write schemas (USAGE + CRUD, no CREATE)
+  for schema in "${TIER2_READWRITE_SCHEMAS[@]}"; do
+    grant_schema_permissions "${db}" "${schema}" "${owner}" 2
+  done
 
-	# 4. Tier 3: Read-only schemas (USAGE + SELECT only)
-	for schema in "${TIER3_READONLY_SCHEMAS[@]}"; do
-		grant_schema_permissions "${db}" "${schema}" "${owner}" 3
-	done
+  # 4. Tier 3: Read-only schemas (USAGE + SELECT only)
+  for schema in "${TIER3_READONLY_SCHEMAS[@]}"; do
+    grant_schema_permissions "${db}" "${schema}" "${owner}" 3
+  done
 
-	# 5. Tier 4: Function-only schemas (USAGE + EXECUTE)
-	for schema in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
-		grant_schema_permissions "${db}" "${schema}" "${owner}" 4
-	done
+  # 5. Tier 4: Function-only schemas (USAGE + EXECUTE)
+  for schema in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
+    grant_schema_permissions "${db}" "${schema}" "${owner}" 4
+  done
 
-	# 6. Custom type permissions
-	grant_type_permissions "${db}" "${owner}"
+  # 6. Custom type permissions
+  grant_type_permissions "${db}" "${owner}"
 
-	# 7. Large object permissions
-	grant_large_object_permissions "${db}" "${owner}"
+  # 7. Large object permissions
+  grant_large_object_permissions "${db}" "${owner}"
 
-	# 8. Set search_path
-	set_role_search_path "${db}" "${owner}"
+  # 8. Set search_path
+  set_role_search_path "${db}" "${owner}"
 
-	_permissions_log "Complete permissions applied for '${owner}' in database '${db}'."
+  _permissions_log "Complete permissions applied for '${owner}' in database '${db}'."
 }
 
 # _get_schema_tier returns the permission tier (1-4) for a schema.
 # Returns 0 if schema is not in any tier array.
 # Usage: _get_schema_tier <schema>
 _get_schema_tier() {
-	local schema=$1
-	local s
-	for s in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
-		[[ "${s}" == "${schema}" ]] && echo 1 && return
-	done
-	for s in "${TIER2_READWRITE_SCHEMAS[@]}"; do
-		[[ "${s}" == "${schema}" ]] && echo 2 && return
-	done
-	for s in "${TIER3_READONLY_SCHEMAS[@]}"; do
-		[[ "${s}" == "${schema}" ]] && echo 3 && return
-	done
-	for s in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
-		[[ "${s}" == "${schema}" ]] && echo 4 && return
-	done
-	echo 0
+  local schema=$1
+  local s
+  for s in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
+    [[ "${s}" == "${schema}" ]] && echo 1 && return
+  done
+  for s in "${TIER2_READWRITE_SCHEMAS[@]}"; do
+    [[ "${s}" == "${schema}" ]] && echo 2 && return
+  done
+  for s in "${TIER3_READONLY_SCHEMAS[@]}"; do
+    [[ "${s}" == "${schema}" ]] && echo 3 && return
+  done
+  for s in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
+    [[ "${s}" == "${schema}" ]] && echo 4 && return
+  done
+  echo 0
 }
 
 # validate_schema_permissions checks if a role has USAGE on a schema.
 # Sets shell exit code to 0 if permissions are correct, 1 if missing.
 # Usage: validate_schema_permissions <db> <schema> <role>
 validate_schema_permissions() {
-	local db=$1
-	local schema=$2
-	local role=$3
+  local db=$1
+  local schema=$2
+  local role=$3
 
-	local has_usage
-	has_usage=$(_run_psql_query "${db}" "
+  local has_usage
+  has_usage=$(_run_psql_query "${db}" "
 		SELECT CASE WHEN EXISTS (
 			SELECT 1 FROM pg_namespace n
 			WHERE n.nspname = $(_psql_quote_literal "${schema}")
@@ -396,48 +401,49 @@ validate_schema_permissions() {
 		) THEN 'yes' ELSE 'no' END;
 	")
 
-	if [[ "${has_usage}" != "yes" ]]; then
-		return 1
-	fi
-	return 0
+  if [[ "${has_usage}" != "yes" ]]; then
+    return 1
+  fi
+  return 0
 }
 
 # validate_function_permissions checks if a role has EXECUTE on functions in a schema.
 # Outputs the count of functions without EXECUTE permission to stdout.
 # Usage: validate_function_permissions <db> <schema> <role>
 validate_function_permissions() {
-	local db=$1
-	local schema=$2
-	local role=$3
+  local db=$1
+  local schema=$2
+  local role=$3
 
-	local missing_count
-	missing_count=$(_run_psql_query "${db}" "
+  local missing_count
+  missing_count=$(_run_psql_query "${db}" "
 		SELECT COUNT(*) FROM pg_proc p
 		JOIN pg_namespace n ON p.pronamespace = n.oid
 		WHERE n.nspname = $(_psql_quote_literal "${schema}")
 		AND NOT has_function_privilege($(_psql_quote_literal "${role}"), p.oid, 'EXECUTE');
 	")
 
-	echo "${missing_count:-0}"
+  echo "${missing_count:-0}"
 }
 
 # validate_sequence_permissions checks if a role has USAGE on sequences in a schema.
 # Outputs the count of sequences without USAGE permission to stdout.
 # Usage: validate_sequence_permissions <db> <schema> <role>
 validate_sequence_permissions() {
-	local db=$1
-	local schema=$2
-	local role=$3
+  local db=$1
+  local schema=$2
+  local role=$3
 
-	local missing_count
-	missing_count=$(_run_psql_query "${db}" "
+  local missing_count
+  missing_count=$(_run_psql_query "${db}" "
 		SELECT COUNT(*) FROM pg_class c
+		JOIN pg_sequence s ON s.seqrelid = c.oid
 		JOIN pg_namespace n ON c.relnamespace = n.oid
-		WHERE n.nspname = $(_psql_quote_literal "${schema}") AND c.relkind = 'S'
+		WHERE n.nspname = $(_psql_quote_literal "${schema}")
 		AND NOT has_sequence_privilege($(_psql_quote_literal "${role}"), c.oid, 'USAGE');
 	")
 
-	echo "${missing_count:-0}"
+  echo "${missing_count:-0}"
 }
 
 # validate_all_permissions performs comprehensive tier-aware permission validation for a role.
@@ -445,193 +451,124 @@ validate_sequence_permissions() {
 # Outputs detailed issues to stderr.
 # Usage: validate_all_permissions <db> <role>
 validate_all_permissions() {
-	local db=$1
-	local role=$2
-	local total_issues=0
+  local db=$1
+  local role=$2
+  local total_issues=0
 
-	_permissions_log "Validating permissions for '${role}' in database '${db}'."
+  _permissions_log "Validating permissions for '${role}' in database '${db}'."
 
-	for schema in "${ALL_EXTENSION_SCHEMAS[@]}"; do
-		# Check if schema exists first
-		local schema_exists
-		schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
+  for schema in "${ALL_EXTENSION_SCHEMAS[@]}"; do
+    # Check if schema exists first
+    local schema_exists
+    schema_exists=$(_run_psql_query "${db}" "SELECT 1 FROM pg_namespace WHERE nspname = $(_psql_quote_literal "${schema}");")
 
-		if [[ -n "${schema_exists}" ]]; then
-			local tier
-			tier=$(_get_schema_tier "${schema}")
+    if [[ -n "${schema_exists}" ]]; then
+      local tier
+      tier=$(_get_schema_tier "${schema}")
 
-			# Check schema USAGE (all tiers)
-			if ! validate_schema_permissions "${db}" "${schema}" "${role}"; then
-				_permissions_log "  [MISSING] Schema '${schema}' (tier ${tier}) USAGE"
-				((total_issues++)) || true
-			else
-				_permissions_log "  [OK] Schema '${schema}' (tier ${tier}) USAGE"
-			fi
+      # Check schema USAGE (all tiers)
+      if ! validate_schema_permissions "${db}" "${schema}" "${role}"; then
+        _permissions_log "  [MISSING] Schema '${schema}' (tier ${tier}) USAGE"
+        ((total_issues++)) || true
+      else
+        _permissions_log "  [OK] Schema '${schema}' (tier ${tier}) USAGE"
+      fi
 
-			# Check CREATE permission (tier 1 only)
-			if [[ "${tier}" == "1" ]]; then
-				local has_create
-				has_create=$(_run_psql_query "${db}" "
+      # Check CREATE permission (tier 1 only)
+      if [[ "${tier}" == "1" ]]; then
+        local has_create
+        has_create=$(_run_psql_query "${db}" "
 					SELECT CASE WHEN EXISTS (
 						SELECT 1 FROM pg_namespace n
 						WHERE n.nspname = $(_psql_quote_literal "${schema}")
 						AND has_schema_privilege($(_psql_quote_literal "${role}"), n.oid, 'CREATE')
 					) THEN 'yes' ELSE 'no' END;
 				")
-				if [[ "${has_create}" != "yes" ]]; then
-					_permissions_log "  [MISSING] Schema '${schema}' CREATE (required for tier 1)"
-					((total_issues++)) || true
-				else
-					_permissions_log "  [OK] Schema '${schema}' CREATE"
-				fi
-			fi
+        if [[ "${has_create}" != "yes" ]]; then
+          _permissions_log "  [MISSING] Schema '${schema}' CREATE (required for tier 1)"
+          ((total_issues++)) || true
+        else
+          _permissions_log "  [OK] Schema '${schema}' CREATE"
+        fi
+      fi
 
-			# Check function EXECUTE (all tiers)
-			local missing_funcs
-			missing_funcs=$(validate_function_permissions "${db}" "${schema}" "${role}")
-			if [[ "${missing_funcs}" -gt 0 ]]; then
-				_permissions_log "  [MISSING] ${missing_funcs} functions in '${schema}' without EXECUTE"
-				((total_issues++)) || true
-			fi
+      # Check function EXECUTE (all tiers)
+      local missing_funcs
+      missing_funcs=$(validate_function_permissions "${db}" "${schema}" "${role}")
+      if [[ "${missing_funcs}" -gt 0 ]]; then
+        _permissions_log "  [MISSING] ${missing_funcs} functions in '${schema}' without EXECUTE"
+        ((total_issues++)) || true
+      fi
 
-			# Check sequence USAGE (tiers 1-3 only, not tier 4)
-			if [[ "${tier}" != "4" ]]; then
-				local missing_seqs
-				missing_seqs=$(validate_sequence_permissions "${db}" "${schema}" "${role}")
-				if [[ "${missing_seqs}" -gt 0 ]]; then
-					_permissions_log "  [MISSING] ${missing_seqs} sequences in '${schema}' without USAGE"
-					((total_issues++)) || true
-				fi
-			fi
-		fi
-	done
+      # Check sequence USAGE (tiers 1-3 only, not tier 4)
+      if [[ "${tier}" != "4" ]]; then
+        local missing_seqs
+        missing_seqs=$(validate_sequence_permissions "${db}" "${schema}" "${role}")
+        if [[ "${missing_seqs}" -gt 0 ]]; then
+          _permissions_log "  [MISSING] ${missing_seqs} sequences in '${schema}' without USAGE"
+          ((total_issues++)) || true
+        fi
+      fi
+    fi
+  done
 
-	if [[ ${total_issues} -eq 0 ]]; then
-		_permissions_log "All permissions validated successfully for '${role}' in '${db}'."
-		return 0
-	else
-		_permissions_log "Found ${total_issues} permission issue(s) for '${role}' in '${db}'."
-		return 1
-	fi
+  if [[ ${total_issues} -eq 0 ]]; then
+    _permissions_log "All permissions validated successfully for '${role}' in '${db}'."
+    return 0
+  else
+    _permissions_log "Found ${total_issues} permission issue(s) for '${role}' in '${db}'."
+    return 1
+  fi
 }
 
 # repair_permissions validates and repairs tiered permissions for a database owner.
 # Usage: repair_permissions <db> <role>
 repair_permissions() {
-	local db=$1
-	local role=$2
+  local db=$1
+  local role=$2
 
-	_permissions_log "Repairing permissions for '${role}' in database '${db}'."
+  _permissions_log "Repairing permissions for '${role}' in database '${db}'."
 
-	# Database-level privileges (includes TEMPORARY)
-	_run_psql "${db}" <<SQL
+  # Database-level privileges (includes TEMPORARY)
+  _run_psql "${db}" << SQL
 GRANT ALL PRIVILEGES ON DATABASE "${db}" TO "${role}";
 SQL
 
-	# Tier 1: Full access schemas
-	# Note: grant_schema_permissions checks schema existence internally
-	for schema in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
-		_permissions_log "  [REPAIR] Granting tier 1 permissions on schema '${schema}'"
-		grant_schema_permissions "${db}" "${schema}" "${role}" 1
-	done
+  # Tier 1: Full access schemas
+  # Note: grant_schema_permissions checks schema existence internally
+  for schema in "${TIER1_FULL_ACCESS_SCHEMAS[@]}"; do
+    _permissions_log "  [REPAIR] Granting tier 1 permissions on schema '${schema}'"
+    grant_schema_permissions "${db}" "${schema}" "${role}" 1
+  done
 
-	# Tier 2: Read-write schemas
-	for schema in "${TIER2_READWRITE_SCHEMAS[@]}"; do
-		_permissions_log "  [REPAIR] Granting tier 2 permissions on schema '${schema}'"
-		grant_schema_permissions "${db}" "${schema}" "${role}" 2
-	done
+  # Tier 2: Read-write schemas
+  for schema in "${TIER2_READWRITE_SCHEMAS[@]}"; do
+    _permissions_log "  [REPAIR] Granting tier 2 permissions on schema '${schema}'"
+    grant_schema_permissions "${db}" "${schema}" "${role}" 2
+  done
 
-	# Tier 3: Read-only schemas
-	for schema in "${TIER3_READONLY_SCHEMAS[@]}"; do
-		_permissions_log "  [REPAIR] Granting tier 3 permissions on schema '${schema}'"
-		grant_schema_permissions "${db}" "${schema}" "${role}" 3
-	done
+  # Tier 3: Read-only schemas
+  for schema in "${TIER3_READONLY_SCHEMAS[@]}"; do
+    _permissions_log "  [REPAIR] Granting tier 3 permissions on schema '${schema}'"
+    grant_schema_permissions "${db}" "${schema}" "${role}" 3
+  done
 
-	# Tier 4: Function-only schemas
-	for schema in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
-		_permissions_log "  [REPAIR] Granting tier 4 permissions on schema '${schema}'"
-		grant_schema_permissions "${db}" "${schema}" "${role}" 4
-	done
+  # Tier 4: Function-only schemas
+  for schema in "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}"; do
+    _permissions_log "  [REPAIR] Granting tier 4 permissions on schema '${schema}'"
+    grant_schema_permissions "${db}" "${schema}" "${role}" 4
+  done
 
-	# Ensure type permissions
-	grant_type_permissions "${db}" "${role}"
+  # Ensure type permissions
+  grant_type_permissions "${db}" "${role}"
 
-	# Ensure large object permissions
-	grant_large_object_permissions "${db}" "${role}"
+  # Ensure large object permissions
+  grant_large_object_permissions "${db}" "${role}"
 
-	# Ensure search_path is set
-	set_role_search_path "${db}" "${role}"
+  # Ensure search_path is set
+  set_role_search_path "${db}" "${role}"
 
-	_permissions_log "Permission repair complete for '${role}' in '${db}'."
-}
-
-# generate_permission_report generates a CSV report of permissions by schema/role.
-# Includes permission tier classification for each schema.
-# Usage: generate_permission_report <db> [output_path]
-generate_permission_report() {
-	local db=$1
-	local output=${2:-}
-
-	# Build tier lists dynamically from the arrays to avoid duplication
-	local tier1_list tier2_list tier3_list tier4_list
-	tier1_list=$(printf "'%s'," "${TIER1_FULL_ACCESS_SCHEMAS[@]}" | sed 's/,$//')
-	tier2_list=$(printf "'%s'," "${TIER2_READWRITE_SCHEMAS[@]}" | sed 's/,$//')
-	tier3_list=$(printf "'%s'," "${TIER3_READONLY_SCHEMAS[@]}" | sed 's/,$//')
-	tier4_list=$(printf "'%s'," "${TIER4_FUNCTION_ONLY_SCHEMAS[@]}" | sed 's/,$//')
-
-	local sql="
-SELECT
-    n.nspname AS schema_name,
-    CASE
-        WHEN n.nspname IN (${tier1_list}) THEN 'Tier 1 (Full)'
-        WHEN n.nspname IN (${tier2_list}) THEN 'Tier 2 (Read-Write)'
-        WHEN n.nspname IN (${tier3_list}) THEN 'Tier 3 (Read-Only)'
-        WHEN n.nspname IN (${tier4_list}) THEN 'Tier 4 (Functions)'
-        ELSE 'Unmanaged'
-    END AS permission_tier,
-    r.rolname AS role_name,
-    CASE WHEN has_schema_privilege(r.oid, n.oid, 'USAGE') THEN 'Y' ELSE 'N' END AS schema_usage,
-    CASE WHEN has_schema_privilege(r.oid, n.oid, 'CREATE') THEN 'Y' ELSE 'N' END AS schema_create,
-    (SELECT COUNT(*) FROM pg_class c
-     WHERE c.relnamespace = n.oid
-     AND c.relkind = 'r'
-     AND has_table_privilege(r.oid, c.oid, 'SELECT')) AS tables_select,
-    (SELECT COUNT(*) FROM pg_class c
-     WHERE c.relnamespace = n.oid
-     AND c.relkind = 'r'
-     AND has_table_privilege(r.oid, c.oid, 'INSERT')) AS tables_insert,
-    (SELECT COUNT(*) FROM pg_class c
-     WHERE c.relnamespace = n.oid
-     AND c.relkind = 'S'
-     AND has_sequence_privilege(r.oid, c.oid, 'USAGE')) AS sequences_usage,
-    (SELECT COUNT(*) FROM pg_proc p
-     WHERE p.pronamespace = n.oid
-     AND has_function_privilege(r.oid, p.oid, 'EXECUTE')) AS functions_execute
-FROM pg_namespace n
-CROSS JOIN pg_roles r
-WHERE n.nspname NOT LIKE 'pg_%'
-AND n.nspname <> 'information_schema'
-AND r.rolname NOT LIKE 'pg_%'
-AND r.rolcanlogin = true
-ORDER BY n.nspname, r.rolname;
-"
-
-	if [[ -n "${output}" ]]; then
-		if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-			psql --csv --username "${POSTGRES_USER:-postgres}" --dbname "${db}" --command "${sql}" > "${output}"
-		else
-			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-				psql --csv --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "${sql}" > "${output}"
-		fi
-		_permissions_log "Permission report written to ${output}"
-	else
-		if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-			psql --username "${POSTGRES_USER:-postgres}" --dbname "${db}" --command "${sql}"
-		else
-			compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-				psql --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${db}" --command "${sql}"
-		fi
-	fi
+  _permissions_log "Permission repair complete for '${role}' in '${db}'."
 }
 
 # startup_permission_healthcheck runs permission validation/repair for all databases.
@@ -639,64 +576,67 @@ ORDER BY n.nspname, r.rolname;
 # Usage: startup_permission_healthcheck [repair_mode]
 # repair_mode: "true" to auto-repair, "false" to report only (default: true)
 startup_permission_healthcheck() {
-	local repair_mode=${1:-true}
-	local issues_found=0
-	local repairs_applied=0
+  local repair_mode=${1:-true}
+  local issues_found=0
+  local repairs_applied=0
 
-	_permissions_log "Permission health check starting..."
+  _permissions_log "Permission health check starting..."
 
-	# Get all non-template databases
-	local databases
-	if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-		mapfile -t databases < <(psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-			--command "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');")
-	else
-		mapfile -t databases < <(compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-			psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-			--command "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');")
-	fi
+  # Get all non-template databases
+  local databases
+  if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
+    mapfile -t databases < <(psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+      --command "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');")
+  else
+    mapfile -t databases < <(compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+      psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+      --command "SELECT datname FROM pg_database WHERE datistemplate = false AND datname NOT IN ('postgres');")
+  fi
 
-	for db in "${databases[@]}"; do
-		[[ -z "${db}" ]] && continue
+  for db in "${databases[@]}"; do
+    [[ -z "${db}" ]] && continue
 
-		# Get database owner
-		local owner
-		if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
-			owner=$(psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
-		else
-			owner=$(compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
-				psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
-				--command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
-		fi
+    # Get database owner
+    local owner
+    if [[ -n "${POSTGRES_EXEC_MODE:-}" && "${POSTGRES_EXEC_MODE}" == "container" ]]; then
+      owner=$(psql --tuples-only --no-align --username "${POSTGRES_USER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+        --command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
+    else
+      owner=$(compose_exec env PGHOST="${POSTGRES_HOST:-localhost}" PGPASSWORD="${POSTGRES_SUPERUSER_PASSWORD:-}" \
+        psql --tuples-only --no-align --username "${POSTGRES_SUPERUSER:-postgres}" --dbname "${POSTGRES_DB:-postgres}" \
+        --command "SELECT pg_catalog.pg_get_userbyid(datdba) FROM pg_database WHERE datname = $(_psql_quote_literal "${db}");")
+    fi
 
-		# Skip if owner is superuser
-		if [[ -z "${owner}" || "${owner}" == "${POSTGRES_USER:-postgres}" || "${owner}" == "${POSTGRES_SUPERUSER:-postgres}" ]]; then
-			_permissions_log "Skipping database '${db}' (owned by superuser)"
-			continue
-		fi
+    # Skip if owner is superuser
+    if [[ -z "${owner}" || "${owner}" == "${POSTGRES_USER:-postgres}" || "${owner}" == "${POSTGRES_SUPERUSER:-postgres}" ]]; then
+      _permissions_log "Skipping database '${db}' (owned by superuser)"
+      continue
+    fi
 
-		_permissions_log "Checking database: ${db} (owner: ${owner})"
+    _permissions_log "Checking database: ${db} (owner: ${owner})"
 
-		if ! validate_all_permissions "${db}" "${owner}"; then
-			((issues_found++)) || true
-			if [[ "${repair_mode}" == "true" ]]; then
-				repair_permissions "${db}" "${owner}"
-				((repairs_applied++)) || true
-			fi
-		fi
-	done
+    if ! validate_all_permissions "${db}" "${owner}"; then
+      ((issues_found++)) || true
+      if [[ "${repair_mode}" == "true" ]]; then
+        repair_permissions "${db}" "${owner}"
+        ((repairs_applied++)) || true
+      fi
+    fi
+  done
 
-	if [[ ${issues_found} -gt 0 ]]; then
-		if [[ "${repair_mode}" == "true" ]]; then
-			_permissions_log "Permission health check complete: ${repairs_applied} database(s) repaired."
-		else
-			_permissions_log "Permission health check complete: ${issues_found} database(s) with issues. Run with repair mode to fix."
-			return 1
-		fi
-	else
-		_permissions_log "Permission health check complete: all databases OK."
-	fi
+  if [[ ${issues_found} -gt 0 ]]; then
+    if [[ "${repair_mode}" == "true" ]]; then
+      _permissions_log "Permission health check complete: ${repairs_applied} database(s) repaired."
+    else
+      _permissions_log "Permission health check complete: ${issues_found} database(s) with issues. Run with repair mode to fix."
+      return 1
+    fi
+  else
+    _permissions_log "Permission health check complete: all databases OK."
+  fi
 
-	return 0
+  return 0
 }
+
+# shellcheck source=scripts/lib/permissions_report.sh
+source "${PERMISSIONS_LIB_DIR}/permissions_report.sh"
