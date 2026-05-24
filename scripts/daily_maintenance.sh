@@ -87,7 +87,10 @@ record_step_status() {
   local status=$2
   local duration=$3
   local message=${4:-}
-  printf '%s\t%s\t%s\t%s\n' "${name}" "${status}" "${duration}" "${message//$'\t'/ }" >> "${STATUS_TSV}"
+  local clean_message=${message//$'\t'/ }
+  clean_message=${clean_message//$'\r'/ }
+  clean_message=${clean_message//$'\n'/ }
+  printf '%s\t%s\t%s\t%s\n' "${name}" "${status}" "${duration}" "${clean_message}" >> "${STATUS_TSV}"
 }
 
 run_optional_step() {

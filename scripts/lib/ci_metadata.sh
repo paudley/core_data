@@ -26,11 +26,13 @@ ci_service_images() {
   local rabbitmq_default="${registry_default}/rabbitmq:${release_tag}"
   local pgbouncer_default="${registry_default}/pgbouncer:${release_tag}"
   local memcached_default="${registry_default}/memcached:${release_tag}"
+  local network_probe_default="${registry_default}/network-probe:${release_tag}"
+  local network_guard_default="${registry_default}/network-guard:${release_tag}"
   entries+=("postgres=${postgres_image}")
   entries+=("logical_backup=${postgres_image}")
   entries+=("volume_prep=${postgres_image}")
-  entries+=("network_probe=${NETWORK_PROBE_IMAGE:-debian:bookworm-slim}")
-  entries+=("network_guard=${NETWORK_GUARD_IMAGE:-debian:bookworm-slim}")
+  entries+=("network_probe=${NETWORK_PROBE_IMAGE:-${network_probe_default}}")
+  entries+=("network_guard=${NETWORK_GUARD_IMAGE:-${network_guard_default}}")
   entries+=("valkey=${VALKEY_IMAGE:-${valkey_default}}")
   entries+=("rabbitmq=${RABBITMQ_IMAGE:-${rabbitmq_default}}")
   entries+=("pgbouncer=${PGBOUNCER_IMAGE:-${pgbouncer_default}}")

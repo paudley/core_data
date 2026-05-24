@@ -27,6 +27,10 @@ LOGICAL_BACKUP_EXCLUDE=${LOGICAL_BACKUP_EXCLUDE:-postgres}
 LOGICAL_BACKUP_SSLMODE=${LOGICAL_BACKUP_SSLMODE:-require}
 LOGICAL_BACKUP_METRICS_FILE=${LOGICAL_BACKUP_METRICS_FILE:-/tmp/core_data_logical_backup.prom}
 LOGICAL_BACKUP_METRICS_PORT=${LOGICAL_BACKUP_METRICS_PORT:-9188}
+LAST_SUCCESS_TIMESTAMP=0
+LAST_SUCCESS_DURATION=0
+LAST_SUCCESS_SIZE_BYTES=0
+LAST_SUCCESS_FILE_COUNT=0
 
 if [[ -z "${POSTGRES_SUPERUSER_PASSWORD}" && -n "${POSTGRES_SUPERUSER_PASSWORD_FILE}" && -r "${POSTGRES_SUPERUSER_PASSWORD_FILE}" ]]; then
   POSTGRES_SUPERUSER_PASSWORD=$(< "${POSTGRES_SUPERUSER_PASSWORD_FILE}")
@@ -54,7 +58,8 @@ write_metrics() {
   local size_bytes=$4
   local file_count=$5
   local failure_count=$6
-  cat > "${LOGICAL_BACKUP_METRICS_FILE}" << METRICS
+  local tmp_file="${LOGICAL_BACKUP_METRICS_FILE}.tmp.$$"
+  cat > "${tmp_file}" << METRICS
 # HELP core_data_logical_backup_last_success_timestamp_seconds Last successful logical backup Unix timestamp.
 # TYPE core_data_logical_backup_last_success_timestamp_seconds gauge
 core_data_logical_backup_last_success_timestamp_seconds ${timestamp}
@@ -74,6 +79,7 @@ core_data_logical_backup_last_status ${status}
 # TYPE core_data_logical_backup_failures_total counter
 core_data_logical_backup_failures_total ${failure_count}
 METRICS
+  mv "${tmp_file}" "${LOGICAL_BACKUP_METRICS_FILE}"
 }
 
 write_metrics 0 0 0 0 0 0
@@ -251,7 +257,11 @@ PY
   fi
   touch "${tmp_dir}/_SUCCESS" || return 1
   mv "${tmp_dir}" "${target_dir}" || return 1
-  write_metrics 1 "${completed_at}" "${duration}" "${size_bytes:-0}" "${file_count}" "${FAILURE_COUNT}"
+  LAST_SUCCESS_TIMESTAMP=${completed_at}
+  LAST_SUCCESS_DURATION=${duration}
+  LAST_SUCCESS_SIZE_BYTES=${size_bytes:-0}
+  LAST_SUCCESS_FILE_COUNT=${file_count}
+  write_metrics 1 "${LAST_SUCCESS_TIMESTAMP}" "${LAST_SUCCESS_DURATION}" "${LAST_SUCCESS_SIZE_BYTES}" "${LAST_SUCCESS_FILE_COUNT}" "${FAILURE_COUNT}"
 
   if ((LOGICAL_BACKUP_RETENTION_DAYS > 0)); then
     find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d ! -name '*.tmp' -mtime +"${LOGICAL_BACKUP_RETENTION_DAYS}" -print -exec rm -rf {} + 2> /dev/null || true
@@ -269,7 +279,7 @@ main_loop() {
     cycle_start=$(date +%s)
     if ! perform_backup; then
       FAILURE_COUNT=$((FAILURE_COUNT + 1))
-      write_metrics 0 0 0 0 0 "${FAILURE_COUNT}"
+      write_metrics 0 "${LAST_SUCCESS_TIMESTAMP}" "${LAST_SUCCESS_DURATION}" "${LAST_SUCCESS_SIZE_BYTES}" "${LAST_SUCCESS_FILE_COUNT}" "${FAILURE_COUNT}"
       log "backup cycle failed"
     fi
     if ! ${RUNNING}; then
