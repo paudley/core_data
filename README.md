@@ -280,6 +280,7 @@ Use the dedicated CI helpers when you need to spin up the published stack inside
 | `provision-qa` | Differential backup + targeted restore for QA databases. |
 | `config-render` | Re-render `postgresql.conf` / `pg_hba.conf` from the templates and restart PostgreSQL (terminates active connections; required for some settings like `shared_buffers` and `max_connections`). |
 | `config-check` | Compare live `postgresql.conf` / `pg_hba.conf` against rendered templates to catch drift. |
+| `data-cleanup` | Report or remove stale `data/.pytest_backups` entries left by interrupted local pytest runs; dry-run by default, deletes entries older than 7 days only with `--execute`. |
 | `audit-roles` / `audit-security` | Generate CSV/text reports covering role hygiene, passwords, and HBA/RLS posture. |
 | `audit-extensions` | Confirm bundled extensions are present and on expected versions. |
 | `audit-autovacuum` | Flag tables with high dead tuple counts or ratios. |
@@ -310,6 +311,8 @@ Use the dedicated CI helpers when you need to spin up the published stack inside
 | `upgrade --new-version` | Orchestrate pgautoupgrade (takes backups, validates base image, restarts). |
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
+
+Interrupted local test runs can leave full service-directory snapshots under `data/.pytest_backups/`. These are disposable pytest stashes, not live cluster state. Inspect them with `./scripts/manage.sh data-cleanup`; remove stale entries with `./scripts/manage.sh data-cleanup --execute`. The command only targets `.pytest_backups`, defaults to entries older than 7 days, and refuses to delete while Compose containers are running unless `--force` is supplied.
 
 `daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also records per-step results in `maintenance_status.json`, records the most recent sidecar dump run in `logical_backup_status.txt`, runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and captures version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 

@@ -43,12 +43,16 @@ source "${SCRIPT_DIR}/lib/memcached.sh"
 source "${SCRIPT_DIR}/lib/rabbitmq.sh"
 # shellcheck source=scripts/lib/seccomp.sh
 source "${SCRIPT_DIR}/lib/seccomp.sh"
+# shellcheck source=scripts/lib/apparmor.sh
+source "${SCRIPT_DIR}/lib/apparmor.sh"
 # shellcheck source=scripts/lib/test_dataset.sh
 source "${SCRIPT_DIR}/lib/test_dataset.sh"
 # shellcheck source=scripts/lib/bootstrap_ci.sh
 source "${SCRIPT_DIR}/lib/bootstrap_ci.sh"
 # shellcheck source=scripts/lib/ci.sh
 source "${SCRIPT_DIR}/lib/ci.sh"
+# shellcheck source=scripts/lib/data_cleanup.sh
+source "${SCRIPT_DIR}/lib/data_cleanup.sh"
 # shellcheck source=scripts/lib/permissions.sh
 source "${SCRIPT_DIR}/lib/permissions.sh"
 
@@ -172,6 +176,7 @@ Lifecycle
   networks-show                       Print the currently rendered allow list.
   config-render                       Re-render postgresql.conf/pg_hba.conf then restart PostgreSQL.
   config-check                        Compare live configs to rendered templates.
+  data-cleanup                        Remove stale pytest data stashes (dry-run by default).
   logs                                Tail postgres logs.
   status                              Show container status and health.
   service-urls                        Print connection URLs for local services using external host IP.
@@ -377,34 +382,6 @@ cmd_service_urls() {
 
 }
 
-cmd_apparmor_load() {
-	local parser=${APPARMOR_PARSER:-apparmor_parser}
-	if ! command -v "${parser}" >/dev/null 2>&1; then
-		echo "[apparmor] ${parser} not found. Install apparmor-utils (Debian/Ubuntu) or ensure apparmor_parser is on PATH." >&2
-		exit 1
-	fi
-	if [[ $EUID -ne 0 ]] && ! command -v sudo >/dev/null 2>&1; then
-		echo "[apparmor] sudo required to load profiles or rerun as root." >&2
-		exit 1
-	fi
-	local loaded=false
-	for profile in "${ROOT_DIR}/apparmor"/*.profile; do
-		[[ -e "${profile}" ]] || continue
-		if [[ $EUID -ne 0 ]]; then
-			sudo "${parser}" -r -W "${profile}" || exit 1
-		else
-			"${parser}" -r -W "${profile}" || exit 1
-		fi
-		loaded=true
-		echo "[apparmor] loaded ${profile##*/}" >&2
-	done
-	if [[ ${loaded} == false ]]; then
-		echo "[apparmor] no profiles found under ${ROOT_DIR}/apparmor" >&2
-		exit 1
-	fi
-	echo "[apparmor] profiles loaded. Set CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal (or your custom profile) before composing." >&2
-}
-
 ensure_compose
 
 COMMAND=${CORE_DATA_SELECTED_COMMAND:-help}
@@ -428,6 +405,9 @@ ci-up)
 	;;
 ci-down)
 	cmd_ci_down "$@"
+	;;
+data-cleanup)
+	cmd_data_cleanup "$@"
 	;;
 build-image)
 	ensure_env
