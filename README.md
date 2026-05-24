@@ -151,11 +151,11 @@ chmod: changing permissions of '/var/lib/postgresql/data': Operation not permitt
 * Custom Docker image with PostGIS, pgvector, Apache AGE, pgsodium, gzip, zstd, pg\_cron, pg\_squeeze, pgAudit, pgBadger, pgBackRest, and pgtune baked in.
 * Init scripts render configuration from templates, create application databases, and enable extensions automatically.
 * `./scripts/manage.sh` wraps lifecycle tasks: image builds, `psql`, logical dumps, pgBackRest backups/restores, QA cloning, log analysis, daily maintenance, and major upgrades via pgautoupgrade.
-* PGDATA, WAL, and pgBackRest now live on dedicated Docker named volumes for near-native Linux I/O, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
+* PGDATA, WAL, pgBackRest, and monitoring state live under `./data/` bind mounts by default, while `BACKUPS_HOST_PATH` (defaults to `./backups`) remains a bind mount for easy artifact exports.
 * Secrets stay in Docker secrets (`POSTGRES_PASSWORD_FILE`) and the container runs as the non-root `postgres` UID/GID at all times, keeping the least-privilege posture consistent across init and steady state.
 * TLS is enforced by default with auto-generated self-signed certificates (override with your own CA material), and a multi-stage health probe (`scripts/healthcheck.sh`) guards dependent services before they start.
 * Logging uses Docker's `local` driver with rotation and non-blocking delivery, preventing runaway JSON logs from filling the host while preserving enough history for incident response.
-* Optional profiles bundle ValKey, PgBouncer, and Memcached with sensible defaults, secrets, and CLI helpers so you can layer caches and pooling alongside PostgreSQL in one step.
+* ValKey, PgBouncer, RabbitMQ, Memcached, Prometheus, Grafana, and required exporters are part of the standard stack with sensible defaults, secrets, metrics, dashboards, and CLI helpers.
 * CI smoke test (`python -m pytest -k full_workflow`) provisions a stack, exercises critical commands, and verifies upgrade safety.
 
 ### Default Extension Bundle
@@ -198,10 +198,11 @@ Run `./scripts/manage.sh async-queue bootstrap` when you want a lightweight back
    ./scripts/manage.sh build-image
    ./scripts/manage.sh up
    ```
-3. Verify health (multi-stage probe):
+3. Verify health and monitoring:
    ```bash
    docker compose exec postgres /opt/core_data/scripts/healthcheck.sh
    ./scripts/manage.sh psql -c 'SELECT 1;'
+   curl -fsS http://127.0.0.1:9090/-/healthy
    ```
 
 4. Explore the CLI: `./scripts/manage.sh help` for grouped commands (lifecycle, CI, backups, audits, extensions, cache/messaging, security).
@@ -220,12 +221,13 @@ See `docs/security_philosophy.md` for how capability hardening and related contr
 ## Operational Defaults
 - **Resource guardrails.** Container memory, CPU, and shared memory limits come from `.env`, keeping pgtune advice and runtime constraints aligned. Adjust `POSTGRES_MEMORY_LIMIT`, `POSTGRES_CPU_LIMIT`, and `POSTGRES_SHM_SIZE` to match the host.
 - **TLS everywhere.** PostgreSQL refuses non-SSL connections from the bridge network. Provide your own certificate/key via Docker secrets or rely on the init hook to mint a self-signed pair under `${PGDATA}/tls`.
-- **Named volumes for PGDATA/WAL.** `pgdata`, `pgwal`, and `pgbackrest` volumes provide near-native I/O on Linux. Override the volume definitions if you pin WAL/data to specific devices.
+- **Bind-mounted persistent state.** PostgreSQL data, WAL, pgBackRest, ValKey, RabbitMQ, Prometheus, and Grafana state live under `./data/` by default so ownership and backups are explicit.
 - **Non-root from the start.** A one-shot `volume_prep` helper chowns the volumes before Postgres launches so the main service and sidecars run as your host user by default (UID/GID `${POSTGRES_UID}`), keeping file ownership consistent across deployments. Supply alternative IDs only when required.
-- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `${BACKUPS_HOST_PATH}/logical`, prunes according to `LOGICAL_BACKUP_RETENTION_DAYS`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
+- **Automated logical backups.** The `logical_backup` sidecar runs `pg_dump`/`pg_dumpall` on the cadence defined by `LOGICAL_BACKUP_INTERVAL_SECONDS`, writes into `${BACKUPS_HOST_PATH}/logical`, validates custom dumps with `pg_restore --list`, records manifests and `_SUCCESS` markers, exports Prometheus metrics on port `9188`, and skips any databases listed in `LOGICAL_BACKUP_EXCLUDE` (defaults to `postgres`). `daily-maintenance` captures the latest run in `logical_backup_status.txt` for auditing.
+- **Required monitoring.** Prometheus scrapes PostgreSQL, PgBouncer, logical backups, RabbitMQ, ValKey, Memcached, host metrics, and container metrics. Grafana is provisioned with the Prometheus datasource and a Core Data overview dashboard. Configure ports, retention, and credentials with the `PROMETHEUS_*`, `GRAFANA_*`, and `*_EXPORTER_*` variables.
 - **Composable health check.** `scripts/healthcheck.sh` verifies readiness, executes `SELECT 1`, and optionally enforces replication lag ceilings before dependents start.
 - **Rotated container logs.** Docker's `local` driver with non-blocking delivery prevents runaway JSON files while retaining compressed history for incident response.
-- **Optional service profiles.** `COMPOSE_PROFILES=valkey,pgbouncer,memcached,rabbitmq` brings the cache/pooling stack online; drop profiles from the list to opt out without editing `docker-compose.yml`.
+- **Required service set.** Cache, pooling, messaging, and monitoring services are started by the normal compose flow. `COMPOSE_PROFILES` is intentionally empty by default.
 - **Seccomp baseline.** Shipping profiles in `seccomp/` cover each service (`postgres.json`, `logical_backup.json`, `pgbouncer.json`, `valkey.json`, `memcached.json`, plus `docker-default.json` reused for RabbitMQ). `./scripts/manage.sh seccomp-status` reports the active spec, `seccomp-verify` gates compose configs, and `docs/security_philosophy.md` outlines how to regenerate traces when you need to tighten them further.
 - **AppArmor (opt-in).** Minimal profiles live in `apparmor/core_data_minimal.profile`. Load them with `./scripts/manage.sh apparmor-load` (sudo), then set `CORE_DATA_APPARMOR_<SERVICE>=apparmor:core_data_minimal` in `.env` for each service you want to confine. The profile denies access to high-value host paths (`/root`, `/etc/shadow`, Docker socket) while leaving normal container paths alone.
 
@@ -250,7 +252,7 @@ core\_data/
 └── AGENTS.md # Contributor quick-reference & runbooks
 
 ```
-If you override the named volumes with host bind mounts, keep those directories out of version control—they contain live cluster state and pgBackRest archives.
+Keep persistent bind mounts under `data/` out of version control; they contain live cluster state, monitoring state, and pgBackRest archives.
 
 ## CI Workflow
 
@@ -309,7 +311,7 @@ Use the dedicated CI helpers when you need to spin up the published stack inside
 
 The CLI sources modular helpers from `scripts/lib/` so each function can be imported by tests or future automation.
 
-`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also records the most recent sidecar dump run in `logical_backup_status.txt`, runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and captures version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
+`daily-maintenance` now emits a richer bundle under `backups/daily/<YYYYMMDD>/`, including `pg_stat_statements` snapshots, `pg_buffercache` heatmaps, role/extension/autovacuum/replication CSVs, pg_cron schedules, pg_squeeze activity, and a security checklist alongside logs, dumps, pgBadger HTML, and pgaudit summaries. The workflow also records per-step results in `maintenance_status.json`, records the most recent sidecar dump run in `logical_backup_status.txt`, runs `partman.run_maintenance_proc()` across each database so freshly created partitions land even if the background worker interval has not elapsed, and captures version drift in `version_status.csv` (focusing on out-of-date components). Pair those reports with `config-check` to keep the rendered configs aligned with the templates. Tune the thresholds via `DAILY_PG_STAT_LIMIT`, `DAILY_BUFFERCACHE_LIMIT`, `DAILY_DEAD_TUPLE_THRESHOLD`, `DAILY_DEAD_TUPLE_RATIO`, and `DAILY_REPLICATION_LAG_THRESHOLD` as needed.
 
 Nightly cron jobs also refresh pg_squeeze targets, reset `pg_stat_statements`, and run a safe `VACUUM (ANALYZE, SKIP_LOCKED, PARALLEL 4)` so statistics stay current without blocking hot tables.
 

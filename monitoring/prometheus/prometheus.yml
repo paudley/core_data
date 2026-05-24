@@ -1,0 +1,46 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics Inc.
+# SPDX-License-Identifier: MIT
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres_exporter:9187"]
+
+  - job_name: pgbouncer
+    static_configs:
+      - targets: ["pgbouncer_exporter:9127"]
+
+  - job_name: logical_backup
+    static_configs:
+      - targets: ["logical_backup:9188"]
+
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+
+  - job_name: valkey
+    static_configs:
+      - targets: ["valkey_exporter:9121"]
+
+  - job_name: memcached
+    static_configs:
+      - targets: ["memcached_exporter:9150"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node_exporter:9100"]
+
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]

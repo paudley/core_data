@@ -1,0 +1,90 @@
+# SPDX-FileCopyrightText: 2025 Blackcat Informatics Inc.
+# SPDX-License-Identifier: MIT
+
+groups:
+  - name: core_data.required_targets
+    rules:
+      - alert: CoreDataScrapeTargetDown
+        expr: >-
+          up{job=~"postgres|pgbouncer|logical_backup|rabbitmq"} == 0
+          or up{job=~"valkey|memcached|node|cadvisor"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Core Data scrape target is down"
+          description: >-
+            {{ $labels.job }} target {{ $labels.instance }} has not been
+            scrapeable for 2 minutes.
+
+  - name: core_data.backups
+    rules:
+      - alert: CoreDataLogicalBackupFailed
+        expr: core_data_logical_backup_last_status == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Logical backup sidecar has not reported a successful backup"
+      - alert: CoreDataLogicalBackupStale
+        expr: time() - core_data_logical_backup_last_success_timestamp_seconds > 93600
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Logical backup is stale"
+          description: >-
+            The most recent successful logical backup is older than 26 hours.
+
+  - name: core_data.postgres
+    rules:
+      - alert: CoreDataPostgresConnectionSaturation
+        expr: sum(pg_stat_activity_count) / max(pg_settings_max_connections) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL connections are near capacity"
+      - alert: CoreDataPostgresLongTransactions
+        expr: max(pg_stat_activity_max_tx_duration) > 900
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Long PostgreSQL transaction detected"
+      - alert: CoreDataPostgresDeadTuplesHigh
+        expr: sum(pg_stat_user_tables_n_dead_tup) > 1000000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PostgreSQL dead tuple count is high"
+
+  - name: core_data.pgbouncer
+    rules:
+      - alert: CoreDataPgBouncerClientsWaiting
+        expr: sum(pgbouncer_pools_client_waiting_connections) > 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "PgBouncer has clients waiting for a server connection"
+
+  - name: core_data.system
+    rules:
+      - alert: CoreDataDiskSpaceLow
+        expr: >-
+          (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"}) < 0.15
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Host disk space is low"
+      - alert: CoreDataContainerRestarting
+        expr: changes(container_start_time_seconds{name=~".*core_data.*"}[15m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Core Data container restarted recently"
