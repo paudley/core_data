@@ -184,9 +184,14 @@ perform_backup() {
 
   log "starting logical backup into ${target_dir}"
 
+  cleanup_failed_backup() {
+    touch "${tmp_dir}/_FAILED" 2> /dev/null || true
+    rm -rf "${tmp_dir}"
+  }
+
   local databases
   databases=$("${PG_ENV[@]}" psql -Atqc "SELECT datname FROM pg_database WHERE datistemplate = false ORDER BY datname;") || {
-    touch "${tmp_dir}/_FAILED"
+    cleanup_failed_backup
     return 1
   }
   local dumped_dbs=()
@@ -198,11 +203,11 @@ perform_backup() {
     local outfile="${tmp_dir}/${db}.dump"
     log "  -> dumping ${db}"
     "${PG_ENV[@]}" pg_dump --format=custom --no-owner --no-acl --file="${outfile}" --dbname="${db}" || {
-      touch "${tmp_dir}/_FAILED"
+      cleanup_failed_backup
       return 1
     }
     pg_restore --list "${outfile}" > /dev/null || {
-      touch "${tmp_dir}/_FAILED"
+      cleanup_failed_backup
       return 1
     }
     dumped_dbs+=("${db}")
@@ -210,7 +215,7 @@ perform_backup() {
 
   log "  -> dumping globals"
   "${PG_ENV[@]}" pg_dumpall --globals-only --no-password > "${tmp_dir}/globals.sql" || {
-    touch "${tmp_dir}/_FAILED"
+    cleanup_failed_backup
     return 1
   }
 
@@ -252,11 +257,17 @@ manifest = {
 }
 manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-    touch "${tmp_dir}/_FAILED"
+    cleanup_failed_backup
     return 1
   fi
-  touch "${tmp_dir}/_SUCCESS" || return 1
-  mv "${tmp_dir}" "${target_dir}" || return 1
+  touch "${tmp_dir}/_SUCCESS" || {
+    cleanup_failed_backup
+    return 1
+  }
+  mv "${tmp_dir}" "${target_dir}" || {
+    cleanup_failed_backup
+    return 1
+  }
   LAST_SUCCESS_TIMESTAMP=${completed_at}
   LAST_SUCCESS_DURATION=${duration}
   LAST_SUCCESS_SIZE_BYTES=${size_bytes:-0}

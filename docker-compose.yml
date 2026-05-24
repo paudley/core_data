@@ -327,6 +327,9 @@ services:
     user: "${VALKEY_UID:-999}:${VALKEY_GID:-1000}"
     group_add:
       - "${SECRETS_GID:-65532}"
+    depends_on:
+      volume_prep:
+        condition: service_completed_successfully
     environment:
       VALKEY_PORT: ${VALKEY_PORT}
       VALKEY_APPENDONLY: ${VALKEY_APPENDONLY}

@@ -309,7 +309,12 @@ python3 "${SCRIPT_DIR}/version_status.py" \
 echo "[daily] summarizing logical backup sidecar"
 LOGICAL_STATUS_FILE="${HOST_TARGET_DIR}/logical_backup_status.txt"
 if [[ -d "${LOGICAL_BACKUP_HOST_OUTPUT}" ]]; then
-  latest_dir=$(find "${LOGICAL_BACKUP_HOST_OUTPUT}" -mindepth 1 -maxdepth 1 -type d | sort | tail -n 1)
+  latest_dir=$(
+    find "${LOGICAL_BACKUP_HOST_OUTPUT}" -mindepth 2 -maxdepth 2 -type f -name _SUCCESS -print |
+      sed 's#/_SUCCESS$##' |
+      sort |
+      tail -n 1
+  )
   if [[ -n "${latest_dir}" ]]; then
     latest_name=$(basename "${latest_dir}")
     latest_epoch=$(stat -c %Y "${latest_dir}" 2> /dev/null || stat -f %m "${latest_dir}" 2> /dev/null || echo 0)
