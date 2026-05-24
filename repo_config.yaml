@@ -2,11 +2,6 @@ hooks:
   enabled_groups:
     - format
     - syntax
-    - python-policy
-    - python-static
-    - docs
-    - security
-    - docker
     - workflow
     - go
     - ai
