@@ -21,6 +21,54 @@ rabbitmq_exec() {
 	compose_exec_service "${RABBITMQ_SERVICE_NAME}" "$@"
 }
 
+rabbitmq_service_enabled() {
+	compose_has_service "${RABBITMQ_SERVICE_NAME}"
+}
+
+cmd_rabbitmq_create_user_if_enabled() {
+	local user=$1
+	local pass=$2
+
+	if ! rabbitmq_service_enabled; then
+		echo "[rabbitmq] Service not enabled; skipping RabbitMQ user '${user}'." >&2
+		return 0
+	fi
+
+	# shellcheck disable=SC2016 # Container-side script expands its own positional parameters.
+	rabbitmq_exec sh -eu -c '
+user=$1
+pass=$2
+if rabbitmqctl list_users --silent | awk "{print \$1}" | grep -Fxq "${user}"; then
+  exit 0
+fi
+rabbitmqctl add_user "${user}" "${pass}"
+' sh "${user}" "${pass}"
+}
+
+cmd_rabbitmq_create_vhost_if_enabled() {
+	local vhost=$1
+	local owner=$2
+
+	if ! rabbitmq_service_enabled; then
+		echo "[rabbitmq] Service not enabled; skipping RabbitMQ vhost '${vhost}'." >&2
+		return 0
+	fi
+
+	# shellcheck disable=SC2016 # Container-side script expands its own positional parameters.
+	rabbitmq_exec sh -eu -c '
+vhost=$1
+owner=$2
+if ! rabbitmqctl list_vhosts --silent | grep -Fxq "${vhost}"; then
+  rabbitmqctl add_vhost "${vhost}"
+fi
+if ! rabbitmqctl list_users --silent | awk "{print \$1}" | grep -Fxq "${owner}"; then
+  echo "[rabbitmq] User ${owner} does not exist; created vhost ${vhost} without owner permissions." >&2
+  exit 0
+fi
+rabbitmqctl set_permissions -p "${vhost}" "${owner}" ".*" ".*" ".*"
+' sh "${vhost}" "${owner}"
+}
+
 cmd_rabbitmq_ctl() {
 	ensure_env
 	ensure_rabbitmq_service

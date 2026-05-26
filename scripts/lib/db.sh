@@ -24,6 +24,7 @@ BEGIN
 END
 \$\$;
 SQL
+	cmd_rabbitmq_create_user_if_enabled "${user}" "${pass}"
 }
 
 # cmd_drop_user removes a role when present, ignoring missing roles.
@@ -93,6 +94,7 @@ SQL
 	bootstrap_database "${db}"
 	grant_db_owner_privileges "${db}" "${owner}"
 	schedule_pg_squeeze_job "${db}"
+	cmd_rabbitmq_create_vhost_if_enabled "${db}" "${owner}"
 }
 
 # cmd_drop_db unschedules cron jobs and drops the database after terminating sessions.

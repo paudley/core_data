@@ -112,8 +112,8 @@ services:
       NETWORK_DIR: /opt/core_data/network_access
       CHECK_INTERVAL: ${NETWORK_GUARD_CHECK_INTERVAL:-30}
       SERVICES: >-
-        ${POSTGRES_PORT:-5433} ${PGBOUNCER_HOST_PORT:-6432}
-        ${PGBOUNCER_EXTRA_HOST_PORT:-5432} ${VALKEY_HOST_PORT:-6379}
+        ${POSTGRES_PORT:-5433} ${PGBOUNCER_HOST_PORT:-5432}
+        ${PGBOUNCER_EXTRA_HOST_PORT:-6432} ${VALKEY_HOST_PORT:-6379}
         ${RABBITMQ_HOST_PORT:-5672} ${RABBITMQ_MANAGEMENT_HOST_PORT:-15672}
         ${RABBITMQ_PROMETHEUS_HOST_PORT:-15692} ${MEMCACHED_PORT:-11211}
         ${PROMETHEUS_HOST_PORT:-9090} ${GRAFANA_HOST_PORT:-3000}
@@ -486,8 +486,8 @@ services:
     ports:
       # Both host ports map to the same container port - PgBouncer listens once,
       # Docker handles the multi-port exposure
-      - "${PGBOUNCER_HOST_PORT:-6432}:${PGBOUNCER_PORT:-6432}"
-      - "${PGBOUNCER_EXTRA_HOST_PORT:-5432}:${PGBOUNCER_PORT:-6432}"
+      - "${PGBOUNCER_HOST_PORT:-5432}:${PGBOUNCER_PORT:-6432}"
+      - "${PGBOUNCER_EXTRA_HOST_PORT:-6432}:${PGBOUNCER_PORT:-6432}"
     healthcheck:
       test:
         - CMD-SHELL
