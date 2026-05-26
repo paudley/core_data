@@ -369,6 +369,7 @@ services:
         SECRETS_GID: ${SECRETS_GID:-65532}
     image: ${RABBITMQ_IMAGE:-ghcr.io/paudley/core_data/rabbitmq:latest}
     container_name: ${COMPOSE_PROJECT_NAME:-core_data}_rabbitmq
+    hostname: rabbitmq
     restart: unless-stopped
     # Add the shared secrets group for read access.
     user: "${RABBITMQ_UID:-100}:${RABBITMQ_GID:-101}"
@@ -381,6 +382,7 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
       RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_default_pass
       RABBITMQ_ERLANG_COOKIE_FILE: /run/secrets/rabbitmq_erlang_cookie
+      RABBITMQ_NODENAME: rabbit@rabbitmq
       RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: ${RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS:-}
       TZ: ${TZ}
     entrypoint: ["/opt/core_data/bin/rabbitmq-entrypoint.sh"]
@@ -613,9 +615,9 @@ services:
         condition: service_healthy
     command:
       - "--redis.addr=redis://valkey:${VALKEY_PORT:-6379}"
-      - "--redis.password-file=/run/secrets/valkey_password"
+      - "--redis.password-file=/run/secrets/valkey_exporter_passwords.json"
     volumes:
-      - ./secrets/valkey_password:/run/secrets/valkey_password:ro
+      - ./secrets/valkey_exporter_passwords.json:/run/secrets/valkey_exporter_passwords.json:ro
     networks:
       - core_data
     ports:
@@ -737,6 +739,11 @@ services:
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      GF_PLUGINS_PREINSTALL_AUTO_UPDATE: "false"
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./data/grafana:/var/lib/grafana

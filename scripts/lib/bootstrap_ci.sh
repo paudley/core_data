@@ -229,6 +229,18 @@ cmd_bootstrap_ci() {
     chmod 0700 "${secrets_dir}" || true
     bootstrap_ci_write_secret POSTGRES_SUPERUSER_PASSWORD "${secrets_dir}/postgres_superuser_password" "${force}" base64
     bootstrap_ci_write_secret VALKEY_PASSWORD "${secrets_dir}/valkey_password" "${force}" base64
+    python3 - "${secrets_dir}/valkey_password" "${secrets_dir}/valkey_exporter_passwords.json" <<'PY'
+import json
+import sys
+
+password_path, output_path = sys.argv[1], sys.argv[2]
+with open(password_path, encoding="utf-8") as handle:
+    password = handle.read().strip()
+with open(output_path, "w", encoding="utf-8") as handle:
+    json.dump({"redis://valkey:6379": password}, handle)
+    handle.write("\n")
+PY
+    chmod 0600 "${secrets_dir}/valkey_exporter_passwords.json" || true
     bootstrap_ci_write_secret PGBOUNCER_AUTH_PASSWORD "${secrets_dir}/pgbouncer_auth_password" "${force}" base64
     bootstrap_ci_write_secret PGBOUNCER_STATS_PASSWORD "${secrets_dir}/pgbouncer_stats_password" "${force}" base64
     bootstrap_ci_write_secret RABBITMQ_DEFAULT_PASS "${secrets_dir}/rabbitmq_default_pass" "${force}" base64
