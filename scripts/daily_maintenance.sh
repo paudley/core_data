@@ -36,7 +36,7 @@ echo "[daily] starting"
 
 HOST_BACKUP_ROOT=${DAILY_BACKUP_ROOT:-./backups/daily}
 CONTAINER_BACKUP_ROOT=${DAILY_CONTAINER_BACKUP_ROOT:-/backups/daily}
-RETENTION_DAYS=${DAILY_RETENTION_DAYS:-30}
+RETENTION_DAYS=${DAILY_RETENTION_DAYS:-7}
 SINCE=${DAILY_PGBADGER_SINCE:-}
 if [[ -n ${SINCE} ]]; then
   if echo "${SINCE}" | grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'; then
@@ -46,6 +46,7 @@ if [[ -n ${SINCE} ]]; then
   fi
 fi
 REMOVE_SOURCE=${DAILY_REMOVE_SOURCE_LOGS:-false}
+PRUNE_SOURCE_LOGS=${DAILY_PRUNE_SOURCE_LOGS:-true}
 PG_BADGER_JOBS=${PG_BADGER_JOBS:-2}
 PG_STAT_LIMIT=${DAILY_PG_STAT_LIMIT:-100}
 BUFFERCACHE_LIMIT=${DAILY_BUFFERCACHE_LIMIT:-50}
@@ -235,6 +236,9 @@ compose_exec bash -lc "cp /var/lib/postgresql/data/log/postgresql-*.log '${CONTA
 compose_exec bash -lc "cp /var/lib/postgresql/data/log/postgresql-*.csv '${CONTAINER_TARGET_DIR}' 2>/dev/null || true"
 if [[ ${REMOVE_SOURCE} == true ]]; then
   compose_exec bash -lc "rm -f /var/lib/postgresql/data/log/postgresql-*.log /var/lib/postgresql/data/log/postgresql-*.csv"
+elif [[ ${PRUNE_SOURCE_LOGS} == true && ${RETENTION_DAYS} =~ ^[0-9]+$ && ${RETENTION_DAYS} -gt 0 ]]; then
+  retention_mtime=$((RETENTION_DAYS - 1))
+  compose_exec bash -lc "find /var/lib/postgresql/data/log -maxdepth 1 -type f \\( -name 'postgresql-*.log' -o -name 'postgresql-*.csv' \\) -mtime +${retention_mtime} -delete"
 fi
 
 echo "[daily] generating pgBadger report"
@@ -370,5 +374,8 @@ if [[ ${EMAIL_REPORT} == true && -n ${REPORT_RECIPIENT} ]]; then
 fi
 
 echo "[daily] applying retention ${RETENTION_DAYS} days"
-find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort | head -n -"${RETENTION_DAYS}" | xargs -r rm -rf
+if [[ ${RETENTION_DAYS} =~ ^[0-9]+$ && ${RETENTION_DAYS} -gt 0 ]]; then
+  retention_mtime=$((RETENTION_DAYS - 1))
+  find "${HOST_BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +"${retention_mtime}" -exec rm -rf {} +
+fi
 echo "[daily] complete"

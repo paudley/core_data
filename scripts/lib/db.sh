@@ -1,7 +1,14 @@
+#!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
 # shellcheck shell=bash
+set -euo pipefail
+
+DB_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=common.sh
+# shellcheck disable=SC1091
+source "${DB_LIB_DIR}/common.sh"
 
 # Database role and schema helpers used by manage.sh.
 # cmd_create_user creates a role with LOGIN privilege if it does not yet exist.
@@ -113,4 +120,5 @@ cmd_drop_db() {
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS "${db}";
 SQL
+	cmd_rabbitmq_drop_vhost_if_enabled "${db}"
 }

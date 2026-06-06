@@ -278,7 +278,7 @@ Permissions
      --jobs <n>               Parallel workers for pgbadger (default 2)
   daily-maintenance options:
      --root <path>            Override host backup root (default ./backups/daily)
-     --retention <days>       Retention in days (default 30)
+     --retention <days>       Retention in days (default 7)
      --since <time>           Pass through to pgBadger (optional)
      --remove-source-logs     Remove original log files after copying/report (default: keep)
      --container-root <path>  Container path mapped to root (default /backups/daily)

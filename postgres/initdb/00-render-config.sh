@@ -223,6 +223,7 @@ cat > "${PGBACKREST_CONF_PATH}" << CONF
 [global]
 repo1-path=/var/lib/pgbackrest
 repo1-retention-full=${PGBACKREST_RETENTION_FULL:-7}
+repo1-retention-full-type=${PGBACKREST_RETENTION_FULL_TYPE:-time}
 repo1-retention-diff=${PGBACKREST_RETENTION_DIFF:-7}
 repo1-retention-archive=${PGBACKREST_RETENTION_ARCHIVE:-7}
 repo1-retention-archive-type=${PGBACKREST_RETENTION_ARCHIVE_TYPE:-diff}

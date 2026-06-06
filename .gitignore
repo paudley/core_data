@@ -54,3 +54,4 @@ node_modules/
 .coding-ethos/prune-runs/
 .coding-ethos/state/
 .coding-ethos/code-intel.db
+sandbox-tmp

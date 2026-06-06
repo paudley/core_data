@@ -184,6 +184,7 @@ services:
       PG_PGAUDIT_LOG_CLIENT: ${PG_PGAUDIT_LOG_CLIENT:-on}
       PG_PGAUDIT_LOG_PARAMETER: ${PG_PGAUDIT_LOG_PARAMETER:-off}
       PGBACKREST_RETENTION_FULL: ${PGBACKREST_RETENTION_FULL:-7}
+      PGBACKREST_RETENTION_FULL_TYPE: ${PGBACKREST_RETENTION_FULL_TYPE:-time}
       PGBACKREST_RETENTION_DIFF: ${PGBACKREST_RETENTION_DIFF:-7}
       PGBACKREST_RETENTION_ARCHIVE: ${PGBACKREST_RETENTION_ARCHIVE:-7}
       PGBACKREST_RETENTION_ARCHIVE_TYPE: ${PGBACKREST_RETENTION_ARCHIVE_TYPE:-diff}
@@ -710,7 +711,7 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-30d}"
+      - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION_TIME:-7d}"
       - "--web.enable-lifecycle"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
