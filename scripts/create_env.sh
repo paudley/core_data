@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+# Standalone bootstrap script: do not source common.sh because this command
+# creates the .env file that common.sh normally consumes.
+# shellcheck source=scripts/lib/common.sh
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
 TEMPLATE="${ROOT_DIR}/.env.example"
@@ -174,6 +177,16 @@ valkey_password="$(prompt_secret "ValKey password (written to secrets/valkey_pas
 printf '%s\n' "${valkey_password}" >"${valkey_secret_file}"
 chmod 0600 "${valkey_secret_file}" || true
 set_env_value VALKEY_PASSWORD_FILE "./secrets/valkey_password"
+python3 - "${valkey_password}" "${secret_dir}/valkey_exporter_passwords.json" <<'PY'
+import json
+import sys
+
+password, path = sys.argv[1], sys.argv[2]
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump({"redis://valkey:6379": password}, handle)
+    handle.write("\n")
+PY
+chmod 0600 "${secret_dir}/valkey_exporter_passwords.json" || true
 
 pgbouncer_auth_secret="${secret_dir}/pgbouncer_auth_password"
 pgbouncer_auth_default="$(generate_password)"

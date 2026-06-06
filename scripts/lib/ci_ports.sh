@@ -57,8 +57,8 @@ ci_check_required_ports() {
   local skip_ports=$1
   ci_check_ports "${skip_ports}" \
     "postgres:${POSTGRES_PORT:-5433}" \
-    "pgbouncer:${PGBOUNCER_HOST_PORT:-${PGBOUNCER_PORT:-6432}}" \
-    "pgbouncer-extra:${PGBOUNCER_EXTRA_HOST_PORT:-5432}" \
+    "pgbouncer:${PGBOUNCER_HOST_PORT:-5432}" \
+    "pgbouncer-extra:${PGBOUNCER_EXTRA_HOST_PORT:-${PGBOUNCER_PORT:-6432}}" \
     "valkey:${VALKEY_HOST_PORT:-${VALKEY_PORT:-6379}}" \
     "memcached:${MEMCACHED_PORT:-11211}" \
     "rabbitmq:${RABBITMQ_HOST_PORT:-${RABBITMQ_PORT:-5672}}" \

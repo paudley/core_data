@@ -275,7 +275,8 @@ PY
   write_metrics 1 "${LAST_SUCCESS_TIMESTAMP}" "${LAST_SUCCESS_DURATION}" "${LAST_SUCCESS_SIZE_BYTES}" "${LAST_SUCCESS_FILE_COUNT}" "${FAILURE_COUNT}"
 
   if ((LOGICAL_BACKUP_RETENTION_DAYS > 0)); then
-    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d ! -name '*.tmp' -mtime +"${LOGICAL_BACKUP_RETENTION_DAYS}" -print -exec rm -rf {} + 2> /dev/null || true
+    retention_mtime=$((LOGICAL_BACKUP_RETENTION_DAYS - 1))
+    find "${LOGICAL_BACKUP_OUTPUT}" -mindepth 1 -maxdepth 1 -type d ! -name '*.tmp' -mtime +"${retention_mtime}" -print -exec rm -rf {} + 2> /dev/null || true
   fi
 
   log "completed backup at ${timestamp}"

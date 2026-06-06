@@ -122,7 +122,7 @@ cmd_pgbadger_report() {
 cmd_daily_maintenance() {
   ensure_env
   local backup_root=${DAILY_BACKUP_ROOT:-./backups/daily}
-  local retention=${DAILY_RETENTION_DAYS:-30}
+  local retention=${DAILY_RETENTION_DAYS:-7}
   local since=""
   local remove_logs=false
   local container_root=${DAILY_CONTAINER_BACKUP_ROOT:-/backups/daily}

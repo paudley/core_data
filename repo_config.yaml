@@ -1,3 +1,14 @@
+hooks:
+  enabled_groups:
+    - format
+    - syntax
+    - workflow
+    - go
+    - ai
+    - commit-msg
+
 python:
+  docstring_coverage:
+    enabled: false
   pytest_gate:
     enabled: false

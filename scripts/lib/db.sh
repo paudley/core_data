@@ -1,7 +1,14 @@
+#!/usr/bin/env bash
 # SPDX-FileCopyrightText: 2025 Blackcat Informatics® Inc.
 # SPDX-License-Identifier: MIT
 
 # shellcheck shell=bash
+set -euo pipefail
+
+DB_LIB_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source=common.sh
+# shellcheck disable=SC1091
+source "${DB_LIB_DIR}/common.sh"
 
 # Database role and schema helpers used by manage.sh.
 # cmd_create_user creates a role with LOGIN privilege if it does not yet exist.
@@ -24,6 +31,7 @@ BEGIN
 END
 \$\$;
 SQL
+	cmd_rabbitmq_create_user_if_enabled "${user}" "${pass}"
 }
 
 # cmd_drop_user removes a role when present, ignoring missing roles.
@@ -93,6 +101,7 @@ SQL
 	bootstrap_database "${db}"
 	grant_db_owner_privileges "${db}" "${owner}"
 	schedule_pg_squeeze_job "${db}"
+	cmd_rabbitmq_create_vhost_if_enabled "${db}" "${owner}"
 }
 
 # cmd_drop_db unschedules cron jobs and drops the database after terminating sessions.
@@ -111,4 +120,5 @@ cmd_drop_db() {
 SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '${db}' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS "${db}";
 SQL
+	cmd_rabbitmq_drop_vhost_if_enabled "${db}"
 }
